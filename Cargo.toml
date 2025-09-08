@@ -1,0 +1,65 @@
+[workspace]
+members = [
+    "crates/slosh-testbed2d",
+    "crates/slosh-testbed3d",
+    "crates/slosh2d",
+    "crates/slosh3d",
+]
+resolver = "2"
+
+[workspace.dependencies]
+nalgebra = { version = "0.34", features = ["convert-bytemuck"] }
+wgpu = { version = "26", features = ["naga-ir"] }
+encase = { version = "0.11", features = [ "nalgebra" ] }
+bytemuck = { version = "1", features = ["derive"] }
+async-channel = "2"
+
+slang-hal = "0.1"
+stensor = "0.1"
+
+[workspace.lints]
+rust.unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("dim2", "dim3"))',
+] }
+
+[patch.crates-io]
+#shader-slang = { path = "../slang-rs" }
+slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
+slang-hal = { path = "../slang-hal/crates/slang-hal" }
+minislang = { path = "../slang-hal/crates/minislang" }
+stensor = { path = "../stensor" }
+nexus2d = { path = "../nexus/crates/nexus2d" }
+nexus3d = { path = "../nexus/crates/nexus3d" }
+encase = { path = "../encase" }
+kiss3d = { path = "../kiss3d" }
+
+#wgcore = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#wgcore-derive = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#wgebra = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#nexus3d = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#nexus2d = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#nexus3d = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+#nexus2d = { git = "https://github.com/dimforge/wgmath.git", rev = "6d17942bd841efdfcc696d8455b22be3a8ddfe8d" }
+
+#wgcore = { path = "../wgmath/crates/wgcore" }
+#wgcore-derive = { path = "../wgmath/crates/wgcore-derive" }
+#wgebra = { path = "../wgmath/crates/wgebra" }
+#nexus3d = { path = "../wgmath/crates/nexus/crates/impulse3d" }
+#impulse2d = { path = "../wgmath/crates/impulse/crates/impulse2d" }
+#impulse3d = { path = "../wgmath/crates/impulse/crates/impulse3d" }
+#impulse2d = { path = "../wgmath/crates/impulse/crates/impulse2d" }
+#
+#parry2d = { git = "https://github.com/dimforge/parry.git", rev = "407fb449504dde7ba0a3d80a8de7e37ac991a77a" }
+#parry3d = { git = "https://github.com/dimforge/parry.git", rev = "407fb449504dde7ba0a3d80a8de7e37ac991a77a" }
+#encase = { git = "https://github.com/sebcrozet/encase.git", rev = "6755c1414c225cbeac9fde1ff9394b70d3b05404" }
+##wgcore = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##wgcore-derive = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##wgebra = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##impulse3d = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##impulse2d = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##impulse3d = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+##impulse2d = { git = "https://github.com/dimforge/wgmath.git", rev = "95538845080ef8680cf9906f1949623e30be3495" }
+#rapier3d = { git = "https://github.com/vrixyz/rapier.git", branch = "uber_physics_context" }
+
+[profile.release]
+opt-level = 'z'

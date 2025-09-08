@@ -1,0 +1,48 @@
+[package]
+name = "slosh2d"
+version = "0.1.0"
+license = "Apache-2.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+name = "slosh2d"
+path = "../../src/lib.rs"
+required-features = ["dim2"]
+
+[features]
+default = ["dim2"]
+dim2 = []
+
+[dependencies]
+nalgebra = { workspace = true }
+wgpu = { workspace = true }
+encase = { workspace = true }
+slang-hal = { workspace = true }
+stensor = { workspace = true }
+bytemuck = { workspace = true }
+
+#wgcore = "0.2"
+#wgebra = "0.2"
+nexus2d = "0.1"
+
+# TODO: make rapier optional?
+rapier2d = "0.28"
+
+# For wasm?
+getrandom = { version = "0.3.1", features = ["wasm_js"] }
+uuid = { version = "1", features = ["js"] }
+
+[dev-dependencies]
+nalgebra = { version = "0.34", features = ["rand"] }
+futures-test = "0.3"
+serial_test = "3"
+approx = "0.5"
+async-std = { version = "1", features = ["attributes"] }
+slosh_testbed2d = { path = "../slosh-testbed2d", features = ["dim2"] }
+
+[build-dependencies]
+minislang = "0.1"
+nexus2d = "0.1" # to access its shaders at compile-time

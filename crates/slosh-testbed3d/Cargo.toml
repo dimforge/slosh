@@ -1,0 +1,38 @@
+[package]
+name = "slosh_testbed3d"
+version = "0.1.0"
+license = "Apache-2.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+name = "slosh_testbed3d"
+path = "../../src_testbed/lib.rs"
+required-features = ["dim3"]
+
+[features]
+dim3 = []
+default = ["dim3"]
+
+[dependencies]
+nalgebra = { workspace = true, features = ["rand"] }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+async-channel = { workspace = true }
+encase = { workspace = true }
+
+slang-hal = { workspace = true }
+stensor = { workspace = true }
+nexus3d = "0.1"
+
+futures-test = "0.3"
+serial_test = "3"
+approx = "0.5"
+async-std = { version = "1", features = ["attributes"] }
+slosh3d = { path = "../slosh3d" }
+futures = "0.3"
+regex = "1"
+
+kiss3d = { version = "0.35", features = [ "vertex_index_u32" ] }

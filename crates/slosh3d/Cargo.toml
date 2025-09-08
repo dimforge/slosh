@@ -1,0 +1,44 @@
+[package]
+name = "slosh3d"
+version = "0.1.0"
+license = "Apache-2.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[lib]
+name = "slosh3d"
+path = "../../src/lib.rs"
+required-features = ["dim3"]
+
+[features]
+default = ["dim3"]
+dim3 = []
+
+[dependencies]
+nalgebra = { workspace = true }
+wgpu = { workspace = true }
+encase = { workspace = true }
+bytemuck = { workspace = true }
+slang-hal = { workspace = true }
+stensor = { workspace = true }
+nexus3d = "0.1"
+regex = "1"
+
+serde = "1"
+
+# TODO: make rapier optional?
+rapier3d = "0.28"
+
+[dev-dependencies]
+nalgebra = { version = "0.34", features = ["rand"] }
+futures-test = "0.3"
+serial_test = "3"
+approx = "0.5"
+async-std = { version = "1", features = ["attributes"] }
+slosh_testbed3d = { path = "../slosh-testbed3d" }
+
+[build-dependencies]
+minislang = "0.1"
+nexus3d = "0.1" # to access its shaders at compile-time
