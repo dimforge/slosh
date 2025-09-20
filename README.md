@@ -16,3 +16,11 @@
    Note that the variable must point to the root of the slang installation (i.e. the directory that contains `bin` and `lib`).
 3. For the 2D examples, run `cargo run --release --example testbed2`
 4. For the 3D examples, run `cargo run --release --example testbed3`
+
+# Notable usages of MPM
+
+This gives some insights of some interesting usages of MPM (the Material Point Method) for deformable physics
+simulation. Note that it doesn’t imply that **slosh** currently implements these models:
+- Animation: one very well-known usage of MPM is
+  [snow simulation](https://www.disneyanimation.com/publications/a-material-point-method-for-snow-simulation/) by Pixar.
+- Engineering: blast movement simulation ([patented](https://patents.google.com/patent/WO2025136223A1)).

@@ -3,9 +3,7 @@
     <option name="buildProfileId" value="release" />
     <option name="command" value="run --example testbed3" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs>
-      <env name="SLANG_DIR" value="$PROJECT_DIR$/..//slang" />
-    </envs>
+    <envs />
     <option name="emulateTerminal" value="true" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />

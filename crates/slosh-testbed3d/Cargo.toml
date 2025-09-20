@@ -35,4 +35,4 @@ slosh3d = { path = "../slosh3d" }
 futures = "0.3"
 regex = "1"
 
-kiss3d = { version = "0.35", features = [ "vertex_index_u32" ] }
+kiss3d = { version = "0.36", features = [ "vertex_index_u32" ] }
