@@ -1,7 +1,5 @@
-# Slosh: cross-platform MPM GPU physics simulation
-
 <p align="center">
-  <img src="assets/slosh-logo.png" alt="crates.io" width="400px">
+  <img src="assets/slosh-logo.png" alt="crates.io" width="300px">
 </p>
 <p align="center">
     <a href="https://discord.gg/vt9DJSW">
@@ -9,7 +7,8 @@
     </a>
 </p>
 
-# Running the examples
+# Slosh: cross-platform MPM GPU physics simulation
+## Running the examples
 
 1. Download the Slang compiler libraries for your platform: https://github.com/shader-slang/slang/releases/tag/v2025.16
 2. Unzip the downloaded directory, and use its path as value to the `SLANG_DIR` environment variable: `SLANG_DIR=/path/to/slang`.
@@ -17,7 +16,7 @@
 3. For the 2D examples, run `cargo run --release --example testbed2`
 4. For the 3D examples, run `cargo run --release --example testbed3`
 
-# Notable usages of MPM
+## Notable MPM use-cases
 
 This gives some insights of some interesting usages of MPM (the Material Point Method) for deformable physics
 simulation. Note that it doesn’t imply that **slosh** currently implements these models:
