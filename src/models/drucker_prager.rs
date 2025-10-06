@@ -8,6 +8,8 @@ pub struct DruckerPrager {
     pub h1: f32,
     pub h2: f32,
     pub h3: f32,
+
+    // TODO: we should just reuse the coefficient from the elastic model?
     pub lambda: f32,
     pub mu: f32,
 }
@@ -20,6 +22,10 @@ impl DruckerPrager {
             (-1.0, -1.0)
         };
 
+        Self::from_lame(lambda, mu)
+    }
+
+    pub fn from_lame(lambda: f32, mu: f32) -> Self {
         Self {
             h0: 35.0f32.to_radians(),
             h1: 9.0f32.to_radians(),
@@ -28,6 +34,17 @@ impl DruckerPrager {
             lambda,
             mu,
         }
+    }
+
+    pub fn set_elastic_coefficients(&mut self, young_modulus: f32, poisson_ratio: f32) {
+        let (lambda, mu) = if young_modulus > 0.0 {
+            lame_lambda_mu(young_modulus, poisson_ratio)
+        } else {
+            (-1.0, -1.0)
+        };
+
+        self.lambda = lambda;
+        self.mu = mu;
     }
 }
 

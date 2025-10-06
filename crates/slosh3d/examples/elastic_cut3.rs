@@ -1,13 +1,13 @@
-use slosh_testbed3d::{slosh, RapierData};
+use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{vector, DMatrix, Isometry3};
+use nalgebra::{DMatrix, Isometry3, vector, point};
 use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, ParticlePhase, SimulationParams},
+    solver::{Particle, ParticleDynamics, ParticlePhase, SimulationParams, ParticleBuilder},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -25,7 +25,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     for i in 0..nxz {
         for j in 0..30 {
             for k in 0..nxz {
-                let position = vector![
+                let position = point![
                     i as f32 + 0.5 - nxz as f32 / 2.0,
                     j as f32 + 0.5 + 60.0,
                     k as f32 + 0.5 - nxz as f32 / 2.0
@@ -33,16 +33,11 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                     / 2.0;
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
-                particles.push(Particle {
-                    position,
-                    dynamics: ParticleDynamics::with_density(radius, density),
-                    model: ElasticCoefficients::from_young_modulus(10_000_000.0, 0.2),
-                    plasticity: None,
-                    phase: Some(ParticlePhase {
-                        phase: 1.0,
-                        max_stretch: f32::MAX,
-                    }),
-                });
+                particles.push(
+                    ParticleBuilder::new(position, radius, density)
+                        .elastic(1.0e7, 0.2)
+                        .build()
+                );
             }
         }
     }

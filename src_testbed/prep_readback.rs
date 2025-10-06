@@ -3,11 +3,11 @@ use nalgebra::Vector4;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
-use stensor::tensor::GpuTensor;
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
 use slosh::solver::{
     GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams,
 };
+use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 
 #[cfg(feature = "dim2")]

@@ -7,8 +7,8 @@ use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
-use stensor::tensor::{GpuScalar, GpuVector};
 use std::sync::Arc;
+use stensor::tensor::{GpuScalar, GpuVector};
 use wgpu::BufferUsages;
 
 #[derive(Shader)]

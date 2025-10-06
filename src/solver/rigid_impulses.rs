@@ -1,6 +1,6 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::solver::params::GpuSimulationParams;
 use crate::solver::SimulationParams;
+use crate::solver::params::GpuSimulationParams;
 use encase::ShaderType;
 use nexus::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use nexus::math::GpuSim;

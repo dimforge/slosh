@@ -25,15 +25,7 @@ impl<B: Backend> GpuModels<B> {
             .iter()
             .map(|_| DruckerPragerPlasticState::default())
             .collect();
-        let phases: Vec<_> = particles
-            .iter()
-            .map(|p| {
-                p.phase.unwrap_or(ParticlePhase {
-                    phase: 0.0,
-                    max_stretch: -1.0,
-                })
-            })
-            .collect();
+        let phases: Vec<_> = particles.iter().map(|p| p.phase).collect();
         Ok(Self {
             linear_elasticity: GpuTensor::vector(backend, &models, BufferUsages::STORAGE)?,
             drucker_prager_plasticity: GpuTensor::vector(

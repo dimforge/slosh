@@ -17,6 +17,7 @@ pub mod grid;
 pub mod models;
 pub mod pipeline;
 pub mod solver;
+pub(crate) mod sampling;
 
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../shaders");

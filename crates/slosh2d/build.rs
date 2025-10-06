@@ -1,4 +1,4 @@
-use minislang::{shader_slang::CompileTarget, SlangCompiler};
+use minislang::{SlangCompiler, shader_slang::CompileTarget};
 use std::path::PathBuf;
 use std::str::FromStr;
 

@@ -1,6 +1,6 @@
 use crate::grid::grid::{GpuActiveBlockHeader, GpuGrid, GpuGridMetadata, GpuGridNode};
-use crate::solver::params::GpuSimulationParams;
 use crate::solver::SimulationParams;
+use crate::solver::params::GpuSimulationParams;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

@@ -25,10 +25,10 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
 
 use crate::prep_readback::{GpuReadbackData, PrepReadback};
 use crate::step::SimulationStepResult;
-use nexus::math::DIM;
-use nexus::rapier::geometry::ShapeType;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
+use nexus::math::DIM;
+use nexus::rapier::geometry::ShapeType;
 use regex::Regex;
 use slang_hal::backend::WebGpu;
 use slang_hal::re_exports::include_dir;

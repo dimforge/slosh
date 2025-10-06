@@ -1,23 +1,26 @@
 use crate::models::{DruckerPrager, ElasticCoefficients};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
+use nalgebra::{vector, Point4};
 use nexus::dynamics::body::BodyCouplingEntry;
-use nalgebra::{vector, Matrix2, Point2, Vector2};
-use rapier::geometry::{ColliderSet, Polyline, Segment};
+use rapier::geometry::{ColliderSet, Polyline, Segment, TriMesh};
 use stensor::tensor::GpuTensor;
 // use nexus::shapes::ShapeBuffers;
 use slang_hal::backend::Backend;
 use wgpu::BufferUsages;
 // use nexus::dynamics::body::BodyCouplingEntry;
 use nexus::dynamics::GpuBodySet;
+use nexus::math::{Matrix, Point, Vector};
 use nexus::shapes::ShapeBuffers;
+use crate::sampling;
+use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
 
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
 pub struct ParticleDynamics {
-    pub velocity: Vector2<f32>,
-    pub def_grad: Matrix2<f32>,
-    pub affine: Matrix2<f32>,
+    pub velocity: Vector<f32>,
+    pub def_grad: Matrix<f32>,
+    pub affine: Matrix<f32>,
     pub cdf: Cdf,
     pub init_volume: f32,
     pub init_radius: f32,
@@ -25,18 +28,22 @@ pub struct ParticleDynamics {
 }
 
 impl ParticleDynamics {
-    pub fn with_density(radius: f32, density: f32) -> Self {
+    pub fn new(radius: f32, density: f32) -> Self {
         let exponent = if cfg!(feature = "dim2") { 2 } else { 3 };
         let init_volume = (radius * 2.0).powi(exponent); // NOTE: the particles are square-ish.
         Self {
-            velocity: Vector2::zeros(),
-            def_grad: Matrix2::identity(),
-            affine: Matrix2::zeros(),
+            velocity: Vector::zeros(),
+            def_grad: Matrix::identity(),
+            affine: Matrix::zeros(),
             init_volume,
             init_radius: radius,
             mass: init_volume * density,
             cdf: Cdf::default(),
         }
+    }
+
+    pub fn set_density(&mut self, density: f32) {
+        self.mass = self.init_volume * density;
     }
 }
 
@@ -47,27 +54,88 @@ pub struct ParticlePhase {
     pub max_stretch: f32,
 }
 
+impl Default for ParticlePhase {
+    fn default() -> Self {
+        Self {
+            phase: 1.0,
+            max_stretch: f32::MAX,
+        }
+    }
+}
+
+impl ParticlePhase {
+    pub fn broken() -> Self {
+        Self {
+            phase: 0.0,
+            max_stretch: -1.0,
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug, Default, ShaderType)]
 #[repr(C)]
 pub struct Cdf {
-    pub normal: Vector2<f32>,
-    pub rigid_vel: Vector2<f32>,
+    pub normal: Vector<f32>,
+    pub rigid_vel: Vector<f32>,
     pub signed_distance: f32,
     pub affinity: u32,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct Particle {
-    pub position: Vector2<f32>,
+    pub position: Point<f32>,
     pub dynamics: ParticleDynamics,
     pub model: ElasticCoefficients,
     pub plasticity: Option<DruckerPrager>,
-    pub phase: Option<ParticlePhase>,
+    pub phase: ParticlePhase,
+}
+
+pub struct ParticleBuilder(Particle);
+
+impl From<ParticleBuilder> for Particle {
+    fn from(value: ParticleBuilder) -> Self {
+        value.0
+    }
+}
+
+impl ParticleBuilder {
+    pub fn new(position: Point<f32>, radius: f32, density: f32) -> Self {
+        const DEFAULT_YOUNG_MODULUS: f32 = 1_000.0;
+        const DEFAULT_POISSON_RATIO: f32 = 0.2;
+
+        Self(Particle {
+            position,
+            dynamics: ParticleDynamics::new(radius, density),
+            model: ElasticCoefficients::from_young_modulus(
+                DEFAULT_YOUNG_MODULUS,
+                DEFAULT_POISSON_RATIO,
+            ),
+            plasticity: None,
+            phase: ParticlePhase::default(),
+        })
+    }
+
+    pub fn elastic(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
+        self.0.model = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
+        self.0.plasticity = None;
+        self
+    }
+
+    pub fn sand(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
+        self.0.model = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
+        self.0.plasticity = Some(DruckerPrager::new(young_modulus, poisson_ratio));
+        self.0.phase = ParticlePhase::broken();
+        self
+    }
+
+    pub fn build(self) -> Particle {
+        self.0
+    }
 }
 
 pub struct GpuRigidParticles<B: Backend> {
-    pub local_sample_points: GpuTensor<Point2<f32>, B>,
-    pub sample_points: GpuTensor<Point2<f32>, B>,
+    pub local_sample_points: GpuTensor<Point<f32>, B>,
+    pub sample_points: GpuTensor<Point<f32>, B>,
     pub rigid_particle_needs_block: GpuTensor<u32, B>,
     pub node_linked_lists: GpuTensor<u32, B>,
     pub sample_ids: GpuTensor<GpuSampleIds, B>,
@@ -99,6 +167,8 @@ impl<B: Backend> GpuRigidParticles<B> {
             .enumerate()
         {
             let collider = &colliders[coupling.collider];
+
+            #[cfg(feature = "dim2")]
             if let Some(polyline) = collider.shape().as_polyline() {
                 let rngs = gpu_data.polyline_rngs();
                 let sampling_params = SamplingParams {
@@ -106,17 +176,38 @@ impl<B: Backend> GpuRigidParticles<B> {
                     base_vid: rngs[0],
                     sampling_step,
                 };
-                sample_polyline(polyline, &sampling_params, &mut sampling_buffers)
+                sampling::sample_polyline(polyline, &sampling_params, &mut sampling_buffers)
+            }
+
+            #[cfg(feature = "dim3")]
+            if let Some(trimesh) = collider.shape().as_trimesh() {
+                let rngs = gpu_data.trimesh_rngs();
+                let sampling_params = SamplingParams {
+                    collider_id: collider_id as u32,
+                    base_vid: rngs[0],
+                    sampling_step,
+                };
+                sampling::sample_trimesh(trimesh, &sampling_params, &mut sampling_buffers)
+            } else if let Some(heightfield) = collider.shape().as_heightfield() {
+                let (vtx, idx) = heightfield.to_trimesh();
+                let trimesh = TriMesh::new(vtx, idx).unwrap();
+                let rngs = gpu_data.trimesh_rngs();
+                let sampling_params = SamplingParams {
+                    collider_id: collider_id as u32,
+                    base_vid: rngs[0],
+                    sampling_step,
+                };
+                sampling::sample_trimesh(&trimesh, &sampling_params, &mut sampling_buffers)
             }
         }
 
         Ok(Self {
-            local_sample_points: GpuTensor::vector(
+            local_sample_points: GpuTensor::vector_encased(
                 backend,
                 &sampling_buffers.samples,
                 BufferUsages::STORAGE,
             )?,
-            sample_points: GpuTensor::vector(
+            sample_points: GpuTensor::vector_encased(
                 backend,
                 &sampling_buffers.samples,
                 BufferUsages::STORAGE,
@@ -154,7 +245,11 @@ impl<B: Backend> GpuRigidParticles<B> {
     }
 }
 
-pub type ParticlePosition = Vector2<f32>;
+#[cfg(feature = "dim2")]
+pub type ParticlePosition = Point<f32>;
+#[cfg(feature = "dim3")]
+pub type ParticlePosition = Point4<f32>;
+
 
 pub struct GpuParticles<B: Backend> {
     pub positions: GpuTensor<ParticlePosition, B>,
@@ -173,7 +268,10 @@ impl<B: Backend> GpuParticles<B> {
     }
 
     pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
+        #[cfg(feature = "dim2")]
         let positions: Vec<_> = particles.iter().map(|p| p.position).collect();
+        #[cfg(feature = "dim3")]
+        let positions: Vec<_> = particles.iter().map(|p| p.position.coords.push(0.0).into()).collect();
         let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
 
         Ok(Self {
@@ -190,57 +288,5 @@ impl<B: Backend> GpuParticles<B> {
                 GpuTensor::vector_uninit(backend, particles.len() as u32, BufferUsages::STORAGE)?
             },
         })
-    }
-}
-
-#[derive(Copy, Clone, Debug, ShaderType)]
-#[repr(C)]
-pub struct GpuSampleIds {
-    pub segment: Vector2<u32>,
-    pub collider: u32,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-struct SamplingParams {
-    base_vid: u32,
-    collider_id: u32,
-    sampling_step: f32,
-}
-
-#[derive(Default, Clone)]
-struct SamplingBuffers {
-    samples: Vec<Point2<f32>>,
-    samples_ids: Vec<GpuSampleIds>,
-}
-
-// TODO: move this elsewhere?
-fn sample_polyline(polyline: &Polyline, params: &SamplingParams, buffers: &mut SamplingBuffers) {
-    for seg_idx in polyline.indices() {
-        let seg = Segment::new(
-            polyline.vertices()[seg_idx[0] as usize],
-            polyline.vertices()[seg_idx[1] as usize],
-        );
-        let sample_id = GpuSampleIds {
-            segment: vector![params.base_vid + seg_idx[0], params.base_vid + seg_idx[1]],
-            collider: params.collider_id,
-        };
-        buffers.samples.push(seg.a);
-        buffers.samples_ids.push(sample_id);
-
-        if let Some(dir) = seg.direction() {
-            for i in 0.. {
-                let shift = (i as f32) * params.sampling_step;
-                if shift > seg.length() {
-                    break;
-                }
-
-                buffers.samples.push(seg.a + *dir * shift);
-                buffers.samples_ids.push(sample_id);
-            }
-
-            buffers.samples.push(seg.b);
-            buffers.samples_ids.push(sample_id);
-        }
     }
 }

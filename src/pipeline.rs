@@ -7,14 +7,14 @@ use crate::solver::{
     WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate,
     WgRigidImpulses, WgRigidParticleUpdate,
 };
-use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::dynamics::GpuBodySet;
+use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::ColliderSet;
+use slang_hal::Shader;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::re_exports::minislang::SlangCompiler;
-use slang_hal::Shader;
 use stensor::tensor::GpuVector;
 use wgpu::BufferUsages;
 
@@ -260,7 +260,7 @@ impl<B: Backend> MpmPipeline<B> {
 
         {
             let mut pass = encoder.begin_pass(); // ("integrate_bodies", timestamps.as_deref_mut());
-                                                 // TODO: should this be in a separate pipeline? Within impulse probably?
+            // TODO: should this be in a separate pipeline? Within impulse probably?
             self.impulses.launch(
                 backend,
                 &mut pass,

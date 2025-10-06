@@ -1,10 +1,11 @@
-use crate::solver::{GpuRigidParticles, GpuSampleIds};
+use crate::solver::{GpuRigidParticles};
 use nexus::dynamics::GpuBodySet;
 use nexus::math::{GpuSim, Point};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::GpuTensor;
+use crate::sampling::GpuSampleIds;
 
 #[derive(Shader)]
 #[shader(module = "slosh::solver::rigid_particle_update")]

@@ -3,10 +3,7 @@ pub use g2p_cdf::WgG2PCdf;
 pub use p2g::WgP2G;
 pub use p2g_cdf::WgP2GCdf;
 pub use params::{GpuSimulationParams, SimulationParams};
-#[cfg(feature = "dim2")]
-pub use particle2d::*;
-#[cfg(feature = "dim3")]
-pub use particle3d::*;
+pub use particle::*;
 // pub use particle_update::WgParticleUpdate;
 pub use grid_update::WgGridUpdate;
 pub use grid_update_cdf::WgGridUpdateCdf;
@@ -25,7 +22,4 @@ mod rigid_particle_update;
 
 mod grid_update;
 mod grid_update_cdf;
-#[cfg(feature = "dim2")]
-mod particle2d;
-#[cfg(feature = "dim3")]
-mod particle3d;
+mod particle;

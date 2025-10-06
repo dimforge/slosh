@@ -1,6 +1,6 @@
-use slosh_testbed2d::{slosh, RapierData};
+use slosh_testbed2d::{RapierData, slosh};
 
-use nalgebra::{vector, Vector2};
+use nalgebra::{Vector2, point, vector};
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::models::DruckerPrager;
@@ -9,8 +9,8 @@ use slosh::{
     pipeline::MpmData,
     solver::{Particle, SimulationParams},
 };
-use slosh2d::solver::ParticleDynamics;
 use slosh_testbed2d::{AppState, PhysicsContext};
+use slosh2d::solver::{ParticleBuilder, ParticleDynamics, ParticlePhase};
 
 #[allow(dead_code)]
 fn main() {
@@ -26,17 +26,18 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let mut particles = vec![];
     for i in 0..700 {
         for j in 0..700 {
-            let position = vector![i as f32 + 0.5, j as f32 + 0.5] * cell_width / 2.0
-                + Vector2::y() * offset_y;
+            let position =
+                point![i as f32 + 0.5, j as f32 + 0.5] * cell_width / 2.0 + Vector2::y() * offset_y;
             let density = 1000.0;
             let radius = cell_width / 4.0;
-            particles.push(Particle {
-                position,
-                dynamics: ParticleDynamics::with_density(radius, density),
-                model: ElasticCoefficients::from_young_modulus(10_000_000.0, 0.2),
-                plasticity: Some(DruckerPrager::new(10_000_000.0, 0.2)),
-                phase: None,
-            });
+            let young_modulus = 1.0e7;
+            let poisson_ratio = 0.2;
+
+            particles.push(
+                ParticleBuilder::new(position, radius, density)
+                    .sand(young_modulus, poisson_ratio)
+                    .build(),
+            );
         }
     }
 
