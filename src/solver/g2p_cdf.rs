@@ -42,9 +42,9 @@ impl<B: Backend> WgG2PCdf<B> {
             hmap_entries: &grid.hmap_entries,
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
-            sorted_particle_ids: &particles.sorted_ids,
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
+            sorted_particle_ids: particles.sorted_ids(),
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
         };
         self.g2p_cdf.launch_indirect(
             backend,

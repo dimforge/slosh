@@ -1,7 +1,6 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::models::GpuModels;
 use crate::solver::{
     GpuImpulses, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, SimulationParams,
     WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate,
@@ -42,7 +41,6 @@ pub struct MpmData<B: Backend> {
     pub impulses: GpuImpulses<B>,
     pub poses_staging: GpuVector<GpuSim, B>,
     prefix_sum: PrefixSumWorkspace<B>,
-    models: GpuModels<B>,
     coupling: Vec<BodyCouplingEntry>,
 }
 
@@ -92,7 +90,6 @@ impl<B: Backend> MpmData<B> {
         let sampling_step = cell_width; // TODO: * 1.5 ?
         let bodies = GpuBodySet::from_rapier(backend, bodies, colliders, &coupling)?;
         let sim_params = GpuSimulationParams::new(backend, params)?;
-        let models = GpuModels::from_particles(backend, particles)?;
         let particles = GpuParticles::from_particles(backend, particles)?;
         let rigid_particles =
             GpuRigidParticles::from_rapier(backend, colliders, &bodies, &coupling, sampling_step)?;
@@ -115,7 +112,6 @@ impl<B: Backend> MpmData<B> {
             impulses,
             grid,
             prefix_sum,
-            models,
             poses_staging,
             coupling,
         })
@@ -253,7 +249,6 @@ impl<B: Backend> MpmPipeline<B> {
                 &data.sim_params,
                 &data.grid,
                 &data.particles,
-                &data.models,
                 &data.bodies,
             )?;
         }

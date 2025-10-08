@@ -53,6 +53,7 @@ struct Stage {
     builders: SceneBuilders,
     physics: PhysicsContext,
     app_state: AppState,
+    step_id: usize,
 
     step_result: SimulationStepResult,
     readback_shader: PrepReadback<WebGpu>,
@@ -115,6 +116,7 @@ impl Stage {
             physics,
             app_state,
             step_result,
+            step_id: 0,
         }
     }
 
@@ -181,8 +183,14 @@ pub fn run(scene_builders: SceneBuilders) {
     #[cfg(feature = "dim2")]
     let mut camera3d = FixedView::new();
     #[cfg(feature = "dim3")]
-    let mut camera3d = ArcBall::new([40.0, 40.0, 40.0].into(), [0.0; 3].into());
+    let mut camera3d = ArcBall::new_with_frustum(
+        std::f32::consts::PI / 4.0,
+        0.1,
+        1000.0,
+        [40.0, 40.0, 40.0].into(), [0.0; 3].into()
+    );
     let mut camera2d = Sidescroll::new();
+    println!("CLIP planes: {:?}", camera3d.clip_planes());
 
     while !window.should_close() {
         /*
@@ -226,6 +234,14 @@ pub fn run(scene_builders: SceneBuilders) {
         offset += font_sz / 2.0;
         window.draw_text(
             &format!("readback: {:.1}ms", stage.step_result.timings.readback_time),
+            &[0.0, offset].into(),
+            font_sz / 2.0,
+            &font,
+            &[0.8, 0.8, 0.8].into(),
+        );
+        offset += font_sz / 2.0;
+        window.draw_text(
+            &format!("particles: {}", stage.physics.data.particles.len()),
             &[0.0, offset].into(),
             font_sz / 2.0,
             &font,

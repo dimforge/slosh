@@ -30,6 +30,10 @@ impl<B: Backend> WgGridUpdateCdf<B> {
         grid: &GpuGrid<B>,
         bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
+        if bodies.is_empty() {
+            return Ok(());
+        }
+
         let args = GridUpdateCdfArgs {
             grid: &grid.meta,
             active_blocks: &grid.active_blocks,

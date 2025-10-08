@@ -46,9 +46,9 @@ impl<B: Backend> WgG2P<B> {
             hmap_entries: &grid.hmap_entries,
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
-            sorted_particle_ids: &particles.sorted_ids,
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
+            sorted_particle_ids: particles.sorted_ids(),
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
             body_vels: bodies.vels(),
             body_mprops: bodies.mprops(),
         };

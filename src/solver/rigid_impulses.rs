@@ -77,6 +77,10 @@ impl<B: Backend> WgRigidImpulses<B> {
         impulses: &GpuImpulses<B>,
         bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
+        if bodies.is_empty() {
+            return Ok(());
+        }
+        
         let args = RigidImpulsesArgs {
             params: Some(&sim_params.params),
             grid: Some(&grid.meta),
@@ -96,6 +100,10 @@ impl<B: Backend> WgRigidImpulses<B> {
         impulses: &GpuImpulses<B>,
         bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
+        if bodies.is_empty() {
+            return Ok(());
+        }
+
         let args = RigidImpulsesArgs {
             params: None,
             grid: None,

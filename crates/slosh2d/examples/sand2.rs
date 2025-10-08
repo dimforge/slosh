@@ -172,6 +172,6 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     PhysicsContext {
         data,
         rapier_data,
-        particles,
+        callbacks: vec![],
     }
 }

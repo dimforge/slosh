@@ -34,6 +34,7 @@ struct GridArgs<'a, B: Backend> {
     scan_values: &'a GpuVector<u32, B>,
     // From particles
     particles_pos: &'a GpuVector<ParticlePosition, B>,
+    particles_len: &'a GpuScalar<u32, B>,
     active_blocks: &'a GpuVector<GpuActiveBlockHeader, B>,
     rigid_particles_pos: &'a GpuVector<Point<f32>, B>,
     rigid_particle_needs_block: &'a GpuVector<u32, B>,
@@ -63,12 +64,13 @@ impl<B: Backend> WgGrid<B> {
             nodes_linked_lists: &grid.nodes_linked_lists,
             rigid_nodes_linked_lists: &grid.rigid_nodes_linked_lists,
             scan_values: &grid.scan_values,
-            particles_pos: &particles.positions,
+            particles_pos: particles.positions(),
+            particles_len: particles.gpu_len(),
             active_blocks: &grid.active_blocks,
             rigid_particles_pos: &rigid_particles.sample_points,
             rigid_particle_needs_block: &rigid_particles.rigid_particle_needs_block,
-            sorted_particle_ids: &particles.sorted_ids,
-            particle_node_linked_lists: &particles.node_linked_lists,
+            sorted_particle_ids: particles.sorted_ids(),
+            particle_node_linked_lists: particles.node_linked_lists(),
         };
 
         // Retry until we allocated enough room on the sparse grid for all the blocks.

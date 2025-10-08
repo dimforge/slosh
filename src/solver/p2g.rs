@@ -44,9 +44,9 @@ impl<B: Backend> WgP2G<B> {
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
             nodes_linked_lists: &grid.nodes_linked_lists,
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
-            particle_node_linked_lists: &particles.node_linked_lists,
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
+            particle_node_linked_lists: particles.node_linked_lists(),
             body_vels: bodies.vels(),
             body_impulses: &impulses.incremental_impulses,
         };

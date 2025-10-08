@@ -1,10 +1,11 @@
-use crate::models::{DruckerPrager, ElasticCoefficients};
+use std::ops::RangeBounds;
+use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
 use nalgebra::{vector, Point4};
 use nexus::dynamics::body::BodyCouplingEntry;
 use rapier::geometry::{ColliderSet, Polyline, Segment, TriMesh};
-use stensor::tensor::GpuTensor;
+use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
 use slang_hal::backend::Backend;
 use wgpu::BufferUsages;
@@ -212,13 +213,11 @@ impl<B: Backend> GpuRigidParticles<B> {
                 &sampling_buffers.samples,
                 BufferUsages::STORAGE,
             )?,
-            node_linked_lists: unsafe {
-                GpuTensor::vector_uninit(
-                    backend,
-                    sampling_buffers.samples.len() as u32,
-                    BufferUsages::STORAGE,
-                )?
-            },
+            node_linked_lists: GpuTensor::vector_uninit(
+                backend,
+                sampling_buffers.samples.len() as u32,
+                BufferUsages::STORAGE,
+            )?,
             sample_ids: GpuTensor::vector_encased(
                 backend,
                 &sampling_buffers.samples_ids,
@@ -226,13 +225,11 @@ impl<B: Backend> GpuRigidParticles<B> {
             )?,
             // NOTE: this is a packed bitmask so each u32 contains
             //       the flag for 32 particles.
-            rigid_particle_needs_block: unsafe {
-                GpuTensor::vector_uninit(
-                    backend,
-                    sampling_buffers.samples.len().div_ceil(32) as u32,
-                    BufferUsages::STORAGE,
-                )?
-            },
+            rigid_particle_needs_block: GpuTensor::vector_uninit(
+                backend,
+                sampling_buffers.samples.len().div_ceil(32) as u32,
+                BufferUsages::STORAGE,
+            )?
         })
     }
 
@@ -251,42 +248,192 @@ pub type ParticlePosition = Point<f32>;
 pub type ParticlePosition = Point4<f32>;
 
 
-pub struct GpuParticles<B: Backend> {
-    pub positions: GpuTensor<ParticlePosition, B>,
-    pub dynamics: GpuTensor<ParticleDynamics, B>,
-    pub sorted_ids: GpuTensor<u32, B>,
-    pub node_linked_lists: GpuTensor<u32, B>,
+struct SoAParticles {
+    positions: Vec<ParticlePosition>,
+    dynamics: Vec<ParticleDynamics>,
+    elasticity: Vec<ElasticCoefficients>,
+    plasticity: Vec<DruckerPrager>,
+    plastic_states: Vec<DruckerPragerPlasticState>,
+    phases: Vec<ParticlePhase>,
 }
 
-impl<B: Backend> GpuParticles<B> {
-    pub fn is_empty(&self) -> bool {
-        self.positions.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.positions.len() as usize
-    }
-
-    pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
+impl SoAParticles {
+    pub fn new(particles: &[Particle]) -> Self {
         #[cfg(feature = "dim2")]
         let positions: Vec<_> = particles.iter().map(|p| p.position).collect();
         #[cfg(feature = "dim3")]
         let positions: Vec<_> = particles.iter().map(|p| p.position.coords.push(0.0).into()).collect();
         let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
 
+        let elasticity: Vec<_> = particles.iter().map(|p| p.model).collect();
+        let plasticity: Vec<_> = particles
+            .iter()
+            .map(|p| p.plasticity.unwrap_or(DruckerPrager::new(-1.0, -1.0)))
+            .collect();
+        let plastic_states: Vec<_> = particles
+            .iter()
+            .map(|_| DruckerPragerPlasticState::default())
+            .collect();
+        let phases: Vec<_> = particles.iter().map(|p| p.phase).collect();
+
+        Self {
+            positions, dynamics, elasticity, plasticity, plastic_states, phases
+        }
+    }
+}
+
+pub struct GpuParticles<B: Backend> {
+    len: usize,
+    gpu_len: GpuScalar<u32, B>,
+    positions: GpuTensor<ParticlePosition, B>,
+    dynamics: GpuTensor<ParticleDynamics, B>,
+    linear_elasticity: GpuTensor<ElasticCoefficients, B>,
+    drucker_prager_plasticity: GpuTensor<DruckerPrager, B>,
+    drucker_prager_plastic_state: GpuTensor<DruckerPragerPlasticState, B>,
+    phases: GpuTensor<ParticlePhase, B>,
+    sorted_ids: GpuTensor<u32, B>,
+    node_linked_lists: GpuTensor<u32, B>,
+}
+
+impl<B: Backend> GpuParticles<B> {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    pub fn gpu_len(&self) -> &GpuScalar<u32, B> {
+        &self.gpu_len
+    }
+
+    pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
+        let data = SoAParticles::new(particles);
+
+        let resizeable = BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST;
         Ok(Self {
+            len: particles.len(),
+            gpu_len: GpuTensor::scalar(backend, particles.len() as u32, BufferUsages::STORAGE | BufferUsages::UNIFORM | BufferUsages::COPY_DST)?,
             positions: GpuTensor::vector(
                 backend,
-                &positions,
-                BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+                &data.positions,
+                resizeable,
             )?,
-            dynamics: GpuTensor::vector_encased(backend, &dynamics, BufferUsages::STORAGE)?,
-            sorted_ids: unsafe {
-                GpuTensor::vector_uninit(backend, particles.len() as u32, BufferUsages::STORAGE)?
-            },
-            node_linked_lists: unsafe {
-                GpuTensor::vector_uninit(backend, particles.len() as u32, BufferUsages::STORAGE)?
-            },
+            dynamics: GpuTensor::vector_encased(backend, &data.dynamics, resizeable)?,
+            linear_elasticity: GpuTensor::vector(backend, &data.elasticity, resizeable)?,
+            drucker_prager_plasticity: GpuTensor::vector(
+                backend,
+                &data.plasticity,
+                resizeable,
+            )?,
+            drucker_prager_plastic_state: GpuTensor::vector(
+                backend,
+                &data.plastic_states,
+                resizeable,
+            )?,
+            phases: GpuTensor::vector(backend, &data.phases, resizeable)?,
+            sorted_ids:
+                GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
+            node_linked_lists:
+                GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?
         })
+    }
+
+    /// Removes a range of data from this buffer, shifting elements to fill the gap.
+    ///
+    /// If the operation succeeded, returns the number of removed elements.
+    pub fn shift_remove(&mut self, backend: &B, range: impl RangeBounds<usize> + Clone) -> Result<usize, B::Error> {
+        // If new vectors are added to the struct, this code needs to be updated to adjust
+        // the buffers accordingly after range removal.
+        let Self {
+            len,
+            gpu_len,
+            positions,
+            dynamics,
+            linear_elasticity,
+            drucker_prager_plasticity,
+            drucker_prager_plastic_state,
+            phases,
+            sorted_ids: _,
+            node_linked_lists: _,
+        } = self;
+
+        let removed = positions.shift_remove_encased(backend, range.clone())?;
+        dynamics.shift_remove_encased(backend, range.clone())?;
+        linear_elasticity.shift_remove(backend, range.clone())?;
+        drucker_prager_plasticity.shift_remove(backend, range.clone())?;
+        drucker_prager_plastic_state.shift_remove(backend, range.clone())?;
+        phases.shift_remove(backend, range)?;
+
+        *len -= removed;
+        backend.write_buffer(gpu_len.buffer_mut(), 0, &[*len as u32])?;
+        Ok(removed)
+    }
+
+    /// Appends particles at the end of this buffer.
+    pub fn append(&mut self, backend: &B, particles: &[Particle]) -> Result<(), B::Error> {
+        // If new vectors are added to the struct, this code needs to be updated to adjust
+        // the buffers accordingly for appending particles.
+        let Self {
+            len,
+            gpu_len,
+            positions,
+            dynamics,
+            linear_elasticity,
+            drucker_prager_plasticity,
+            drucker_prager_plastic_state,
+            phases,
+            sorted_ids,
+            node_linked_lists,
+        } = self;
+
+        let data = SoAParticles::new(particles);
+
+        let zeros = vec![0; particles.len() as usize];
+
+        dynamics.append_encased(backend, &data.dynamics)?;
+        positions.append_encased(backend, &data.positions)?;
+        linear_elasticity.append(backend, &data.elasticity)?;
+        drucker_prager_plasticity.append(backend, &data.plasticity)?;
+        drucker_prager_plastic_state.append(backend, &data.plastic_states)?;
+        phases.append(backend, &data.phases)?;
+        sorted_ids.append(backend, &zeros)?;
+        node_linked_lists.append(backend, &zeros)?;
+
+        *len += particles.len();
+        backend.write_buffer(gpu_len.buffer_mut(), 0, &[*len as u32])?;
+        println!("New len: {}", *len);
+
+        Ok(())
+    }
+
+    pub fn positions(&self) -> &GpuTensor<ParticlePosition, B> {
+        &self.positions
+    }
+
+    pub fn dynamics(&self) -> &GpuTensor<ParticleDynamics, B> {
+        &self.dynamics
+    }
+
+    pub fn sorted_ids(&self) -> &GpuTensor<u32, B> {
+        &self.sorted_ids
+    }
+
+    pub fn node_linked_lists(&self) -> &GpuTensor<u32, B> {
+        &self.node_linked_lists
+    }
+
+    pub fn linear_elasticity(&self) -> &GpuTensor<ElasticCoefficients, B> {
+        &self.linear_elasticity
+    }
+    pub fn drucker_prager_plasticity(&self) -> &GpuTensor<DruckerPrager, B> {
+        &self.drucker_prager_plasticity
+    }
+    pub fn drucker_prager_plastic_state(&self) -> &GpuTensor<DruckerPragerPlasticState, B> {
+        &self.drucker_prager_plastic_state
+    }
+    pub fn phases(&self) -> &GpuTensor<ParticlePhase, B> {
+        &self.phases
     }
 }

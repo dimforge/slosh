@@ -108,6 +108,6 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     PhysicsContext {
         data,
         rapier_data,
-        particles,
+        callbacks: vec![]
     }
 }

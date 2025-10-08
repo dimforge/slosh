@@ -1,4 +1,4 @@
-use slang_hal::backend::WebGpu;
+use slang_hal::backend::{Backend, WebGpu};
 use slosh::pipeline::{MpmData, MpmPipeline};
 use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
@@ -33,10 +33,36 @@ pub struct RapierData {
     pub islands: IslandManager,
 }
 
+pub trait PhysicsCallback {
+    fn update(&mut self, state: &mut PhysicsState<'_>);
+}
+
+impl<F: FnMut(&mut PhysicsState)> PhysicsCallback for F {
+    fn update(&mut self, state: &mut PhysicsState<'_>) {
+        (*self)(state);
+    }
+}
+
+pub struct PhysicsState<'a> {
+    pub(crate) backend: &'a WebGpu,
+    pub(crate) data: &'a mut MpmData<WebGpu>,
+    pub(crate) step_id: usize,
+}
+
+impl<'a> PhysicsState<'a> {
+    pub fn step_id(&self) -> usize {
+        self.step_id
+    }
+
+    pub fn add_particles(&mut self, particles: &[Particle]) {
+        self.data.particles.append(self.backend, particles).expect("Failed to add particles.");
+    }
+}
+
 pub struct PhysicsContext {
     pub data: MpmData<WebGpu>,
     pub rapier_data: RapierData,
-    pub particles: Vec<Particle>,
+    pub callbacks: Vec<Box<dyn PhysicsCallback>>
 }
 
 // #[derive(Default)]

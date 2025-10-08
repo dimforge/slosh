@@ -1,4 +1,4 @@
-use slosh_testbed3d::{RapierData, slosh};
+use slosh_testbed3d::{RapierData, slosh, PhysicsState};
 
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
@@ -16,6 +16,11 @@ fn main() {
     panic!("Run the `testbed3` example instead.");
 }
 
+// const YOUNG_MODULUS: f32 = 2.0e5;
+// const DENSITY: f32 = 400.0;
+const DENSITY: f32 = 2700.0;
+const YOUNG_MODULUS: f32 = 2.0e9;
+
 pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let mut rapier_data = RapierData::default();
 
@@ -31,16 +36,38 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                     k as f32 + 0.5 - nxz as f32 / 2.0
                 ] * cell_width
                     / 2.0;
-                let density = 2700.0;
                 let radius = cell_width / 4.0;
                 particles.push(
-                    ParticleBuilder::new(position, radius, density)
-                        .sand(2.0e9, 0.2)
+                    ParticleBuilder::new(position, radius, DENSITY)
+                        .sand(YOUNG_MODULUS, 0.2)
                         .build()
                 );
             }
         }
     }
+
+
+    // let nxz = 2; // 45;
+    // let cell_width = 1.0;
+    // let mut particles = vec![];
+    // for i in 0..nxz {
+    //     for j in 0..1 {
+    //         for k in 0..nxz {
+    //             let position = point![
+    //                 i as f32 * 4.0 + 0.5 - nxz as f32 / 2.0,
+    //                 j as f32 + 0.5 + 10.0,
+    //                 k as f32 * 4.0 + 0.5 - nxz as f32 / 2.0
+    //             ] * cell_width
+    //                 / 2.0;
+    //             let radius = cell_width / 4.0;
+    //             particles.push(
+    //                 ParticleBuilder::new(position, radius, DENSITY)
+    //                     .sand(YOUNG_MODULUS, 0.2)
+    //                     .build()
+    //             );
+    //         }
+    //     }
+    // }
 
     if !app_state.restarting {
         app_state.num_substeps = 20;
@@ -104,9 +131,34 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         60_000,
     )
     .unwrap();
+
+    let callback = move |phx: &mut PhysicsState| {
+        if phx.step_id() % 50 == 0 {
+            let mut particles = vec![];
+            for i in 0..nxz {
+                for k in 0..nxz {
+                    let position = point![
+                    i as f32 + 0.5 - nxz as f32 / 2.0,
+                    110.0,
+                    k as f32 + 0.5 - nxz as f32 / 2.0
+                ] * cell_width
+                        / 2.0;
+                    let radius = cell_width / 4.0;
+                    particles.push(
+                        ParticleBuilder::new(position, radius, DENSITY)
+                            .sand(YOUNG_MODULUS, 0.2)
+                            .build()
+                    );
+                }
+            }
+            println!("I am called {}!", particles.len());
+            phx.add_particles(&particles);
+        }
+    };
+
     PhysicsContext {
         data,
         rapier_data,
-        particles,
+        callbacks: vec![Box::new(callback)]
     }
 }

@@ -29,11 +29,12 @@ func particle_update(
     RWStructuredBuffer<DruckerPragerPlasticState> plastic_state,
     RWStructuredBuffer<Position> particles_pos,
     RWStructuredBuffer<Dynamics> particles_dyn,
+    ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<Phase> phases,
 ) {
     let particle_id = invocation_id.x;
 
-    if (particle_id >= particles_pos.getCount()) {
+    if (particle_id >= particles_len) {
         return;
     }
 
