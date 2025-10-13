@@ -50,6 +50,7 @@ type RenderNode = kiss3d::scene::SceneNode;
 struct Stage {
     gpu: WebGpu,
 
+    selected_demo: usize,
     builders: SceneBuilders,
     physics: PhysicsContext,
     app_state: AppState,
@@ -67,7 +68,7 @@ struct Stage {
 impl Stage {
     pub async fn new(builders: SceneBuilders) -> Stage {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 10, // Did the default get bumped down to 8???!!
+            max_storage_buffers_per_shader_stage: 10,
             ..Limits::default()
         };
         let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
@@ -117,10 +118,12 @@ impl Stage {
             app_state,
             step_result,
             step_id: 0,
+            selected_demo: 0,
         }
     }
 
     pub fn set_demo(&mut self, demo_id: usize) {
+        self.selected_demo = demo_id;
         self.physics = (self.builders[demo_id]).1(&self.gpu, &mut self.app_state);
         self.readback = GpuReadbackData::new(&self.gpu, self.physics.data.particles.len()).unwrap();
         self.step_result
@@ -170,9 +173,6 @@ pub async fn run(scene_builders: SceneBuilders) {
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
 
-    let font = Font::default();
-    let font_sz = 40.0;
-
     window.set_light(Light::StickToCamera);
 
     #[cfg(feature = "dim2")]
@@ -193,6 +193,8 @@ pub async fn run(scene_builders: SceneBuilders) {
     println!("CLIP planes: {:?}", camera3d.clip_planes());
 
     while !window.should_close() {
+        let mut new_selected_demo = None;
+
         /*
          * Step simulation.
          */
@@ -209,64 +211,59 @@ pub async fn run(scene_builders: SceneBuilders) {
         /*
          * UI
          */
-        let mut offset = 0.0;
-        for (i, builder) in stage.builders.iter().enumerate() {
-            window.draw_text(
-                &format!("{} - {} demo", i + 1, builder.0),
-                &[0.0, offset].into(),
-                font_sz,
-                &font,
-                &[0.8, 0.8, 0.8].into(),
-            );
-            offset += font_sz;
-        }
+        window.draw_ui(|ctx| {
+            kiss3d::egui::Window::new("Settings")
+                .show(ctx, |ui| {
+                    let mut changed = false;
+                    kiss3d::egui::ComboBox::from_label("selected sample")
+                        .selected_text(&stage.builders[stage.selected_demo].0)
+                        .show_ui(ui, |ui| {
+                            for (i, (name, _)) in stage.builders.iter().enumerate() {
+                                changed = ui
+                                    .selectable_value(&mut stage.selected_demo, i, name)
+                                    .changed()
+                                    || changed;
+                            }
+                        });
+                    if changed {
+                        new_selected_demo = Some(stage.selected_demo);
+                    }
 
-        window.draw_text(
-            &format!(
-                "total: {:.1}ms (encoding: {:.1}ms)",
-                stage.step_result.timings.total_step_time, stage.step_result.timings.encoding_time
-            ),
-            &[0.0, offset].into(),
-            font_sz / 2.0,
-            &font,
-            &[0.8, 0.8, 0.8].into(),
-        );
-        offset += font_sz / 2.0;
-        window.draw_text(
-            &format!("readback: {:.1}ms", stage.step_result.timings.readback_time),
-            &[0.0, offset].into(),
-            font_sz / 2.0,
-            &font,
-            &[0.8, 0.8, 0.8].into(),
-        );
-        offset += font_sz / 2.0;
-        window.draw_text(
-            &format!("particles: {}", stage.physics.data.particles.len()),
-            &[0.0, offset].into(),
-            font_sz / 2.0,
-            &font,
-            &[0.8, 0.8, 0.8].into(),
-        );
+                    ui.label(format!(
+                        "total: {:.1}ms (encoding: {:.1}ms)",
+                        stage.step_result.timings.total_step_time, stage.step_result.timings.encoding_time
+                    ));
+                    ui.label(
+                        format!("readback: {:.1}ms", stage.step_result.timings.readback_time)
+                    );
+                    ui.label(format!("particles: {}", stage.physics.data.particles.len()));
 
-        /*
-         * Handle events
-         */
-        for event in window.events().iter() {
-            let mut new_selected_demo = None;
+                    ui.horizontal(|ui| {
+                        let play_pause_label = if stage.app_state.run_state == RunState::Running {
+                            "Pause"
+                        } else {
+                            "Play"
+                        };
+                        if ui.button(play_pause_label).clicked() {
+                            if stage.app_state.run_state == RunState::Running {
+                                stage.app_state.run_state = RunState::Paused;
+                            } else {
+                                stage.app_state.run_state = RunState::Running;
+                            }
+                        }
+                        if ui.button("Step").clicked() {
+                            stage.app_state.run_state = RunState::Step;
+                        }
+                        if ui.button("Restart").clicked() {
+                            new_selected_demo = Some(stage.selected_demo);
+                        }
+                    });
+                });
+        });
 
-            if let WindowEvent::Key(button, Action::Release, _) = event.value {
-                match button {
-                    Key::Key1 => new_selected_demo = Some(0),
-                    Key::Key2 => new_selected_demo = Some(1),
-                    Key::Key3 => new_selected_demo = Some(2),
-                    _ => {}
-                }
-            }
-
-            if let Some(demo) = new_selected_demo {
-                stage.set_demo(demo as usize);
-                render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
-            }
+        if let Some(demo) = new_selected_demo {
+            stage.set_demo(demo);
+            render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
         }
 
         /*
