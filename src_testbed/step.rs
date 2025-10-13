@@ -18,7 +18,7 @@ pub struct SimulationStepResult {
 
 impl Stage {
     // TODO PERF: don’t reallocate the result buffer each time.
-    pub fn step_simulation(&mut self) -> bool {
+    pub async fn step_simulation(&mut self) -> bool {
         if self.app_state.run_state == RunState::Paused {
             return false;
         }
@@ -151,11 +151,10 @@ impl Stage {
 
         // TODO: reuse the `physics.data.particles_pos_staging` buffer.
         let t_readback = std::time::Instant::now();
-        futures::executor::block_on(self.gpu.read_buffer(
+        self.gpu.read_buffer(
             self.readback.instances_staging.buffer(),
             self.step_result.instances.as_mut_slice(),
-        ))
-        .unwrap();
+        ).await.unwrap();
         let t_readback = t_readback.elapsed().as_secs_f32() * 1000.0;
         // Step rapier to update kinematic bodies.
         let rapier = &mut self.physics.rapier_data;

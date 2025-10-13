@@ -32,7 +32,6 @@ serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
 slosh2d = { path = "../slosh2d" }
-futures = "0.3"
 regex = "1"
 
 kiss3d = { version = "0.36", features = [ "vertex_index_u32" ] }

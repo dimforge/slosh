@@ -65,12 +65,12 @@ struct Stage {
 }
 
 impl Stage {
-    pub fn new(builders: SceneBuilders) -> Stage {
+    pub async fn new(builders: SceneBuilders) -> Stage {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 10, // Did the default get bumped down to 8???!!
             ..Limits::default()
         };
-        let mut gpu = futures::executor::block_on(WebGpu::new(Default::default(), limits)).unwrap();
+        let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
         // TODO: this is a terrible, horrible, hack, to work around the fact that slang isn’t giving us access to
         //       `exch.exchanged` to properly handle the _weak_ nature of `atomicCompareExchangeWeak̀
         let reg =
@@ -128,8 +128,8 @@ impl Stage {
             .resize(self.physics.data.particles.len(), Default::default());
     }
 
-    fn update(&mut self) {
-        if !self.step_simulation() {
+    async fn update(&mut self) {
+        if !self.step_simulation().await {
             return;
         }
 
@@ -164,9 +164,9 @@ impl Stage {
     }
 }
 
-pub fn run(scene_builders: SceneBuilders) {
+pub async fn run(scene_builders: SceneBuilders) {
     let mut colliders_gfx = HashMap::new();
-    let mut stage = Stage::new(scene_builders);
+    let mut stage = Stage::new(scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
 
@@ -196,7 +196,7 @@ pub fn run(scene_builders: SceneBuilders) {
         /*
          * Step simulation.
          */
-        stage.update();
+        stage.update().await;
 
         /*
          * Update rendering.
@@ -272,7 +272,7 @@ pub fn run(scene_builders: SceneBuilders) {
         /*
          * Render
          */
-        window.render_with_cameras(&mut camera3d, &mut camera2d);
+        window.render_with_cameras(&mut camera3d, &mut camera2d).await;
     }
 }
 
@@ -417,7 +417,7 @@ fn kiss3d_mesh_from_polyline(vertices: Vec<nalgebra::Point2<f32>>) -> PlanarMesh
 }
 
 #[cfg(feature = "dim3")]
-fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<Mesh> {
+fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<GpuMesh> {
     let mesh = match co_shape.shape_type() {
         ShapeType::Ball => {
             let ball = co_shape.as_ball().unwrap();
@@ -462,7 +462,7 @@ fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<Mesh> {
 }
 
 #[cfg(feature = "dim3")]
-fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::resource::Mesh {
+fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::resource::GpuMesh {
     let (vtx, idx) = buffers;
     let kiss_vtx: Vec<_> = vtx
         .into_iter()
@@ -472,7 +472,7 @@ fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::
         .into_iter()
         .map(|idx| kiss3d::nalgebra::Point3::new(idx[0], idx[1], idx[2]))
         .collect();
-    Mesh::new(kiss_vtx, kiss_idx, None, None, false)
+    GpuMesh::new(kiss_vtx, kiss_idx, None, None, false)
 }
 
 #[cfg(feature = "dim2")]
