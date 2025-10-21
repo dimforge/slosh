@@ -23,11 +23,12 @@ fn shear_modulus(young_modulus: f32, poisson_ratio: f32) -> f32 {
 pub struct ElasticCoefficients {
     pub lambda: f32,
     pub mu: f32,
+    pub cfl_coeff: f32,
 }
 
 impl ElasticCoefficients {
     pub fn from_young_modulus(young_modulus: f32, poisson_ratio: f32) -> Self {
         let (lambda, mu) = lame_lambda_mu(young_modulus, poisson_ratio);
-        Self { lambda, mu }
+        Self { lambda, mu, cfl_coeff: 0.5 }
     }
 }

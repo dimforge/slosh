@@ -151,7 +151,6 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                     );
                 }
             }
-            println!("I am called {}!", particles.len());
             phx.add_particles(&particles);
         }
     };

@@ -15,6 +15,7 @@ use nexus::math::{Matrix, Point, Vector};
 use nexus::shapes::ShapeBuffers;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
+use crate::solver::particle_model::{GpuParticleModel, ParticleModel, SandModel};
 
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
@@ -86,9 +87,7 @@ pub struct Cdf {
 pub struct Particle {
     pub position: Point<f32>,
     pub dynamics: ParticleDynamics,
-    pub model: ElasticCoefficients,
-    pub plasticity: Option<DruckerPrager>,
-    pub phase: ParticlePhase,
+    pub model: ParticleModel,
 }
 
 pub struct ParticleBuilder(Particle);
@@ -107,25 +106,26 @@ impl ParticleBuilder {
         Self(Particle {
             position,
             dynamics: ParticleDynamics::new(radius, density),
-            model: ElasticCoefficients::from_young_modulus(
+            model: ParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
                 DEFAULT_YOUNG_MODULUS,
                 DEFAULT_POISSON_RATIO,
-            ),
-            plasticity: None,
-            phase: ParticlePhase::default(),
+            )),
         })
     }
 
     pub fn elastic(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
-        self.0.plasticity = None;
+        self.0.model = ParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio));
         self
     }
 
     pub fn sand(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
-        self.0.plasticity = Some(DruckerPrager::new(young_modulus, poisson_ratio));
-        self.0.phase = ParticlePhase::broken();
+        self.0.model = ParticleModel::SandLinear(
+            SandModel {
+                plastic_state: DruckerPragerPlasticState::default(),
+                plastic: DruckerPrager::new(young_modulus, poisson_ratio),
+                elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
+            }
+        );
         self
     }
 
@@ -251,10 +251,7 @@ pub type ParticlePosition = Point4<f32>;
 struct SoAParticles {
     positions: Vec<ParticlePosition>,
     dynamics: Vec<ParticleDynamics>,
-    elasticity: Vec<ElasticCoefficients>,
-    plasticity: Vec<DruckerPrager>,
-    plastic_states: Vec<DruckerPragerPlasticState>,
-    phases: Vec<ParticlePhase>,
+    models: Vec<GpuParticleModel>,
 }
 
 impl SoAParticles {
@@ -264,20 +261,10 @@ impl SoAParticles {
         #[cfg(feature = "dim3")]
         let positions: Vec<_> = particles.iter().map(|p| p.position.coords.push(0.0).into()).collect();
         let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
-
-        let elasticity: Vec<_> = particles.iter().map(|p| p.model).collect();
-        let plasticity: Vec<_> = particles
-            .iter()
-            .map(|p| p.plasticity.unwrap_or(DruckerPrager::new(-1.0, -1.0)))
-            .collect();
-        let plastic_states: Vec<_> = particles
-            .iter()
-            .map(|_| DruckerPragerPlasticState::default())
-            .collect();
-        let phases: Vec<_> = particles.iter().map(|p| p.phase).collect();
+        let models: Vec<_> = particles.iter().map(|p| p.model.into()).collect();
 
         Self {
-            positions, dynamics, elasticity, plasticity, plastic_states, phases
+            positions, dynamics, models
         }
     }
 }
@@ -287,10 +274,7 @@ pub struct GpuParticles<B: Backend> {
     gpu_len: GpuScalar<u32, B>,
     positions: GpuTensor<ParticlePosition, B>,
     dynamics: GpuTensor<ParticleDynamics, B>,
-    linear_elasticity: GpuTensor<ElasticCoefficients, B>,
-    drucker_prager_plasticity: GpuTensor<DruckerPrager, B>,
-    drucker_prager_plastic_state: GpuTensor<DruckerPragerPlasticState, B>,
-    phases: GpuTensor<ParticlePhase, B>,
+    models: GpuTensor<GpuParticleModel, B>,
     sorted_ids: GpuTensor<u32, B>,
     node_linked_lists: GpuTensor<u32, B>,
 }
@@ -310,7 +294,6 @@ impl<B: Backend> GpuParticles<B> {
 
     pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
         let data = SoAParticles::new(particles);
-
         let resizeable = BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST;
         Ok(Self {
             len: particles.len(),
@@ -321,18 +304,7 @@ impl<B: Backend> GpuParticles<B> {
                 resizeable,
             )?,
             dynamics: GpuTensor::vector_encased(backend, &data.dynamics, resizeable)?,
-            linear_elasticity: GpuTensor::vector(backend, &data.elasticity, resizeable)?,
-            drucker_prager_plasticity: GpuTensor::vector(
-                backend,
-                &data.plasticity,
-                resizeable,
-            )?,
-            drucker_prager_plastic_state: GpuTensor::vector(
-                backend,
-                &data.plastic_states,
-                resizeable,
-            )?,
-            phases: GpuTensor::vector(backend, &data.phases, resizeable)?,
+            models: GpuTensor::vector(backend, &data.models, resizeable)?,
             sorted_ids:
                 GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
             node_linked_lists:
@@ -351,20 +323,14 @@ impl<B: Backend> GpuParticles<B> {
             gpu_len,
             positions,
             dynamics,
-            linear_elasticity,
-            drucker_prager_plasticity,
-            drucker_prager_plastic_state,
-            phases,
+            models,
             sorted_ids: _,
             node_linked_lists: _,
         } = self;
 
         let removed = positions.shift_remove_encased(backend, range.clone())?;
         dynamics.shift_remove_encased(backend, range.clone())?;
-        linear_elasticity.shift_remove(backend, range.clone())?;
-        drucker_prager_plasticity.shift_remove(backend, range.clone())?;
-        drucker_prager_plastic_state.shift_remove(backend, range.clone())?;
-        phases.shift_remove(backend, range)?;
+        models.shift_remove(backend, range.clone())?;
 
         *len -= removed;
         backend.write_buffer(gpu_len.buffer_mut(), 0, &[*len as u32])?;
@@ -380,10 +346,7 @@ impl<B: Backend> GpuParticles<B> {
             gpu_len,
             positions,
             dynamics,
-            linear_elasticity,
-            drucker_prager_plasticity,
-            drucker_prager_plastic_state,
-            phases,
+            models,
             sorted_ids,
             node_linked_lists,
         } = self;
@@ -394,10 +357,7 @@ impl<B: Backend> GpuParticles<B> {
 
         dynamics.append_encased(backend, &data.dynamics)?;
         positions.append_encased(backend, &data.positions)?;
-        linear_elasticity.append(backend, &data.elasticity)?;
-        drucker_prager_plasticity.append(backend, &data.plasticity)?;
-        drucker_prager_plastic_state.append(backend, &data.plastic_states)?;
-        phases.append(backend, &data.phases)?;
+        models.append(backend, &data.models)?;
         sorted_ids.append(backend, &zeros)?;
         node_linked_lists.append(backend, &zeros)?;
 
@@ -406,6 +366,10 @@ impl<B: Backend> GpuParticles<B> {
         println!("New len: {}", *len);
 
         Ok(())
+    }
+
+    pub fn models(&self) -> &GpuTensor<GpuParticleModel, B> {
+        &self.models
     }
 
     pub fn positions(&self) -> &GpuTensor<ParticlePosition, B> {
@@ -422,18 +386,5 @@ impl<B: Backend> GpuParticles<B> {
 
     pub fn node_linked_lists(&self) -> &GpuTensor<u32, B> {
         &self.node_linked_lists
-    }
-
-    pub fn linear_elasticity(&self) -> &GpuTensor<ElasticCoefficients, B> {
-        &self.linear_elasticity
-    }
-    pub fn drucker_prager_plasticity(&self) -> &GpuTensor<DruckerPrager, B> {
-        &self.drucker_prager_plasticity
-    }
-    pub fn drucker_prager_plastic_state(&self) -> &GpuTensor<DruckerPragerPlasticState, B> {
-        &self.drucker_prager_plastic_state
-    }
-    pub fn phases(&self) -> &GpuTensor<ParticlePhase, B> {
-        &self.phases
     }
 }

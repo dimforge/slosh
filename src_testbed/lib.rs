@@ -190,7 +190,6 @@ pub async fn run(scene_builders: SceneBuilders) {
         [40.0, 40.0, 40.0].into(), [0.0; 3].into()
     );
     let mut camera2d = Sidescroll::new();
-    println!("CLIP planes: {:?}", camera3d.clip_planes());
 
     while !window.should_close() {
         let mut new_selected_demo = None;

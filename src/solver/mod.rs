@@ -23,3 +23,4 @@ mod rigid_particle_update;
 mod grid_update;
 mod grid_update_cdf;
 mod particle;
+mod particle_model;

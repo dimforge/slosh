@@ -28,9 +28,9 @@ slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
 slang-hal = { path = "../slang-hal/crates/slang-hal" }
 minislang = { path = "../slang-hal/crates/minislang" }
 stensor = { path = "../stensor" }
-#nexus2d = { path = "../nexus/crates/nexus2d" }
-#nexus3d = { path = "../nexus/crates/nexus3d" }
+nexus2d = { path = "../nexus/crates/nexus2d" }
+nexus3d = { path = "../nexus/crates/nexus3d" }
 #nalgebra = { path = "../nalgebra" }
-kiss3d = { path = "../kiss3d" }
+#kiss3d = { path = "../kiss3d" }
 
 [profile.release]
