@@ -1,21 +1,22 @@
-use std::ops::RangeBounds;
 use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use nalgebra::{vector, Point4};
+use nalgebra::{Point4, vector};
 use nexus::dynamics::body::BodyCouplingEntry;
 use rapier::geometry::{ColliderSet, Polyline, Segment, TriMesh};
+use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
 use slang_hal::backend::Backend;
 use wgpu::BufferUsages;
 // use nexus::dynamics::body::BodyCouplingEntry;
+use crate::sampling;
+use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
+use crate::solver::particle_model::{DefaultGpuParticleModel, GpuParticleModel, ParticleModel, SandModel};
 use nexus::dynamics::GpuBodySet;
 use nexus::math::{Matrix, Point, Vector};
 use nexus::shapes::ShapeBuffers;
-use crate::sampling;
-use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
-use crate::solver::particle_model::{GpuParticleModel, ParticleModel, SandModel};
+use crate::solver::DefaultParticleModel;
 
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
@@ -23,6 +24,7 @@ pub struct ParticleDynamics {
     pub velocity: Vector<f32>,
     pub def_grad: Matrix<f32>,
     pub affine: Matrix<f32>,
+    pub vel_grad_det: f32,
     pub cdf: Cdf,
     pub init_volume: f32,
     pub init_radius: f32,
@@ -37,6 +39,7 @@ impl ParticleDynamics {
             velocity: Vector::zeros(),
             def_grad: Matrix::identity(),
             affine: Matrix::zeros(),
+            vel_grad_det: 0.0,
             init_volume,
             init_radius: radius,
             mass: init_volume * density,
@@ -84,21 +87,21 @@ pub struct Cdf {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Particle {
+pub struct Particle<Model: ParticleModel> {
     pub position: Point<f32>,
     pub dynamics: ParticleDynamics,
-    pub model: ParticleModel,
+    pub model: Model,
 }
 
-pub struct ParticleBuilder(Particle);
+pub struct ParticleBuilder<Model: ParticleModel>(Particle<Model>);
 
-impl From<ParticleBuilder> for Particle {
-    fn from(value: ParticleBuilder) -> Self {
+impl<Model: ParticleModel> From<ParticleBuilder<Model>> for Particle<Model> {
+    fn from(value: ParticleBuilder<Model>) -> Self {
         value.0
     }
 }
 
-impl ParticleBuilder {
+impl<Model: ParticleModel> ParticleBuilder<Model> {
     pub fn new(position: Point<f32>, radius: f32, density: f32) -> Self {
         const DEFAULT_YOUNG_MODULUS: f32 = 1_000.0;
         const DEFAULT_POISSON_RATIO: f32 = 0.2;
@@ -106,30 +109,31 @@ impl ParticleBuilder {
         Self(Particle {
             position,
             dynamics: ParticleDynamics::new(radius, density),
-            model: ParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
+            model: DefaultParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
                 DEFAULT_YOUNG_MODULUS,
                 DEFAULT_POISSON_RATIO,
-            )),
+            )).into(),
         })
     }
 
     pub fn elastic(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = ParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio));
+        self.0.model = DefaultParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
+            young_modulus,
+            poisson_ratio,
+        )).into();
         self
     }
 
     pub fn sand(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = ParticleModel::SandLinear(
-            SandModel {
-                plastic_state: DruckerPragerPlasticState::default(),
-                plastic: DruckerPrager::new(young_modulus, poisson_ratio),
-                elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
-            }
-        );
+        self.0.model = DefaultParticleModel::SandLinear(SandModel {
+            plastic_state: DruckerPragerPlasticState::default(),
+            plastic: DruckerPrager::new(young_modulus, poisson_ratio),
+            elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
+        }).into();
         self
     }
 
-    pub fn build(self) -> Particle {
+    pub fn build(self) -> Particle<Model> {
         self.0
     }
 }
@@ -229,7 +233,7 @@ impl<B: Backend> GpuRigidParticles<B> {
                 backend,
                 sampling_buffers.samples.len().div_ceil(32) as u32,
                 BufferUsages::STORAGE,
-            )?
+            )?,
         })
     }
 
@@ -247,39 +251,43 @@ pub type ParticlePosition = Point<f32>;
 #[cfg(feature = "dim3")]
 pub type ParticlePosition = Point4<f32>;
 
-
-struct SoAParticles {
+struct SoAParticles<GpuModel: GpuParticleModel> {
     positions: Vec<ParticlePosition>,
     dynamics: Vec<ParticleDynamics>,
-    models: Vec<GpuParticleModel>,
+    models: Vec<GpuModel>,
 }
 
-impl SoAParticles {
-    pub fn new(particles: &[Particle]) -> Self {
+impl<GpuModel: GpuParticleModel> SoAParticles<GpuModel> {
+    pub fn new(particles: &[Particle<GpuModel::Model>]) -> Self {
         #[cfg(feature = "dim2")]
         let positions: Vec<_> = particles.iter().map(|p| p.position).collect();
         #[cfg(feature = "dim3")]
-        let positions: Vec<_> = particles.iter().map(|p| p.position.coords.push(0.0).into()).collect();
+        let positions: Vec<_> = particles
+            .iter()
+            .map(|p| p.position.coords.push(0.0).into())
+            .collect();
         let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
-        let models: Vec<_> = particles.iter().map(|p| p.model.into()).collect();
+        let models: Vec<_> = particles.iter().map(|p| GpuModel::from_model(p.model)).collect();
 
         Self {
-            positions, dynamics, models
+            positions,
+            dynamics,
+            models,
         }
     }
 }
 
-pub struct GpuParticles<B: Backend> {
+pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModel> {
     len: usize,
     gpu_len: GpuScalar<u32, B>,
     positions: GpuTensor<ParticlePosition, B>,
     dynamics: GpuTensor<ParticleDynamics, B>,
-    models: GpuTensor<GpuParticleModel, B>,
+    models: GpuTensor<GpuModel, B>,
     sorted_ids: GpuTensor<u32, B>,
     node_linked_lists: GpuTensor<u32, B>,
 }
 
-impl<B: Backend> GpuParticles<B> {
+impl<B: Backend, GpuModel: GpuParticleModel> GpuParticles<B, GpuModel> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -292,30 +300,36 @@ impl<B: Backend> GpuParticles<B> {
         &self.gpu_len
     }
 
-    pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
+    pub fn from_particles(backend: &B, particles: &[Particle<GpuModel::Model>]) -> Result<Self, B::Error> {
         let data = SoAParticles::new(particles);
         let resizeable = BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST;
         Ok(Self {
             len: particles.len(),
-            gpu_len: GpuTensor::scalar(backend, particles.len() as u32, BufferUsages::STORAGE | BufferUsages::UNIFORM | BufferUsages::COPY_DST)?,
-            positions: GpuTensor::vector(
+            gpu_len: GpuTensor::scalar(
                 backend,
-                &data.positions,
-                resizeable,
+                particles.len() as u32,
+                BufferUsages::STORAGE | BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             )?,
+            positions: GpuTensor::vector(backend, &data.positions, resizeable)?,
             dynamics: GpuTensor::vector_encased(backend, &data.dynamics, resizeable)?,
             models: GpuTensor::vector(backend, &data.models, resizeable)?,
-            sorted_ids:
-                GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
-            node_linked_lists:
-                GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?
+            sorted_ids: GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
+            node_linked_lists: GpuTensor::vector_uninit(
+                backend,
+                particles.len() as u32,
+                resizeable,
+            )?,
         })
     }
 
     /// Removes a range of data from this buffer, shifting elements to fill the gap.
     ///
     /// If the operation succeeded, returns the number of removed elements.
-    pub fn shift_remove(&mut self, backend: &B, range: impl RangeBounds<usize> + Clone) -> Result<usize, B::Error> {
+    pub fn shift_remove(
+        &mut self,
+        backend: &B,
+        range: impl RangeBounds<usize> + Clone,
+    ) -> Result<usize, B::Error> {
         // If new vectors are added to the struct, this code needs to be updated to adjust
         // the buffers accordingly after range removal.
         let Self {
@@ -338,7 +352,7 @@ impl<B: Backend> GpuParticles<B> {
     }
 
     /// Appends particles at the end of this buffer.
-    pub fn append(&mut self, backend: &B, particles: &[Particle]) -> Result<(), B::Error> {
+    pub fn append(&mut self, backend: &B, particles: &[Particle<GpuModel::Model>]) -> Result<(), B::Error> {
         // If new vectors are added to the struct, this code needs to be updated to adjust
         // the buffers accordingly for appending particles.
         let Self {
@@ -368,7 +382,7 @@ impl<B: Backend> GpuParticles<B> {
         Ok(())
     }
 
-    pub fn models(&self) -> &GpuTensor<GpuParticleModel, B> {
+    pub fn models(&self) -> &GpuTensor<GpuModel, B> {
         &self.models
     }
 

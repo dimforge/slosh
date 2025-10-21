@@ -157,6 +157,7 @@ func particle_g2p(
     var momentum_velocity_mass = float4(0.0);
     var velocity_gradient = float3x3(float3(0.0), float3(0.0), float3(0.0));
 #endif
+    var vel_grad_det = 0.0;
 
     // G2P
     {
@@ -222,10 +223,12 @@ func particle_g2p(
             let weight = w[0][shift.x] * w[1][shift.y];
             momentum_velocity_mass += cpic_cell_data * weight;
             velocity_gradient += (weight * inv_d) * outer_product(cpic_cell_data.xy, dpt);
+            vel_grad_det += weight * inv_d * dot(cpic_cell_data.xy, dpt);
 #else
             let weight = w[0][shift.x] * w[1][shift.y] * w[2][shift.z];
             momentum_velocity_mass += cpic_cell_data * weight;
             velocity_gradient += (weight * inv_d) * outer_product(cpic_cell_data.xyz, dpt);
+            vel_grad_det += weight * inv_d * dot(cpic_cell_data.xyz, dpt);
 #endif
         }
 
@@ -242,6 +245,7 @@ func particle_g2p(
     // Set the particle velocity, and store the velocity gradient into the affine matrix.
     // The rest will be dealt with in the particle update kernel(s).
     particles_dyn[particle_id].affine = velocity_gradient;
+    particles_dyn[particle_id].vel_grad_det = vel_grad_det;
 #if DIM == 2
     particles_dyn[particle_id].velocity = momentum_velocity_mass.xy;
 #else

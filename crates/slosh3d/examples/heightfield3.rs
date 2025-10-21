@@ -1,6 +1,6 @@
 use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{DMatrix, vector, point};
+use nalgebra::{DMatrix, point, vector};
 use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
@@ -8,7 +8,7 @@ use slosh::models::DruckerPrager;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, SimulationParams, ParticlePhase, ParticleBuilder},
+    solver::{Particle, ParticleBuilder, ParticleDynamics, ParticlePhase, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -37,7 +37,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                 particles.push(
                     ParticleBuilder::new(position, radius, density)
                         .sand(2.0e9, 0.2)
-                        .build()
+                        .build(),
                 );
             }
         }
@@ -78,6 +78,6 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     PhysicsContext {
         data,
         rapier_data,
-        callbacks: vec![]
+        callbacks: vec![],
     }
 }

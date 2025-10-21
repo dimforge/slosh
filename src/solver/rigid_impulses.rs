@@ -80,7 +80,7 @@ impl<B: Backend> WgRigidImpulses<B> {
         if bodies.is_empty() {
             return Ok(());
         }
-        
+
         let args = RigidImpulsesArgs {
             params: Some(&sim_params.params),
             grid: Some(&grid.meta),

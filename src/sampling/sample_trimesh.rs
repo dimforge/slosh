@@ -1,7 +1,7 @@
-use std::collections::HashSet;
 use encase::ShaderType;
-use nalgebra::{vector, Point3, Vector3};
+use nalgebra::{Point3, Vector3, vector};
 use rapier::geometry::{Segment, TriMesh, Triangle};
+use std::collections::HashSet;
 
 // Epsilon used as a length threshold in various steps of the sampling. In particular, this avoids
 // degenerate geometries from generating invalid samples.
@@ -33,7 +33,6 @@ pub struct SamplingBuffers {
     pub samples_ids: Vec<GpuSampleIds>,
 }
 
-
 pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut SamplingBuffers) {
     let samples = sample_mesh(trimesh.vertices(), trimesh.indices(), params.sampling_step);
 
@@ -41,10 +40,10 @@ pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut 
         let tri_idx = trimesh.indices()[sample.triangle_id as usize];
         let sample_id = GpuSampleIds {
             triangle: vector![
-                    params.base_vid + tri_idx[0],
-                    params.base_vid + tri_idx[1],
-                    params.base_vid + tri_idx[2]
-                ],
+                params.base_vid + tri_idx[0],
+                params.base_vid + tri_idx[1],
+                params.base_vid + tri_idx[2]
+            ],
             collider: params.collider_id,
         };
         buffers.local_samples.push(sample.point);

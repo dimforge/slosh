@@ -11,6 +11,7 @@ public struct Dynamics {
     public vector<float, DIM> velocity;
     public matrix<float, DIM, DIM> def_grad;
     public matrix<float, DIM, DIM> affine;
+    public float vel_grad_det;
     public Cdf cdf;
     public float init_volume;
     public float init_radius;

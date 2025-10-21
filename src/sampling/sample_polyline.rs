@@ -1,6 +1,5 @@
-
 use encase::ShaderType;
-use nalgebra::{vector, Point2, Vector2};
+use nalgebra::{Point2, Vector2, vector};
 use rapier::geometry::{Polyline, Segment};
 
 #[derive(Copy, Clone, Debug, ShaderType)]
@@ -24,7 +23,11 @@ pub struct SamplingBuffers {
     pub samples_ids: Vec<GpuSampleIds>,
 }
 
-pub fn sample_polyline(polyline: &Polyline, params: &SamplingParams, buffers: &mut SamplingBuffers) {
+pub fn sample_polyline(
+    polyline: &Polyline,
+    params: &SamplingParams,
+    buffers: &mut SamplingBuffers,
+) {
     for seg_idx in polyline.indices() {
         let seg = Segment::new(
             polyline.vertices()[seg_idx[0] as usize],

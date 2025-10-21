@@ -15,7 +15,10 @@ pub fn main() {
             target,
             "../../shaders",
             "../../src/autogen3d",
-            &[("DIM".to_string(), "3".to_string())],
+            &[
+                ("DIM".to_string(), "3".to_string()),
+                ("COMPILE_CHECK".to_string(), "1".to_string()),
+            ],
         );
     }
 }

@@ -2,6 +2,7 @@ use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
 use nexus::rapier::na;
 use slang_hal::backend::Backend;
+use slosh::solver::GpuParticleModel;
 
 #[derive(Default)]
 pub struct SimulationTimes {
@@ -16,7 +17,7 @@ pub struct SimulationStepResult {
     pub timings: SimulationTimes,
 }
 
-impl Stage {
+impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
     // TODO PERF: don’t reallocate the result buffer each time.
     pub async fn step_simulation(&mut self) -> bool {
         if self.app_state.run_state == RunState::Paused {
@@ -40,7 +41,9 @@ impl Stage {
         if prev_particle_count != new_particle_count {
             // TODO: resize buffers instead of recreating.
             self.readback = GpuReadbackData::new(&self.gpu, new_particle_count).unwrap();
-            self.step_result.instances.resize(new_particle_count, ReadbackData::default());
+            self.step_result
+                .instances
+                .resize(new_particle_count, ReadbackData::default());
             println!("Adjust readback buffers: {}", new_particle_count);
         }
 
@@ -151,10 +154,13 @@ impl Stage {
 
         // TODO: reuse the `physics.data.particles_pos_staging` buffer.
         let t_readback = std::time::Instant::now();
-        self.gpu.read_buffer(
-            self.readback.instances_staging.buffer(),
-            self.step_result.instances.as_mut_slice(),
-        ).await.unwrap();
+        self.gpu
+            .read_buffer(
+                self.readback.instances_staging.buffer(),
+                self.step_result.instances.as_mut_slice(),
+            )
+            .await
+            .unwrap();
         let t_readback = t_readback.elapsed().as_secs_f32() * 1000.0;
         // Step rapier to update kinematic bodies.
         let rapier = &mut self.physics.rapier_data;

@@ -4,6 +4,7 @@ pub use p2g::WgP2G;
 pub use p2g_cdf::WgP2GCdf;
 pub use params::{GpuSimulationParams, SimulationParams};
 pub use particle::*;
+pub use particle_model::*;
 // pub use particle_update::WgParticleUpdate;
 pub use grid_update::WgGridUpdate;
 pub use grid_update_cdf::WgGridUpdateCdf;

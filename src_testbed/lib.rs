@@ -38,22 +38,23 @@ use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
 use std::rc::Rc;
 use wgpu::Limits;
+use slosh::solver::GpuParticleModel;
 
-type SceneBuilders = Vec<(String, SceneBuildFn)>;
-type SceneBuildFn = fn(&WebGpu, &mut AppState) -> PhysicsContext;
+type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
+type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
 
 #[cfg(feature = "dim2")]
 type RenderNode = PlanarSceneNode;
 #[cfg(feature = "dim3")]
 type RenderNode = kiss3d::scene::SceneNode;
 
-struct Stage {
+struct Stage<GpuModel: GpuParticleModel> {
     gpu: WebGpu,
 
     selected_demo: usize,
-    builders: SceneBuilders,
-    physics: PhysicsContext,
-    app_state: AppState,
+    builders: SceneBuilders<GpuModel>,
+    physics: PhysicsContext<GpuModel>,
+    app_state: AppState<GpuModel>,
     step_id: usize,
 
     step_result: SimulationStepResult,
@@ -65,8 +66,8 @@ struct Stage {
     instances: Vec<InstanceData>,
 }
 
-impl Stage {
-    pub async fn new(builders: SceneBuilders) -> Stage {
+impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
+    pub async fn new(builders: SceneBuilders<GpuModel>) -> Stage<GpuModel> {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 10,
             ..Limits::default()
@@ -167,7 +168,7 @@ impl Stage {
     }
 }
 
-pub async fn run(scene_builders: SceneBuilders) {
+pub async fn run<GpuModel: GpuParticleModel>(scene_builders: SceneBuilders<GpuModel>) {
     let mut colliders_gfx = HashMap::new();
     let mut stage = Stage::new(scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");
@@ -187,7 +188,8 @@ pub async fn run(scene_builders: SceneBuilders) {
         std::f32::consts::PI / 4.0,
         0.1,
         1000.0,
-        [40.0, 40.0, 40.0].into(), [0.0; 3].into()
+        [40.0, 40.0, 40.0].into(),
+        [0.0; 3].into(),
     );
     let mut camera2d = Sidescroll::new();
 
@@ -211,53 +213,54 @@ pub async fn run(scene_builders: SceneBuilders) {
          * UI
          */
         window.draw_ui(|ctx| {
-            kiss3d::egui::Window::new("Settings")
-                .show(ctx, |ui| {
-                    let mut changed = false;
-                    kiss3d::egui::ComboBox::from_label("selected sample")
-                        .selected_text(&stage.builders[stage.selected_demo].0)
-                        .show_ui(ui, |ui| {
-                            for (i, (name, _)) in stage.builders.iter().enumerate() {
-                                changed = ui
-                                    .selectable_value(&mut stage.selected_demo, i, name)
-                                    .changed()
-                                    || changed;
-                            }
-                        });
-                    if changed {
-                        new_selected_demo = Some(stage.selected_demo);
-                    }
-
-                    ui.label(format!(
-                        "total: {:.1}ms (encoding: {:.1}ms)",
-                        stage.step_result.timings.total_step_time, stage.step_result.timings.encoding_time
-                    ));
-                    ui.label(
-                        format!("readback: {:.1}ms", stage.step_result.timings.readback_time)
-                    );
-                    ui.label(format!("particles: {}", stage.physics.data.particles.len()));
-
-                    ui.horizontal(|ui| {
-                        let play_pause_label = if stage.app_state.run_state == RunState::Running {
-                            "Pause"
-                        } else {
-                            "Play"
-                        };
-                        if ui.button(play_pause_label).clicked() {
-                            if stage.app_state.run_state == RunState::Running {
-                                stage.app_state.run_state = RunState::Paused;
-                            } else {
-                                stage.app_state.run_state = RunState::Running;
-                            }
-                        }
-                        if ui.button("Step").clicked() {
-                            stage.app_state.run_state = RunState::Step;
-                        }
-                        if ui.button("Restart").clicked() {
-                            new_selected_demo = Some(stage.selected_demo);
+            kiss3d::egui::Window::new("Settings").show(ctx, |ui| {
+                let mut changed = false;
+                kiss3d::egui::ComboBox::from_label("selected sample")
+                    .selected_text(&stage.builders[stage.selected_demo].0)
+                    .show_ui(ui, |ui| {
+                        for (i, (name, _)) in stage.builders.iter().enumerate() {
+                            changed = ui
+                                .selectable_value(&mut stage.selected_demo, i, name)
+                                .changed()
+                                || changed;
                         }
                     });
+                if changed {
+                    new_selected_demo = Some(stage.selected_demo);
+                }
+
+                ui.label(format!(
+                    "total: {:.1}ms (encoding: {:.1}ms)",
+                    stage.step_result.timings.total_step_time,
+                    stage.step_result.timings.encoding_time
+                ));
+                ui.label(format!(
+                    "readback: {:.1}ms",
+                    stage.step_result.timings.readback_time
+                ));
+                ui.label(format!("particles: {}", stage.physics.data.particles.len()));
+
+                ui.horizontal(|ui| {
+                    let play_pause_label = if stage.app_state.run_state == RunState::Running {
+                        "Pause"
+                    } else {
+                        "Play"
+                    };
+                    if ui.button(play_pause_label).clicked() {
+                        if stage.app_state.run_state == RunState::Running {
+                            stage.app_state.run_state = RunState::Paused;
+                        } else {
+                            stage.app_state.run_state = RunState::Running;
+                        }
+                    }
+                    if ui.button("Step").clicked() {
+                        stage.app_state.run_state = RunState::Step;
+                    }
+                    if ui.button("Restart").clicked() {
+                        new_selected_demo = Some(stage.selected_demo);
+                    }
                 });
+            });
         });
 
         if let Some(demo) = new_selected_demo {
@@ -268,13 +271,15 @@ pub async fn run(scene_builders: SceneBuilders) {
         /*
          * Render
          */
-        window.render_with_cameras(&mut camera3d, &mut camera2d).await;
+        window
+            .render_with_cameras(&mut camera3d, &mut camera2d)
+            .await;
     }
 }
 
-fn update_colliders(
+fn update_colliders<GpuModel: GpuParticleModel>(
     window: &mut Window,
-    physics: &PhysicsContext,
+    physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,
 ) {
     for (handle, node) in colliders {
@@ -310,9 +315,9 @@ fn update_colliders(
     }
 }
 
-pub fn render_colliders(
+pub fn render_colliders<GpuModel: GpuParticleModel>(
     window: &mut Window,
-    physics: &PhysicsContext,
+    physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,
 ) {
     for (_, mut node) in colliders.drain() {

@@ -8,11 +8,16 @@ import slosh.grid.grid;
 import slosh.models.linear_elasticity;
 import slosh.models.drucker_prager;
 import slosh.models.interfaces;
-import slosh.models.specializations;
 import stensor.geometry.svd2;
 import stensor.geometry.svd3;
+import stensor.utils.mat;
 import nexus.shapes.cuboid;
 import nexus.aliases;
+
+// Only include that when checking compilation in build.rs which doesn’t support specialization yet.
+#if COMPILE_CHECK
+    import slosh.models.specializations;
+#endif
 
 extern struct ParticleModel : IParticleModel;
 
@@ -39,6 +44,8 @@ func particle_update(
         return;
     }
 
+    let model = ParticleModel();
+    let flags = model.model_flags(particles_model, particle_id);
     let dt = params.dt;
     let cell_width = grid[0].cell_width;
     let dynamics = particles_dyn[particle_id];
@@ -73,15 +80,23 @@ func particle_update(
     /*
      * Deformation gradient update.
      */
-    // NOTE: the velocity gradient was stored in the affine buffer.
-    var new_deformation_gradient = dynamics.def_grad +
-       mul(dynamics.def_grad, dynamics.affine * dt);
+    var new_deformation_gradient: Mat<float>;
+
+    if ((flags & ModelFlags::FLUID) == 0) {
+        // NOTE: the velocity gradient was stored in the affine buffer.
+        new_deformation_gradient = dynamics.def_grad +
+           mul(dynamics.def_grad, dynamics.affine * dt);
+    } else {
+        let def_grad0 = dynamics.def_grad[0][0];
+        var new_def_grad_diag_elt = def_grad0 + def_grad0 * dynamics.vel_grad_det * dt;
+        new_deformation_gradient = diag(Vect<float>(new_def_grad_diag_elt));
+    }
 
     /*
      * Constitutive model.
      */
-    let model = ParticleModel();
-    let update_result = model.update(particles_model, particle_id, new_deformation_gradient);
+    let update_data = ParticleUpdateData(dt, cell_width, particle_id, dynamics.init_volume);
+    let update_result = model.update(particles_model, update_data, dynamics.affine, new_deformation_gradient);
 
 //    var phase = phases[particle_id].phase;
 //
@@ -126,6 +141,6 @@ func particle_update(
      */
     particles_pos[particle_id].pt = new_particle_pos;
     particles_dyn[particle_id].velocity = new_particle_vel;
-    particles_dyn[particle_id].def_grad = update_result.deformation_gradient;
+    particles_dyn[particle_id].def_grad = new_deformation_gradient;
     particles_dyn[particle_id].affine = affine;
 }

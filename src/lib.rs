@@ -16,8 +16,8 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 pub mod grid;
 pub mod models;
 pub mod pipeline;
-pub mod solver;
 pub(crate) mod sampling;
+pub mod solver;
 
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../shaders");

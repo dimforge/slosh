@@ -26,6 +26,7 @@ encase = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
 bytemuck = { workspace = true }
+static_assertions = { workspace = true }
 
 #wgcore = "0.2"
 #wgebra = "0.2"
@@ -37,7 +38,7 @@ rapier2d = "0.30"
 # For wasm?
 getrandom = { version = "0.3.1", features = ["wasm_js"] }
 uuid = { version = "1", features = ["js"] }
-static_assertions = "1.1.0"
+
 
 [dev-dependencies]
 nalgebra = { version = "0.34", features = ["rand"] }

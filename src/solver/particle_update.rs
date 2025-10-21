@@ -1,41 +1,43 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
 use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use crate::solver::params::GpuSimulationParams;
-use crate::solver::{GpuParticles, ParticleDynamics, ParticlePhase, ParticlePosition, SimulationParams};
+use crate::solver::particle_model::{DefaultGpuParticleModel, GpuParticleModel};
+use crate::solver::{
+    GpuParticles, ParticleDynamics, ParticlePhase, ParticlePosition, SimulationParams,
+};
 use nexus::dynamics::GpuBodySet;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuTensor};
-use crate::solver::particle_model::GpuParticleModel;
 
 #[derive(Shader)]
 #[shader(
-    module = "slosh::solver::particle_update"
-
+    module = "slosh::solver::particle_update",
+    specialize = ["slosh::models::specializations"]
 )]
 pub struct WgParticleUpdate<B: Backend> {
     pub particle_update: GpuFunction<B>,
 }
 
 #[derive(ShaderArgs)]
-struct ParticleUpdateArgs<'a, B: Backend> {
+struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModel> {
     params: &'a GpuTensor<SimulationParams, B>,
     grid: &'a GpuTensor<GpuGridMetadata, B>,
-    particles_model: &'a GpuTensor<GpuParticleModel, B>,
+    particles_model: &'a GpuTensor<GpuModel, B>,
     particles_pos: &'a GpuTensor<ParticlePosition, B>,
     particles_dyn: &'a GpuTensor<ParticleDynamics, B>,
     particles_len: &'a GpuScalar<u32, B>,
 }
 
 impl<B: Backend> WgParticleUpdate<B> {
-    pub fn launch(
+    pub fn launch<GpuModel: GpuParticleModel>(
         &self,
         backend: &B,
         pass: &mut B::Pass,
         sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
         _bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
         let args = ParticleUpdateArgs {
@@ -46,11 +48,7 @@ impl<B: Backend> WgParticleUpdate<B> {
             particles_dyn: particles.dynamics(),
             particles_len: particles.gpu_len(),
         };
-        self.particle_update.launch(
-            backend,
-            pass,
-            &args,
-            [particles.len() as u32, 1, 1],
-        )
+        self.particle_update
+            .launch(backend, pass, &args, [particles.len() as u32, 1, 1])
     }
 }

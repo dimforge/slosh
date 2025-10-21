@@ -13,6 +13,7 @@ wgpu = { version = "26", features = ["naga-ir"] }
 encase = "0.12"
 bytemuck = { version = "1", features = ["derive"] }
 async-channel = "2"
+static_assertions = "1"
 
 slang-hal = "0.1"
 stensor = "0.1"

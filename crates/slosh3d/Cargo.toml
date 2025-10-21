@@ -26,6 +26,7 @@ encase = { workspace = true }
 bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
+static_assertions = { workspace = true }
 nexus3d = "0.1"
 regex = "1"
 

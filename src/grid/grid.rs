@@ -1,6 +1,6 @@
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuParticles, GpuRigidParticles, ParticlePosition};
+use crate::solver::{GpuParticleModel, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
 use nexus::math::Point;
@@ -44,11 +44,11 @@ struct GridArgs<'a, B: Backend> {
 
 impl<B: Backend> WgGrid<B> {
     // Returns the pair (number of active blocks, number of GPU dispatch blocks needed to cover all the particles).
-    pub fn launch_sort<'a>(
+    pub fn launch_sort<'a, GpuModel: GpuParticleModel>(
         &'a self,
         backend: &B,
         pass: &mut B::Pass,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
         rigid_particles: &GpuRigidParticles<B>,
         grid: &GpuGrid<B>,
         prefix_sum: &mut PrefixSumWorkspace<B>,
@@ -251,36 +251,29 @@ impl<B: Backend> GpuGrid<B> {
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
         let hmap_entries =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
-        let nodes = unsafe {
+            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let nodes =
             GpuVector::vector_uninit_encased(
                 backend,
                 capacity * NODES_PER_BLOCK,
                 BufferUsages::STORAGE,
-            )?
-        };
-        let nodes_linked_lists = unsafe {
-            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?
-        };
-        let rigid_nodes_linked_lists = unsafe {
-            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?
-        };
+            )?;
+        let nodes_linked_lists =
+            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
+        let rigid_nodes_linked_lists = GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
         let active_blocks =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
+            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
         let scan_values =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
-        let indirect_n_blocks_groups = unsafe {
+            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let indirect_n_blocks_groups = Arc::new(GpuVector::scalar_uninit(
+                backend,
+                BufferUsages::STORAGE | BufferUsages::INDIRECT,
+            )?);
+        let indirect_n_g2p_p2g_groups =
             Arc::new(GpuVector::scalar_uninit(
                 backend,
                 BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?)
-        };
-        let indirect_n_g2p_p2g_groups = unsafe {
-            Arc::new(GpuVector::scalar_uninit(
-                backend,
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?)
-        };
+            )?);
         let debug = GpuVector::vector(backend, [0, 0], BufferUsages::STORAGE)?;
 
         Ok(Self {

@@ -4,9 +4,7 @@ use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
-use slosh::solver::{
-    GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams,
-};
+use slosh::solver::{GpuParticleModel, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
 use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 
@@ -97,7 +95,7 @@ impl<B: Backend> GpuReadbackData<B> {
                 backend,
                 num_particles as u32,
                 BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            )?
+            )?,
         })
     }
 }
@@ -114,14 +112,14 @@ struct PrepReadbackArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> PrepReadback<B> {
-    pub fn launch(
+    pub fn launch<GpuModel: GpuParticleModel>(
         &self,
         backend: &B,
         encoder: &mut B::Encoder,
         data: &mut GpuReadbackData<B>,
         sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
     ) -> Result<(), B::Error> {
         let args = PrepReadbackArgs {
             particles_pos: particles.positions(),
@@ -133,12 +131,8 @@ impl<B: Backend> PrepReadback<B> {
             base_colors: &data.base_colors,
         };
         let mut pass = encoder.begin_pass();
-        self.prep_readback.launch(
-            backend,
-            &mut pass,
-            &args,
-            [particles.len() as u32, 1, 1],
-        )?;
+        self.prep_readback
+            .launch(backend, &mut pass, &args, [particles.len() as u32, 1, 1])?;
         drop(pass);
 
         data.instances_staging

@@ -4,13 +4,13 @@ use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
-use slosh::solver::Particle;
+use slosh::solver::{DefaultGpuParticleModel, GpuParticleModel, Particle};
 
-pub struct AppState {
+pub struct AppState<GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
     pub run_state: RunState,
     // pub render_config: RenderConfig,
     // pub gpu_render_config: GpuRenderConfig,
-    pub pipeline: MpmPipeline<WebGpu>,
+    pub pipeline: MpmPipeline<WebGpu, GpuModel>,
     // pub prep_vertex_buffer: WgPrepVertexBuffer,
     pub num_substeps: usize,
     pub gravity_factor: f32,
@@ -33,36 +33,39 @@ pub struct RapierData {
     pub islands: IslandManager,
 }
 
-pub trait PhysicsCallback {
-    fn update(&mut self, state: &mut PhysicsState<'_>);
+pub trait PhysicsCallback<GpuModel: GpuParticleModel> {
+    fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>);
 }
 
-impl<F: FnMut(&mut PhysicsState)> PhysicsCallback for F {
-    fn update(&mut self, state: &mut PhysicsState<'_>) {
+impl<GpuModel: GpuParticleModel, F: FnMut(&mut PhysicsState<GpuModel>)> PhysicsCallback<GpuModel> for F {
+    fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>) {
         (*self)(state);
     }
 }
 
-pub struct PhysicsState<'a> {
+pub struct PhysicsState<'a, GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
     pub(crate) backend: &'a WebGpu,
-    pub(crate) data: &'a mut MpmData<WebGpu>,
+    pub(crate) data: &'a mut MpmData<WebGpu, GpuModel>,
     pub(crate) step_id: usize,
 }
 
-impl<'a> PhysicsState<'a> {
+impl<'a, GpuModel: GpuParticleModel> PhysicsState<'a, GpuModel> {
     pub fn step_id(&self) -> usize {
         self.step_id
     }
 
-    pub fn add_particles(&mut self, particles: &[Particle]) {
-        self.data.particles.append(self.backend, particles).expect("Failed to add particles.");
+    pub fn add_particles(&mut self, particles: &[Particle<GpuModel::Model>]) {
+        self.data
+            .particles
+            .append(self.backend, particles)
+            .expect("Failed to add particles.");
     }
 }
 
-pub struct PhysicsContext {
-    pub data: MpmData<WebGpu>,
+pub struct PhysicsContext<GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
+    pub data: MpmData<WebGpu, GpuModel>,
     pub rapier_data: RapierData,
-    pub callbacks: Vec<Box<dyn PhysicsCallback>>
+    pub callbacks: Vec<Box<dyn PhysicsCallback<GpuModel>>>,
 }
 
 // #[derive(Default)]

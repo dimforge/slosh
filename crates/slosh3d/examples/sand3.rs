@@ -1,4 +1,4 @@
-use slosh_testbed3d::{RapierData, slosh, PhysicsState};
+use slosh_testbed3d::{PhysicsState, RapierData, slosh};
 
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
@@ -7,7 +7,7 @@ use slosh::models::DruckerPrager;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, SimulationParams, ParticleBuilder},
+    solver::{Particle, ParticleBuilder, ParticleDynamics, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -40,12 +40,11 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                 particles.push(
                     ParticleBuilder::new(position, radius, DENSITY)
                         .sand(YOUNG_MODULUS, 0.2)
-                        .build()
+                        .build(),
                 );
             }
         }
     }
-
 
     // let nxz = 2; // 45;
     // let cell_width = 1.0;
@@ -138,16 +137,16 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
             for i in 0..nxz {
                 for k in 0..nxz {
                     let position = point![
-                    i as f32 + 0.5 - nxz as f32 / 2.0,
-                    110.0,
-                    k as f32 + 0.5 - nxz as f32 / 2.0
-                ] * cell_width
+                        i as f32 + 0.5 - nxz as f32 / 2.0,
+                        110.0,
+                        k as f32 + 0.5 - nxz as f32 / 2.0
+                    ] * cell_width
                         / 2.0;
                     let radius = cell_width / 4.0;
                     particles.push(
                         ParticleBuilder::new(position, radius, DENSITY)
                             .sand(YOUNG_MODULUS, 0.2)
-                            .build()
+                            .build(),
                     );
                 }
             }
@@ -158,6 +157,6 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     PhysicsContext {
         data,
         rapier_data,
-        callbacks: vec![Box::new(callback)]
+        callbacks: vec![Box::new(callback)],
     }
 }

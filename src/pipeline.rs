@@ -1,11 +1,8 @@
+use std::marker::PhantomData;
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{
-    GpuImpulses, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, SimulationParams,
-    WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate,
-    WgRigidImpulses, WgRigidParticleUpdate,
-};
+use crate::solver::{GpuImpulses, GpuParticleModel, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, ParticleModel, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
@@ -17,7 +14,7 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 use stensor::tensor::GpuVector;
 use wgpu::BufferUsages;
 
-pub struct MpmPipeline<B: Backend> {
+pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModel> {
     grid: WgGrid<B>,
     prefix_sum: WgPrefixSum<B>,
     sort: WgSort<B>,
@@ -30,12 +27,13 @@ pub struct MpmPipeline<B: Backend> {
     g2p_cdf: WgG2PCdf<B>,
     rigid_particles_update: WgRigidParticleUpdate<B>,
     pub impulses: WgRigidImpulses<B>,
+    _phantom: PhantomData<GpuModel>,
 }
 
-pub struct MpmData<B: Backend> {
+pub struct MpmData<B: Backend, GpuModel: GpuParticleModel> {
     pub sim_params: GpuSimulationParams<B>,
     pub grid: GpuGrid<B>,
-    pub particles: GpuParticles<B>, // TODO: keep private?
+    pub particles: GpuParticles<B, GpuModel>, // TODO: keep private?
     pub rigid_particles: GpuRigidParticles<B>,
     pub bodies: GpuBodySet<B>,
     pub impulses: GpuImpulses<B>,
@@ -44,11 +42,17 @@ pub struct MpmData<B: Backend> {
     coupling: Vec<BodyCouplingEntry>,
 }
 
-impl<B: Backend> MpmData<B> {
+// Defines module paths for specializing parts of the MPM pipeline leveraging Slang’s
+// link-time specialization feature.
+pub struct MpmSpecializations {
+    pub particle_model: Vec<String>,
+}
+
+impl<B: Backend, GpuModel: GpuParticleModel> MpmData<B, GpuModel> {
     pub fn new(
         backend: &B,
         params: SimulationParams,
-        particles: &[Particle],
+        particles: &[Particle<GpuModel::Model>],
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         cell_width: f32,
@@ -80,7 +84,7 @@ impl<B: Backend> MpmData<B> {
     pub fn with_select_coupling(
         backend: &B,
         params: SimulationParams,
-        particles: &[Particle],
+        particles: &[Particle<GpuModel::Model>],
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         coupling: Vec<BodyCouplingEntry>,
@@ -96,13 +100,11 @@ impl<B: Backend> MpmData<B> {
         let grid = GpuGrid::with_capacity(backend, grid_capacity, cell_width)?;
         let prefix_sum = PrefixSumWorkspace::with_capacity(backend, grid_capacity)?;
         let impulses = GpuImpulses::new(backend)?;
-        let poses_staging = unsafe {
-            GpuVector::vector_uninit(
-                backend,
-                bodies.len(),
-                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            )?
-        };
+        let poses_staging = GpuVector::vector_uninit(
+            backend,
+            bodies.len(),
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )?;
 
         Ok(Self {
             sim_params,
@@ -122,7 +124,7 @@ impl<B: Backend> MpmData<B> {
     }
 }
 
-impl<B: Backend> MpmPipeline<B> {
+impl<B: Backend, GpuModel: GpuParticleModel> MpmPipeline<B, GpuModel> {
     pub fn new(backend: &B, compiler: &SlangCompiler) -> Result<Self, B::Error> {
         Ok(Self {
             grid: WgGrid::from_backend(backend, compiler)?,
@@ -132,11 +134,12 @@ impl<B: Backend> MpmPipeline<B> {
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
-            particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
+            particles_update: WgParticleUpdate::with_specializations(backend, compiler, &GpuModel::specialization_modules())?,
             rigid_particles_update: WgRigidParticleUpdate::from_backend(backend, compiler)?,
             g2p: WgG2P::from_backend(backend, compiler)?,
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
+            _phantom: PhantomData,
         })
     }
 
@@ -144,7 +147,7 @@ impl<B: Backend> MpmPipeline<B> {
         &self,
         backend: &B,
         encoder: &mut B::Encoder,
-        data: &mut MpmData<B>,
+        data: &mut MpmData<B, GpuModel>,
         // mut timestamps: Option<&mut GpuTimestamps>,
     ) -> Result<(), B::Error> {
         {

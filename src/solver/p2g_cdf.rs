@@ -1,14 +1,14 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{GpuRigidParticles};
+use crate::sampling::GpuSampleIds;
+use crate::solver::GpuRigidParticles;
 use nexus::dynamics::GpuBodySet;
 use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
-use crate::sampling::GpuSampleIds;
 
 #[derive(Shader)]
 #[shader(module = "slosh::solver::p2g_cdf")]

@@ -1,13 +1,13 @@
 use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{DMatrix, Isometry3, vector, point};
+use nalgebra::{DMatrix, Isometry3, point, vector};
 use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, ParticlePhase, SimulationParams, ParticleBuilder},
+    solver::{Particle, ParticleBuilder, ParticleDynamics, ParticlePhase, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -36,7 +36,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                 particles.push(
                     ParticleBuilder::new(position, radius, density)
                         .elastic(1.0e7, 0.2)
-                        .build()
+                        .build(),
                 );
             }
         }
@@ -90,6 +90,6 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     PhysicsContext {
         data,
         rapier_data,
-        callbacks: vec![]
+        callbacks: vec![],
     }
 }

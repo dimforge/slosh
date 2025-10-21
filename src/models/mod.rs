@@ -29,6 +29,10 @@ pub struct ElasticCoefficients {
 impl ElasticCoefficients {
     pub fn from_young_modulus(young_modulus: f32, poisson_ratio: f32) -> Self {
         let (lambda, mu) = lame_lambda_mu(young_modulus, poisson_ratio);
-        Self { lambda, mu, cfl_coeff: 0.5 }
+        Self {
+            lambda,
+            mu,
+            cfl_coeff: 0.5,
+        }
     }
 }

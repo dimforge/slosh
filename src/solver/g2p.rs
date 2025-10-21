@@ -1,9 +1,7 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{
-    GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams,
-};
+use crate::solver::{GpuParticleModel, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticleModel, ParticlePosition, SimulationParams};
 use nexus::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -31,13 +29,13 @@ struct G2PArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgG2P<B> {
-    pub fn launch(
+    pub fn launch<GpuModel: GpuParticleModel>(
         &self,
         backend: &B,
         pass: &mut B::Pass,
         sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
         bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
         let args = G2PArgs {
