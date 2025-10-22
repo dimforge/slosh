@@ -7,7 +7,7 @@ use slang_hal::backend::WebGpu;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleBuilder, ParticleDynamics, ParticlePhase, SimulationParams},
+    solver::{Particle, ParticleDynamics, ParticlePhase, SimulationParams, ParticleModel},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -33,10 +33,9 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                     / 2.0;
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
+                let model = ParticleModel::elastic(1.0e7, 0.2);
                 particles.push(
-                    ParticleBuilder::new(position, radius, density)
-                        .elastic(1.0e7, 0.2)
-                        .build(),
+                    Particle::new(position, radius, density, model)
                 );
             }
         }

@@ -8,7 +8,7 @@ use slosh::models::DruckerPrager;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleBuilder, ParticleDynamics, ParticlePhase, SimulationParams},
+    solver::{Particle, ParticleModel, ParticleDynamics, ParticlePhase, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -34,10 +34,9 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                     / 2.0;
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
+                let model = ParticleModel::sand(2.0e9, 0.2);
                 particles.push(
-                    ParticleBuilder::new(position, radius, density)
-                        .sand(2.0e9, 0.2)
-                        .build(),
+                    Particle::new(position, radius, density, model)
                 );
             }
         }

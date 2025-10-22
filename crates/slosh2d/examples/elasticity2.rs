@@ -10,7 +10,7 @@ use slosh::{
     solver::{Particle, SimulationParams},
 };
 use slosh_testbed2d::{AppState, PhysicsContext};
-use slosh2d::solver::{ParticleBuilder, ParticleDynamics};
+use slosh2d::solver::{ParticleModel, ParticleDynamics};
 
 #[allow(dead_code)]
 fn main() {
@@ -31,10 +31,9 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
                     + Vector2::y() * offset_y;
             let density = 1000.0;
             let radius = cell_width / 4.0;
+            let model = ParticleModel::elastic(5.0e6, 0.2);
             particles.push(
-                ParticleBuilder::new(position, radius, density)
-                    .elastic(5.0e6, 0.2)
-                    .build(),
+                Particle::new(position, radius, density, model)
             );
         }
     }

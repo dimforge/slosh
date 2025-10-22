@@ -1,6 +1,6 @@
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuParticleModel, GpuParticles, GpuRigidParticles, ParticlePosition};
+use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
 use nexus::math::Point;
@@ -44,7 +44,7 @@ struct GridArgs<'a, B: Backend> {
 
 impl<B: Backend> WgGrid<B> {
     // Returns the pair (number of active blocks, number of GPU dispatch blocks needed to cover all the particles).
-    pub fn launch_sort<'a, GpuModel: GpuParticleModel>(
+    pub fn launch_sort<'a, GpuModel: GpuParticleModelData>(
         &'a self,
         backend: &B,
         pass: &mut B::Pass,

@@ -2,7 +2,7 @@ use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
 use nexus::rapier::na;
 use slang_hal::backend::Backend;
-use slosh::solver::GpuParticleModel;
+use slosh::solver::GpuParticleModelData;
 
 #[derive(Default)]
 pub struct SimulationTimes {
@@ -17,7 +17,7 @@ pub struct SimulationStepResult {
     pub timings: SimulationTimes,
 }
 
-impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
+impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
     // TODO PERF: don’t reallocate the result buffer each time.
     pub async fn step_simulation(&mut self) -> bool {
         if self.app_state.run_state == RunState::Paused {

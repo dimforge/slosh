@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuImpulses, GpuParticleModel, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, ParticleModel, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate};
+use crate::solver::{GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
@@ -14,7 +14,7 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 use stensor::tensor::GpuVector;
 use wgpu::BufferUsages;
 
-pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModel> {
+pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     grid: WgGrid<B>,
     prefix_sum: WgPrefixSum<B>,
     sort: WgSort<B>,
@@ -30,7 +30,7 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModel> {
     _phantom: PhantomData<GpuModel>,
 }
 
-pub struct MpmData<B: Backend, GpuModel: GpuParticleModel> {
+pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     pub sim_params: GpuSimulationParams<B>,
     pub grid: GpuGrid<B>,
     pub particles: GpuParticles<B, GpuModel>, // TODO: keep private?
@@ -48,7 +48,7 @@ pub struct MpmSpecializations {
     pub particle_model: Vec<String>,
 }
 
-impl<B: Backend, GpuModel: GpuParticleModel> MpmData<B, GpuModel> {
+impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
     pub fn new(
         backend: &B,
         params: SimulationParams,
@@ -124,7 +124,7 @@ impl<B: Backend, GpuModel: GpuParticleModel> MpmData<B, GpuModel> {
     }
 }
 
-impl<B: Backend, GpuModel: GpuParticleModel> MpmPipeline<B, GpuModel> {
+impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
     pub fn new(backend: &B, compiler: &SlangCompiler) -> Result<Self, B::Error> {
         Ok(Self {
             grid: WgGrid::from_backend(backend, compiler)?,

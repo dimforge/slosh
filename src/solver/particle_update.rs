@@ -1,7 +1,7 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
 use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use crate::solver::params::GpuSimulationParams;
-use crate::solver::particle_model::{DefaultGpuParticleModel, GpuParticleModel};
+use crate::solver::particle_model::{GpuParticleModel, GpuParticleModelData};
 use crate::solver::{
     GpuParticles, ParticleDynamics, ParticlePhase, ParticlePosition, SimulationParams,
 };
@@ -21,7 +21,7 @@ pub struct WgParticleUpdate<B: Backend> {
 }
 
 #[derive(ShaderArgs)]
-struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModel> {
+struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     params: &'a GpuTensor<SimulationParams, B>,
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     particles_model: &'a GpuTensor<GpuModel, B>,
@@ -31,7 +31,7 @@ struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModel> {
 }
 
 impl<B: Backend> WgParticleUpdate<B> {
-    pub fn launch<GpuModel: GpuParticleModel>(
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         pass: &mut B::Pass,

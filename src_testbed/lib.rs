@@ -38,7 +38,7 @@ use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
 use std::rc::Rc;
 use wgpu::Limits;
-use slosh::solver::GpuParticleModel;
+use slosh::solver::GpuParticleModelData;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
 type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
@@ -48,7 +48,7 @@ type RenderNode = PlanarSceneNode;
 #[cfg(feature = "dim3")]
 type RenderNode = kiss3d::scene::SceneNode;
 
-struct Stage<GpuModel: GpuParticleModel> {
+struct Stage<GpuModel: GpuParticleModelData> {
     gpu: WebGpu,
 
     selected_demo: usize,
@@ -66,8 +66,8 @@ struct Stage<GpuModel: GpuParticleModel> {
     instances: Vec<InstanceData>,
 }
 
-impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
-    pub async fn new(builders: SceneBuilders<GpuModel>) -> Stage<GpuModel> {
+impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
+    pub async fn new(mut compiler: SlangCompiler, builders: SceneBuilders<GpuModel>) -> Stage<GpuModel> {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 10,
             ..Limits::default()
@@ -86,7 +86,6 @@ impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
         ";
         gpu.append_hack(reg, replace.to_string());
 
-        let mut compiler = SlangCompiler::new(vec![]);
         crate::register_shaders(&mut compiler);
 
         compiler.set_global_macro("DIM", DIM);
@@ -94,7 +93,7 @@ impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
         let mpm_pipeline = MpmPipeline::new(&gpu, &compiler).unwrap();
         let mut app_state = AppState {
             pipeline: mpm_pipeline,
-            run_state: RunState::Running,
+            run_state: RunState::Paused,
             num_substeps: 1,
             gravity_factor: 1.0,
             restarting: false,
@@ -168,18 +167,22 @@ impl<GpuModel: GpuParticleModel> Stage<GpuModel> {
     }
 }
 
-pub async fn run<GpuModel: GpuParticleModel>(scene_builders: SceneBuilders<GpuModel>) {
+pub async fn run<GpuModel: GpuParticleModelData>(scene_builders: SceneBuilders<GpuModel>) {
+    run_with_compiler(SlangCompiler::new(vec![]), scene_builders).await
+}
+
+pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(compiler: SlangCompiler, scene_builders: SceneBuilders<GpuModel>) {
     let mut colliders_gfx = HashMap::new();
-    let mut stage = Stage::new(scene_builders).await;
+    let mut stage = Stage::new(compiler, scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
 
     window.set_light(Light::StickToCamera);
 
     #[cfg(feature = "dim2")]
-    let mut c = window.add_rectangle(0.1, 0.1);
+    let mut c = window.add_rectangle(1.0, 1.0);
     #[cfg(feature = "dim3")]
-    let mut c = window.add_cube(0.5, 0.5, 0.5);
+    let mut c = window.add_cube(1.0, 1.0, 1.0);
 
     #[cfg(feature = "dim2")]
     let mut camera3d = FixedView::new();
@@ -277,7 +280,7 @@ pub async fn run<GpuModel: GpuParticleModel>(scene_builders: SceneBuilders<GpuMo
     }
 }
 
-fn update_colliders<GpuModel: GpuParticleModel>(
+fn update_colliders<GpuModel: GpuParticleModelData>(
     window: &mut Window,
     physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,
@@ -315,7 +318,7 @@ fn update_colliders<GpuModel: GpuParticleModel>(
     }
 }
 
-pub fn render_colliders<GpuModel: GpuParticleModel>(
+pub fn render_colliders<GpuModel: GpuParticleModelData>(
     window: &mut Window,
     physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,

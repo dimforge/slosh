@@ -7,7 +7,7 @@ use slosh::models::DruckerPrager;
 use slosh::{
     models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleBuilder, ParticleDynamics, SimulationParams},
+    solver::{Particle, ParticleDynamics, SimulationParams, ParticleModel},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -37,10 +37,9 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                 ] * cell_width
                     / 2.0;
                 let radius = cell_width / 4.0;
+                let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
                 particles.push(
-                    ParticleBuilder::new(position, radius, DENSITY)
-                        .sand(YOUNG_MODULUS, 0.2)
-                        .build(),
+                    Particle::new(position, radius, DENSITY, model)
                 );
             }
         }
@@ -143,10 +142,9 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                     ] * cell_width
                         / 2.0;
                     let radius = cell_width / 4.0;
+                    let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
                     particles.push(
-                        ParticleBuilder::new(position, radius, DENSITY)
-                            .sand(YOUNG_MODULUS, 0.2)
-                            .build(),
+                        Particle::new(position, radius, DENSITY, model)
                     );
                 }
             }

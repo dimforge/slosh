@@ -4,6 +4,8 @@ import slosh.solver.particle;
 import slosh.grid.grid;
 import slosh.solver.params;
 import stensor.geometry.svd2;
+import stensor.utils.mat;
+import nexus.aliases;
 
 struct ReadbackData {
     float4 color;
@@ -38,7 +40,8 @@ func prep_readback(
 
     if (particle_id < instances.getCount()) {
         let def_grad = particles_dyn[particle_id].def_grad;
-        instances[particle_id].deformation = def_grad;
+        let init_deformation = diag(Vect<float>(particles_dyn[particle_id].init_radius * 2.0));
+        instances[particle_id].deformation = def_grad * init_deformation;
         instances[particle_id].position = float2(particles_pos[particle_id].pt);
 
         let color = base_colors[particle_id];

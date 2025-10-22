@@ -12,11 +12,11 @@ use wgpu::BufferUsages;
 // use nexus::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
-use crate::solver::particle_model::{DefaultGpuParticleModel, GpuParticleModel, ParticleModel, SandModel};
+use crate::solver::particle_model::{GpuParticleModel, GpuParticleModelData, SandModel};
 use nexus::dynamics::GpuBodySet;
 use nexus::math::{Matrix, Point, Vector};
 use nexus::shapes::ShapeBuffers;
-use crate::solver::DefaultParticleModel;
+use crate::solver::ParticleModel;
 
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
@@ -87,54 +87,19 @@ pub struct Cdf {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct Particle<Model: ParticleModel> {
+pub struct Particle<Model> {
     pub position: Point<f32>,
     pub dynamics: ParticleDynamics,
     pub model: Model,
 }
 
-pub struct ParticleBuilder<Model: ParticleModel>(Particle<Model>);
-
-impl<Model: ParticleModel> From<ParticleBuilder<Model>> for Particle<Model> {
-    fn from(value: ParticleBuilder<Model>) -> Self {
-        value.0
-    }
-}
-
-impl<Model: ParticleModel> ParticleBuilder<Model> {
-    pub fn new(position: Point<f32>, radius: f32, density: f32) -> Self {
-        const DEFAULT_YOUNG_MODULUS: f32 = 1_000.0;
-        const DEFAULT_POISSON_RATIO: f32 = 0.2;
-
-        Self(Particle {
+impl<Model> Particle<Model> {
+    pub fn new(position: Point<f32>, radius: f32, density: f32, model: Model) -> Self {
+        Particle {
             position,
             dynamics: ParticleDynamics::new(radius, density),
-            model: DefaultParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
-                DEFAULT_YOUNG_MODULUS,
-                DEFAULT_POISSON_RATIO,
-            )).into(),
-        })
-    }
-
-    pub fn elastic(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = DefaultParticleModel::ElasticLinear(ElasticCoefficients::from_young_modulus(
-            young_modulus,
-            poisson_ratio,
-        )).into();
-        self
-    }
-
-    pub fn sand(mut self, young_modulus: f32, poisson_ratio: f32) -> Self {
-        self.0.model = DefaultParticleModel::SandLinear(SandModel {
-            plastic_state: DruckerPragerPlasticState::default(),
-            plastic: DruckerPrager::new(young_modulus, poisson_ratio),
-            elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
-        }).into();
-        self
-    }
-
-    pub fn build(self) -> Particle<Model> {
-        self.0
+            model,
+        }
     }
 }
 
@@ -251,13 +216,13 @@ pub type ParticlePosition = Point<f32>;
 #[cfg(feature = "dim3")]
 pub type ParticlePosition = Point4<f32>;
 
-struct SoAParticles<GpuModel: GpuParticleModel> {
+struct SoAParticles<GpuModel: GpuParticleModelData> {
     positions: Vec<ParticlePosition>,
     dynamics: Vec<ParticleDynamics>,
     models: Vec<GpuModel>,
 }
 
-impl<GpuModel: GpuParticleModel> SoAParticles<GpuModel> {
+impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
     pub fn new(particles: &[Particle<GpuModel::Model>]) -> Self {
         #[cfg(feature = "dim2")]
         let positions: Vec<_> = particles.iter().map(|p| p.position).collect();
@@ -277,7 +242,7 @@ impl<GpuModel: GpuParticleModel> SoAParticles<GpuModel> {
     }
 }
 
-pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModel> {
+pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModelData> {
     len: usize,
     gpu_len: GpuScalar<u32, B>,
     positions: GpuTensor<ParticlePosition, B>,
@@ -287,7 +252,7 @@ pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModel> {
     node_linked_lists: GpuTensor<u32, B>,
 }
 
-impl<B: Backend, GpuModel: GpuParticleModel> GpuParticles<B, GpuModel> {
+impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

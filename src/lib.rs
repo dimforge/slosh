@@ -25,3 +25,10 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
     nexus::register_shaders(compiler);
     compiler.add_dir(SLANG_SRC_DIR.clone());
 }
+
+pub mod re_exports {
+    pub use slang_hal::re_exports::*;
+    pub use slang_hal;
+    pub use stensor;
+    pub use nexus;
+}

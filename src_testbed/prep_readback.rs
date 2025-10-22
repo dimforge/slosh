@@ -4,7 +4,7 @@ use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
-use slosh::solver::{GpuParticleModel, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
+use slosh::solver::{GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
 use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 
@@ -112,7 +112,7 @@ struct PrepReadbackArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> PrepReadback<B> {
-    pub fn launch<GpuModel: GpuParticleModel>(
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         encoder: &mut B::Encoder,

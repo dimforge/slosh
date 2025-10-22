@@ -1,7 +1,7 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{GpuParticleModel, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticleModel, ParticlePosition, SimulationParams};
+use crate::solver::{GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
@@ -26,7 +26,7 @@ struct G2PCdfArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgG2PCdf<B> {
-    pub fn launch<GpuModel: GpuParticleModel>(
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         pass: &mut B::Pass,

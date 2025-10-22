@@ -139,8 +139,14 @@ func particle_update(
     /*
      * Write back the new particle properties.
      */
-    particles_pos[particle_id].pt = new_particle_pos;
-    particles_dyn[particle_id].velocity = new_particle_vel;
-    particles_dyn[particle_id].def_grad = new_deformation_gradient;
-    particles_dyn[particle_id].affine = affine;
+    if (all(new_particle_pos == new_particle_pos)) { // Avoid NaNs
+        particles_pos[particle_id].pt = new_particle_pos;
+        particles_dyn[particle_id].velocity = new_particle_vel;
+        particles_dyn[particle_id].def_grad = new_deformation_gradient;
+        particles_dyn[particle_id].affine = affine;
+    } else {
+        particles_dyn[particle_id].velocity = Vect<float>(0.0);
+        particles_dyn[particle_id].def_grad = diag(Vect<float>(1.0));
+        particles_dyn[particle_id].affine = Mat<float>(0.0);
+    }
 }

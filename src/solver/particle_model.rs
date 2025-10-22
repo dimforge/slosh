@@ -4,17 +4,40 @@ use slang_hal::backend::WebGpu;
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum DefaultParticleModel {
+pub enum ParticleModel {
     ElasticLinear(ElasticCoefficients),
     ElasticNeoHookean(ElasticCoefficients),
     SandLinear(SandModel),
     SandNeoHookean(SandModel),
 }
 
+impl Default for ParticleModel {
+    fn default() -> Self {
+        Self::elastic(Self::DEFAULT_YOUNG_MODULUS, Self::DEFAULT_POISSON_RATIO)
+    }
+}
+
+impl ParticleModel {
+    pub const DEFAULT_YOUNG_MODULUS: f32 = 1_000.0;
+    pub const DEFAULT_POISSON_RATIO: f32 = 0.2;
+
+    pub fn elastic(young_modulus: f32, poisson_ratio: f32) -> Self {
+        Self::ElasticLinear(ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio))
+    }
+
+    pub fn sand(young_modulus: f32, poisson_ratio: f32) -> Self {
+        ParticleModel::SandLinear(SandModel {
+            plastic_state: DruckerPragerPlasticState::default(),
+            plastic: DruckerPrager::new(young_modulus, poisson_ratio),
+            elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
+        })
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, NoUninit)]
 #[repr(u32)]
 /// This is the same as [`ParticleModel`] but with explicit padding for compatibility with `bytemuck::NoUninit`.
-pub enum DefaultGpuParticleModel {
+pub enum GpuParticleModel {
     ElasticLinear(ElasticCoefficients, [u32; 9]) = 0,     // 3 floats + padding + 1 discriminant
     ElasticNeoHookean(ElasticCoefficients, [u32; 9]) = 1, // 3 floats + padding + 1 discriminant
     SandLinear(SandModel) = 2,                            // 12 floats + 1 discriminant
@@ -23,37 +46,37 @@ pub enum DefaultGpuParticleModel {
 
 // IMPORTANT: this assertions is here to reduce risks of `GpuParticleModel` from mismatching
 //            `SloshParticleModel` in
-static_assertions::assert_eq_size!(DefaultGpuParticleModel, [u8; 52]);
+static_assertions::assert_eq_size!(GpuParticleModel, [u8; 52]);
 
-impl Into<DefaultGpuParticleModel> for DefaultParticleModel {
-    fn into(self) -> DefaultGpuParticleModel {
+impl Into<GpuParticleModel> for ParticleModel {
+    fn into(self) -> GpuParticleModel {
         match self {
-            DefaultParticleModel::ElasticLinear(elastic_linear) => {
-                DefaultGpuParticleModel::ElasticLinear(elastic_linear, [0; _])
+            ParticleModel::ElasticLinear(elastic_linear) => {
+                GpuParticleModel::ElasticLinear(elastic_linear, [0; _])
             }
-            DefaultParticleModel::ElasticNeoHookean(elastic_neo_hookean) => {
-                DefaultGpuParticleModel::ElasticNeoHookean(elastic_neo_hookean, [0; _])
+            ParticleModel::ElasticNeoHookean(elastic_neo_hookean) => {
+                GpuParticleModel::ElasticNeoHookean(elastic_neo_hookean, [0; _])
             }
-            DefaultParticleModel::SandLinear(sand_linear) => DefaultGpuParticleModel::SandLinear(sand_linear),
-            DefaultParticleModel::SandNeoHookean(sand_neo_hookean) => {
-                DefaultGpuParticleModel::SandNeoHookean(sand_neo_hookean)
+            ParticleModel::SandLinear(sand_linear) => GpuParticleModel::SandLinear(sand_linear),
+            ParticleModel::SandNeoHookean(sand_neo_hookean) => {
+                GpuParticleModel::SandNeoHookean(sand_neo_hookean)
             }
         }
     }
 }
 
-impl Into<DefaultParticleModel> for DefaultGpuParticleModel {
-    fn into(self) -> DefaultParticleModel {
+impl Into<ParticleModel> for GpuParticleModel {
+    fn into(self) -> ParticleModel {
         match self {
-            DefaultGpuParticleModel::ElasticLinear(elastic_linear, _) => {
-                DefaultParticleModel::ElasticLinear(elastic_linear)
+            GpuParticleModel::ElasticLinear(elastic_linear, _) => {
+                ParticleModel::ElasticLinear(elastic_linear)
             }
-            DefaultGpuParticleModel::ElasticNeoHookean(elastic_neo_hookean, _) => {
-                DefaultParticleModel::ElasticNeoHookean(elastic_neo_hookean)
+            GpuParticleModel::ElasticNeoHookean(elastic_neo_hookean, _) => {
+                ParticleModel::ElasticNeoHookean(elastic_neo_hookean)
             }
-            DefaultGpuParticleModel::SandLinear(sand_linear) => DefaultParticleModel::SandLinear(sand_linear),
-            DefaultGpuParticleModel::SandNeoHookean(sand_neo_hookean) => {
-                DefaultParticleModel::SandNeoHookean(sand_neo_hookean)
+            GpuParticleModel::SandLinear(sand_linear) => ParticleModel::SandLinear(sand_linear),
+            GpuParticleModel::SandNeoHookean(sand_neo_hookean) => {
+                ParticleModel::SandNeoHookean(sand_neo_hookean)
             }
         }
     }
@@ -68,18 +91,14 @@ pub struct SandModel {
 }
 
 
-pub trait ParticleModel: Copy + From<DefaultParticleModel> {}
-
-impl ParticleModel for DefaultParticleModel {}
-
-pub trait GpuParticleModel: NoUninit + Send + Sync {
-    type Model: ParticleModel;
+pub trait GpuParticleModelData: NoUninit + Send + Sync {
+    type Model: Copy;
     fn from_model(model: Self::Model) -> Self;
     fn specialization_modules() -> Vec<String>;
 }
 
-impl GpuParticleModel for DefaultGpuParticleModel {
-    type Model = DefaultParticleModel;
+impl GpuParticleModelData for GpuParticleModel {
+    type Model = ParticleModel;
 
     fn specialization_modules() -> Vec<String> {
         // NOTE: we could have returned an empty `vec![]` here since the default specialization

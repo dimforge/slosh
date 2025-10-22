@@ -10,7 +10,7 @@ use slosh::{
     solver::{Particle, SimulationParams},
 };
 use slosh_testbed2d::{AppState, PhysicsContext};
-use slosh2d::solver::{ParticleBuilder, ParticleDynamics, ParticlePhase};
+use slosh2d::solver::{ParticleDynamics, ParticleModel, ParticlePhase};
 
 #[allow(dead_code)]
 fn main() {
@@ -32,11 +32,10 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
             let radius = cell_width / 4.0;
             let young_modulus = 1.0e7;
             let poisson_ratio = 0.2;
+            let model = ParticleModel::sand(young_modulus, poisson_ratio);
 
             particles.push(
-                ParticleBuilder::new(position, radius, density)
-                    .sand(young_modulus, poisson_ratio)
-                    .build(),
+                Particle::new(position, radius, density, model)
             );
         }
     }

@@ -4,9 +4,9 @@ use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
-use slosh::solver::{DefaultGpuParticleModel, GpuParticleModel, Particle};
+use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
 
-pub struct AppState<GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
+pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,
     // pub render_config: RenderConfig,
     // pub gpu_render_config: GpuRenderConfig,
@@ -33,23 +33,23 @@ pub struct RapierData {
     pub islands: IslandManager,
 }
 
-pub trait PhysicsCallback<GpuModel: GpuParticleModel> {
+pub trait PhysicsCallback<GpuModel: GpuParticleModelData> {
     fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>);
 }
 
-impl<GpuModel: GpuParticleModel, F: FnMut(&mut PhysicsState<GpuModel>)> PhysicsCallback<GpuModel> for F {
+impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)> PhysicsCallback<GpuModel> for F {
     fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>) {
         (*self)(state);
     }
 }
 
-pub struct PhysicsState<'a, GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
+pub struct PhysicsState<'a, GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub(crate) backend: &'a WebGpu,
     pub(crate) data: &'a mut MpmData<WebGpu, GpuModel>,
     pub(crate) step_id: usize,
 }
 
-impl<'a, GpuModel: GpuParticleModel> PhysicsState<'a, GpuModel> {
+impl<'a, GpuModel: GpuParticleModelData> PhysicsState<'a, GpuModel> {
     pub fn step_id(&self) -> usize {
         self.step_id
     }
@@ -62,7 +62,7 @@ impl<'a, GpuModel: GpuParticleModel> PhysicsState<'a, GpuModel> {
     }
 }
 
-pub struct PhysicsContext<GpuModel: GpuParticleModel = DefaultGpuParticleModel> {
+pub struct PhysicsContext<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub data: MpmData<WebGpu, GpuModel>,
     pub rapier_data: RapierData,
     pub callbacks: Vec<Box<dyn PhysicsCallback<GpuModel>>>,
