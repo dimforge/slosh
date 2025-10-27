@@ -27,7 +27,7 @@ bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
 static_assertions = { workspace = true }
-nexus3d = "0.2"
+nexus3d = "0.2.1"
 regex = "1"
 
 serde = "1"

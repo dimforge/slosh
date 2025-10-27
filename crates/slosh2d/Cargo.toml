@@ -30,7 +30,7 @@ static_assertions = { workspace = true }
 
 #wgcore = "0.2"
 #wgebra = "0.2"
-nexus2d = "0.2"
+nexus2d = "0.2.1"
 
 # TODO: make rapier optional?
 rapier2d = "0.30"
