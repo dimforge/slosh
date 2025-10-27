@@ -28,7 +28,7 @@ public struct SandModel<ElasticModel> {
     }
 }
 
-public struct DefaultParticleModel {
+public struct DefaultParticleModel: IParticleModel {
     uint dummy; // naga doesn’t allow empty structs so we add an unused field.
 
     // TODO: hard-coding this is quite fragile as is must match the size of

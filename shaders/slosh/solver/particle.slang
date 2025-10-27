@@ -46,7 +46,7 @@ public struct Cdf {
 
     public __init(vector<float, DIM> normal, vector<float, DIM> rigid_vel, float signed_distance, uint affinity) {
         this.normal = normal;
-        this.rigid_vel = rigid_vel,
+        this.rigid_vel = rigid_vel;
         this.signed_distance = signed_distance;
         this.affinity = affinity;
     }

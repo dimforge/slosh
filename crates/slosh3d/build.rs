@@ -8,7 +8,7 @@ pub fn main() {
     let mut slang = SlangCompiler::new(vec![PathBuf::from_str("../../shaders").unwrap()]);
     nexus3d::register_shaders(&mut slang);
 
-    let targets = [CompileTarget::Wgsl, CompileTarget::CudaSource];
+    let targets = [CompileTarget::Wgsl]; // , CompileTarget::CudaSource];
 
     for target in targets {
         slang.compile_all(

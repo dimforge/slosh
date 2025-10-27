@@ -14,12 +14,14 @@ import stensor.utils.mat;
 import nexus.shapes.cuboid;
 import nexus.aliases;
 
-// Only include that when checking compilation in build.rs which doesn’t support specialization yet.
 #if COMPILE_CHECK
-    import slosh.models.specializations;
+    // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
+    import slosh.models.default;
+    extern struct ParticleModel : IParticleModel = DefaultParticleModel;
+#else
+    extern struct ParticleModel : IParticleModel;
 #endif
 
-extern struct ParticleModel : IParticleModel;
 
 public struct Phase {
     public float phase;

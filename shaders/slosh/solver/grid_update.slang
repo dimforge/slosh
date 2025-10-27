@@ -25,7 +25,7 @@ func grid_update(
     uint3 tid: SV_GroupThreadID,
     uint tid_flat: SV_GroupIndex,
     ConstantBuffer<SimulationParams> sim_params,
-    StructuredBuffer<AtomicGrid> grid,
+    StructuredBuffer<Grid> grid,
     StructuredBuffer<ActiveBlockHeader> active_blocks,
     RWStructuredBuffer<Node> nodes,
 ) {
