@@ -1,9 +1,5 @@
-use crate::solver::{Particle, ParticlePhase};
 use bytemuck::{Pod, Zeroable};
 pub use drucker_prager::{DruckerPrager, DruckerPragerPlasticState};
-use slang_hal::backend::Backend;
-use stensor::tensor::GpuTensor;
-use wgpu::BufferUsages;
 
 mod drucker_prager;
 

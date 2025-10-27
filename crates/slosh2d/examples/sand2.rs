@@ -3,14 +3,12 @@ use slosh_testbed2d::{RapierData, slosh};
 use nalgebra::{Vector2, point, vector};
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
-use slosh::models::DruckerPrager;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
     solver::{Particle, SimulationParams},
 };
 use slosh_testbed2d::{AppState, PhysicsContext};
-use slosh2d::solver::{ParticleDynamics, ParticleModel, ParticlePhase};
+use slosh2d::solver::ParticleModel;
 
 #[allow(dead_code)]
 fn main() {
@@ -34,9 +32,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
             let poisson_ratio = 0.2;
             let model = ParticleModel::sand(young_modulus, poisson_ratio);
 
-            particles.push(
-                Particle::new(position, radius, density, model)
-            );
+            particles.push(Particle::new(position, radius, density, model));
         }
     }
 

@@ -4,7 +4,10 @@ use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
-use slosh::solver::{GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
+use slosh::solver::{
+    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
+    SimulationParams,
+};
 use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 

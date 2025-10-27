@@ -1,8 +1,11 @@
-use std::marker::PhantomData;
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate};
+use crate::solver::{
+    GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams,
+    Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf,
+    WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate,
+};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
@@ -11,6 +14,7 @@ use rapier::geometry::ColliderSet;
 use slang_hal::Shader;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::re_exports::minislang::SlangCompiler;
+use std::marker::PhantomData;
 use stensor::tensor::GpuVector;
 use wgpu::BufferUsages;
 
@@ -134,7 +138,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
-            particles_update: WgParticleUpdate::with_specializations(backend, compiler, &GpuModel::specialization_modules())?,
+            particles_update: WgParticleUpdate::with_specializations(
+                backend,
+                compiler,
+                &GpuModel::specialization_modules(),
+            )?,
             rigid_particles_update: WgRigidParticleUpdate::from_backend(backend, compiler)?,
             g2p: WgG2P::from_backend(backend, compiler)?,
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,

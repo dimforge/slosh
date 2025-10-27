@@ -1,7 +1,10 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{GpuImpulses, GpuParticleModelData, GpuParticles, ParticleDynamics, ParticlePosition, RigidImpulse};
+use crate::solver::{
+    GpuImpulses, GpuParticleModelData, GpuParticles, ParticleDynamics, ParticlePosition,
+    RigidImpulse,
+};
 use nexus::dynamics::{GpuBodySet, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;

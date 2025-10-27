@@ -5,9 +5,8 @@ use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, ParticlePhase, SimulationParams, ParticleModel},
+    solver::{Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -34,9 +33,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
                 let model = ParticleModel::elastic(1.0e7, 0.2);
-                particles.push(
-                    Particle::new(position, radius, density, model)
-                );
+                particles.push(Particle::new(position, radius, density, model));
             }
         }
     }

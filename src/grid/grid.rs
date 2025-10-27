@@ -250,30 +250,26 @@ impl<B: Backend> GpuGrid<B> {
             cpu_meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
-        let hmap_entries =
-            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
-        let nodes =
-            GpuVector::vector_uninit_encased(
-                backend,
-                capacity * NODES_PER_BLOCK,
-                BufferUsages::STORAGE,
-            )?;
+        let hmap_entries = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let nodes = GpuVector::vector_uninit_encased(
+            backend,
+            capacity * NODES_PER_BLOCK,
+            BufferUsages::STORAGE,
+        )?;
         let nodes_linked_lists =
             GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
-        let rigid_nodes_linked_lists = GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
-        let active_blocks =
-            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
-        let scan_values =
-            GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let rigid_nodes_linked_lists =
+            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
+        let active_blocks = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let scan_values = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
         let indirect_n_blocks_groups = Arc::new(GpuVector::scalar_uninit(
-                backend,
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?);
-        let indirect_n_g2p_p2g_groups =
-            Arc::new(GpuVector::scalar_uninit(
-                backend,
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?);
+            backend,
+            BufferUsages::STORAGE | BufferUsages::INDIRECT,
+        )?);
+        let indirect_n_g2p_p2g_groups = Arc::new(GpuVector::scalar_uninit(
+            backend,
+            BufferUsages::STORAGE | BufferUsages::INDIRECT,
+        )?);
         let debug = GpuVector::vector(backend, [0, 0], BufferUsages::STORAGE)?;
 
         Ok(Self {

@@ -1,4 +1,4 @@
-use slang_hal::backend::{Backend, WebGpu};
+use slang_hal::backend::WebGpu;
 use slosh::pipeline::{MpmData, MpmPipeline};
 use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
@@ -37,7 +37,9 @@ pub trait PhysicsCallback<GpuModel: GpuParticleModelData> {
     fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>);
 }
 
-impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)> PhysicsCallback<GpuModel> for F {
+impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)>
+    PhysicsCallback<GpuModel> for F
+{
     fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>) {
         (*self)(state);
     }

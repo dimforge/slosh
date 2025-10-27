@@ -1,9 +1,7 @@
-use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use nalgebra::{Point4, vector};
 use nexus::dynamics::body::BodyCouplingEntry;
-use rapier::geometry::{ColliderSet, Polyline, Segment, TriMesh};
+use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
@@ -12,11 +10,10 @@ use wgpu::BufferUsages;
 // use nexus::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
-use crate::solver::particle_model::{GpuParticleModel, GpuParticleModelData, SandModel};
+use crate::solver::particle_model::GpuParticleModelData;
 use nexus::dynamics::GpuBodySet;
 use nexus::math::{Matrix, Point, Vector};
 use nexus::shapes::ShapeBuffers;
-use crate::solver::ParticleModel;
 
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
@@ -162,7 +159,7 @@ impl<B: Backend> GpuRigidParticles<B> {
                 sampling::sample_trimesh(trimesh, &sampling_params, &mut sampling_buffers)
             } else if let Some(heightfield) = collider.shape().as_heightfield() {
                 let (vtx, idx) = heightfield.to_trimesh();
-                let trimesh = TriMesh::new(vtx, idx).unwrap();
+                let trimesh = rapier::geometry::TriMesh::new(vtx, idx).unwrap();
                 let rngs = gpu_data.trimesh_rngs();
                 let sampling_params = SamplingParams {
                     collider_id: collider_id as u32,
@@ -216,7 +213,7 @@ impl<B: Backend> GpuRigidParticles<B> {
 #[cfg(feature = "dim2")]
 pub type ParticlePosition = Point<f32>;
 #[cfg(feature = "dim3")]
-pub type ParticlePosition = Point4<f32>;
+pub type ParticlePosition = nalgebra::Point4<f32>;
 
 struct SoAParticles<GpuModel: GpuParticleModelData> {
     positions: Vec<ParticlePosition>,
@@ -234,7 +231,10 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
             .map(|p| p.position.coords.push(0.0).into())
             .collect();
         let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
-        let models: Vec<_> = particles.iter().map(|p| GpuModel::from_model(p.model)).collect();
+        let models: Vec<_> = particles
+            .iter()
+            .map(|p| GpuModel::from_model(p.model))
+            .collect();
 
         Self {
             positions,
@@ -260,14 +260,17 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
     }
 
     pub fn len(&self) -> usize {
-        self.len as usize
+        self.len
     }
 
     pub fn gpu_len(&self) -> &GpuScalar<u32, B> {
         &self.gpu_len
     }
 
-    pub fn from_particles(backend: &B, particles: &[Particle<GpuModel::Model>]) -> Result<Self, B::Error> {
+    pub fn from_particles(
+        backend: &B,
+        particles: &[Particle<GpuModel::Model>],
+    ) -> Result<Self, B::Error> {
         let data = SoAParticles::new(particles);
         let resizeable = BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST;
         Ok(Self {
@@ -319,7 +322,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
     }
 
     /// Appends particles at the end of this buffer.
-    pub fn append(&mut self, backend: &B, particles: &[Particle<GpuModel::Model>]) -> Result<(), B::Error> {
+    pub fn append(
+        &mut self,
+        backend: &B,
+        particles: &[Particle<GpuModel::Model>],
+    ) -> Result<(), B::Error> {
         // If new vectors are added to the struct, this code needs to be updated to adjust
         // the buffers accordingly for appending particles.
         let Self {
@@ -334,7 +341,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
 
         let data = SoAParticles::new(particles);
 
-        let zeros = vec![0; particles.len() as usize];
+        let zeros = vec![0; particles.len()];
 
         dynamics.append_encased(backend, &data.dynamics)?;
         positions.append_encased(backend, &data.positions)?;

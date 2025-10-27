@@ -4,11 +4,9 @@ use nalgebra::{DMatrix, point, vector};
 use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
-use slosh::models::DruckerPrager;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleModel, ParticleDynamics, ParticlePhase, SimulationParams},
+    solver::{Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -35,9 +33,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
                 let model = ParticleModel::sand(2.0e9, 0.2);
-                particles.push(
-                    Particle::new(position, radius, density, model)
-                );
+                particles.push(Particle::new(position, radius, density, model));
             }
         }
     }

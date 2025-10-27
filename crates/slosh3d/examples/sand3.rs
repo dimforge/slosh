@@ -3,11 +3,9 @@ use slosh_testbed3d::{PhysicsState, RapierData, slosh};
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
-use slosh::models::DruckerPrager;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, SimulationParams, ParticleModel},
+    solver::{Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -38,9 +36,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                     / 2.0;
                 let radius = cell_width / 4.0;
                 let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
-                particles.push(
-                    Particle::new(position, radius, DENSITY, model)
-                );
+                particles.push(Particle::new(position, radius, DENSITY, model));
             }
         }
     }
@@ -131,7 +127,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     .unwrap();
 
     let callback = move |phx: &mut PhysicsState| {
-        if phx.step_id() % 50 == 0 {
+        if phx.step_id().is_multiple_of(50) {
             let mut particles = vec![];
             for i in 0..nxz {
                 for k in 0..nxz {
@@ -143,9 +139,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                         / 2.0;
                     let radius = cell_width / 4.0;
                     let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
-                    particles.push(
-                        Particle::new(position, radius, DENSITY, model)
-                    );
+                    particles.push(Particle::new(position, radius, DENSITY, model));
                 }
             }
             phx.add_particles(&particles);

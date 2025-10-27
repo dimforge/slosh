@@ -36,9 +36,9 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 use slosh::pipeline::MpmPipeline;
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
+use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
 use wgpu::Limits;
-use slosh::solver::GpuParticleModelData;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
 type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
@@ -67,7 +67,10 @@ struct Stage<GpuModel: GpuParticleModelData> {
 }
 
 impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
-    pub async fn new(mut compiler: SlangCompiler, builders: SceneBuilders<GpuModel>) -> Stage<GpuModel> {
+    pub async fn new(
+        mut compiler: SlangCompiler,
+        builders: SceneBuilders<GpuModel>,
+    ) -> Stage<GpuModel> {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 10,
             ..Limits::default()
@@ -171,7 +174,10 @@ pub async fn run<GpuModel: GpuParticleModelData>(scene_builders: SceneBuilders<G
     run_with_compiler(SlangCompiler::new(vec![]), scene_builders).await
 }
 
-pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(compiler: SlangCompiler, scene_builders: SceneBuilders<GpuModel>) {
+pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    scene_builders: SceneBuilders<GpuModel>,
+) {
     let mut colliders_gfx = HashMap::new();
     let mut stage = Stage::new(compiler, scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");

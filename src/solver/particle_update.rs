@@ -1,10 +1,7 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use crate::solver::params::GpuSimulationParams;
-use crate::solver::particle_model::{GpuParticleModel, GpuParticleModelData};
-use crate::solver::{
-    GpuParticles, ParticleDynamics, ParticlePhase, ParticlePosition, SimulationParams,
-};
+use crate::solver::particle_model::GpuParticleModelData;
+use crate::solver::{GpuParticles, ParticleDynamics, ParticlePosition, SimulationParams};
 use nexus::dynamics::GpuBodySet;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -43,7 +40,7 @@ impl<B: Backend> WgParticleUpdate<B> {
         let args = ParticleUpdateArgs {
             params: &sim_params.params,
             grid: &grid.meta,
-            particles_model: &particles.models(),
+            particles_model: particles.models(),
             particles_pos: particles.positions(),
             particles_dyn: particles.dynamics(),
             particles_len: particles.gpu_len(),
