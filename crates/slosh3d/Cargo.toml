@@ -2,7 +2,7 @@
 name = "slosh3d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 3D Material Point Method implementation."
-repository = "https://github.com/dimforge/stensor"
+repository = "https://github.com/dimforge/slosh"
 version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
