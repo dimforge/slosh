@@ -1,4 +1,3 @@
-
 //! Material constitutive models for MPM particles.
 //!
 //! This module provides material models that define how particles respond to deformation:
