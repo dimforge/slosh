@@ -1,3 +1,5 @@
+//! Grid CDF (Collision Detection Field) update for rigid body coupling.
+
 use crate::grid::grid::{GpuActiveBlockHeader, GpuGrid, GpuGridMetadata, GpuGridNode};
 use nexus::dynamics::GpuBodySet;
 use nexus::math::GpuSim;
@@ -7,9 +9,14 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
 
+/// GPU kernel for updating grid node CDF data from rigid bodies.
+///
+/// Computes signed distance fields and closest points on rigid body surfaces
+/// for each active grid node.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::grid_update_cdf")]
 pub struct WgGridUpdateCdf<B: Backend> {
+    /// Compiled grid CDF update shader.
     pub grid_update: GpuFunction<B>,
 }
 
@@ -23,6 +30,14 @@ struct GridUpdateCdfArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgGridUpdateCdf<B> {
+    /// Launches grid CDF update from rigid body geometries.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `grid` - Grid to update with CDF data
+    /// * `bodies` - Rigid bodies providing collision geometry
     pub fn launch(
         &self,
         backend: &B,

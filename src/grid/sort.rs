@@ -1,3 +1,5 @@
+//! Particle sorting kernels for spatial acceleration.
+
 use crate::grid::grid::{GpuGrid, GpuGridHashMapEntry, GpuGridMetadata};
 use crate::solver::GpuRigidParticles;
 use nexus::math::Point;
@@ -6,6 +8,10 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::GpuScalar;
 
+/// GPU compute kernels for sorting particles into grid cells.
+///
+/// Implements spatial hashing and sorting to group particles by grid block
+/// for efficient neighbor queries during P2G/G2P.
 #[derive(Shader)]
 #[shader(module = "slosh::grid::sort")]
 pub struct WgSort<B: Backend> {
@@ -29,6 +35,16 @@ struct SortArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgSort<B> {
+    /// Sorts rigid body particles into grid cells.
+    ///
+    /// Builds spatial linked lists for efficient rigid-MPM particle interactions.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `rigid_particles` - Rigid body surface particles to sort
+    /// * `grid` - Target grid structure
     pub fn launch_sort_rigid_particles(
         &self,
         backend: &B,

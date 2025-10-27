@@ -1,3 +1,5 @@
+//! Parallel prefix sum (scan) implementation for GPU.
+
 use nalgebra::DVector;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -5,9 +7,10 @@ use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 
-/// This is a special variant of the prefix sum algorithm that assumes a 0 is always prepended
-/// as the first element in the vector.
-
+/// GPU compute kernels for parallel prefix sum.
+///
+/// This is a special variant that produces results as if a 0 was prepended
+/// to the input vector. Used for computing particle index offsets in blocks.
 #[derive(Shader)]
 #[shader(module = "slosh::grid::prefix_sum")]
 pub struct WgPrefixSum<B: Backend> {
@@ -25,6 +28,17 @@ impl<B: Backend> WgPrefixSum<B> {
     // TODO: figure out a way to read this from the shader.
     const THREADS: u32 = 256;
 
+    /// Computes parallel prefix sum on GPU data.
+    ///
+    /// Uses a multi-stage algorithm to handle arbitrary-length arrays.
+    /// The result is equivalent to a CPU scan with a 0 prepended.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `workspace` - Auxiliary buffers for multi-stage scan
+    /// * `data` - Input/output buffer to scan (modified in-place)
     pub fn launch(
         &self,
         backend: &B,
@@ -79,6 +93,9 @@ impl<B: Backend> WgPrefixSum<B> {
         Ok(())
     }
 
+    /// CPU implementation of the prefix sum for testing/validation.
+    ///
+    /// Applies the same algorithm as the GPU version but on CPU.
     pub fn eval_cpu(&self, v: &mut DVector<u32>) {
         for i in 0..v.len() - 1 {
             v[i + 1] += v[i];
@@ -99,6 +116,9 @@ struct PrefixSumStage<B: Backend> {
     buffer: GpuTensor<u32, B>,
 }
 
+/// Workspace buffers for multi-stage prefix sum.
+///
+/// Stores auxiliary buffers needed for hierarchical scan of large arrays.
 #[derive(Default)]
 pub struct PrefixSumWorkspace<B: Backend> {
     stages: Vec<PrefixSumStage<B>>,
@@ -106,6 +126,7 @@ pub struct PrefixSumWorkspace<B: Backend> {
 }
 
 impl<B: Backend> PrefixSumWorkspace<B> {
+    /// Creates an empty workspace.
     pub fn new() -> Self {
         Self {
             stages: vec![],
@@ -113,6 +134,9 @@ impl<B: Backend> PrefixSumWorkspace<B> {
         }
     }
 
+    /// Creates a workspace with capacity for the given buffer length.
+    ///
+    /// Allocates all necessary auxiliary buffers upfront.
     pub fn with_capacity(backend: &B, buffer_len: u32) -> Result<Self, B::Error> {
         let mut result = Self {
             stages: vec![],
@@ -122,6 +146,9 @@ impl<B: Backend> PrefixSumWorkspace<B> {
         Ok(result)
     }
 
+    /// Ensures workspace has capacity for the given buffer length.
+    ///
+    /// Reallocates auxiliary buffers if needed.
     pub fn reserve(&mut self, backend: &B, buffer_len: u32) -> Result<(), B::Error> {
         let mut stage_len = buffer_len.div_ceil(WgPrefixSum::<B>::THREADS);
 

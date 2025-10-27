@@ -1,3 +1,5 @@
+//! Grid-to-Particle transfer with Collision Detection Field updates.
+
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
@@ -10,9 +12,14 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
 
+/// GPU kernel for G2P transfer with CDF updates for rigid body coupling.
+///
+/// Updates particle CDF (Collision Detection Field) data based on proximity
+/// to rigid bodies during the G2P phase.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::g2p_cdf")]
 pub struct WgG2PCdf<B: Backend> {
+    /// Compiled G2P-CDF compute shader.
     pub g2p_cdf: GpuFunction<B>,
 }
 
@@ -29,6 +36,15 @@ struct G2PCdfArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgG2PCdf<B> {
+    /// Launches G2P with CDF updates for MPM particles.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `sim_params` - Simulation parameters
+    /// * `grid` - Source grid
+    /// * `particles` - Target particles to update
     pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,

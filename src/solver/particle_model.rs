@@ -1,11 +1,19 @@
 use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{NoUninit, Pod, Zeroable};
 
+/// Material model for MPM particles.
+///
+/// Defines the constitutive behavior (how stress relates to deformation) for particles.
+/// Supports both elastic and plastic materials with different strain energy formulations.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ParticleModel {
+    /// Linear elastic material (St. Venant-Kirchhoff).
     ElasticLinear(ElasticCoefficients),
+    /// Neo-Hookean hyperelastic material (better for large deformations).
     ElasticNeoHookean(ElasticCoefficients),
+    /// Sand/granular material with linear elasticity and Drucker-Prager plasticity.
     SandLinear(SandModel),
+    /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
     SandNeoHookean(SandModel),
 }
 
@@ -16,9 +24,17 @@ impl Default for ParticleModel {
 }
 
 impl ParticleModel {
+    /// Default Young's modulus for elastic materials (Pa).
     pub const DEFAULT_YOUNG_MODULUS: f32 = 1_000.0;
+    /// Default Poisson's ratio for elastic materials (dimensionless).
     pub const DEFAULT_POISSON_RATIO: f32 = 0.2;
 
+    /// Creates a linear elastic material model.
+    ///
+    /// # Arguments
+    ///
+    /// * `young_modulus` - Stiffness (Pa)
+    /// * `poisson_ratio` - Ratio of lateral to axial strain (0.0 - 0.5)
     pub fn elastic(young_modulus: f32, poisson_ratio: f32) -> Self {
         Self::ElasticLinear(ElasticCoefficients::from_young_modulus(
             young_modulus,
@@ -26,6 +42,12 @@ impl ParticleModel {
         ))
     }
 
+    /// Creates a sand/granular material model with Drucker-Prager plasticity.
+    ///
+    /// # Arguments
+    ///
+    /// * `young_modulus` - Elastic stiffness (Pa)
+    /// * `poisson_ratio` - Elastic Poisson's ratio (0.0 - 0.5)
     pub fn sand(young_modulus: f32, poisson_ratio: f32) -> Self {
         ParticleModel::SandLinear(SandModel {
             plastic_state: DruckerPragerPlasticState::default(),
@@ -35,14 +57,22 @@ impl ParticleModel {
     }
 }
 
+/// GPU-compatible version of [`ParticleModel`] with explicit padding.
+///
+/// This enum has the same variants as [`ParticleModel`] but includes padding
+/// to satisfy alignment requirements for GPU buffers. The memory layout must
+/// match the shader-side `SloshParticleModel` definition exactly.
 #[derive(Copy, Clone, Debug, PartialEq, NoUninit)]
 #[repr(u32)]
-/// This is the same as [`ParticleModel`] but with explicit padding for compatibility with `bytemuck::NoUninit`.
 pub enum GpuParticleModel {
-    ElasticLinear(ElasticCoefficients, [u32; 9]) = 0, // 3 floats + padding + 1 discriminant
-    ElasticNeoHookean(ElasticCoefficients, [u32; 9]) = 1, // 3 floats + padding + 1 discriminant
-    SandLinear(SandModel) = 2,                        // 12 floats + 1 discriminant
-    SandNeoHookean(SandModel) = 3,                    // 12 floats + 1 discriminant
+    /// Linear elastic model with padding for GPU alignment.
+    ElasticLinear(ElasticCoefficients, [u32; 9]) = 0,
+    /// Neo-Hookean elastic model with padding for GPU alignment.
+    ElasticNeoHookean(ElasticCoefficients, [u32; 9]) = 1,
+    /// Sand with linear elasticity and Drucker-Prager plasticity.
+    SandLinear(SandModel) = 2,
+    /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
+    SandNeoHookean(SandModel) = 3,
 }
 
 // IMPORTANT: this assertions is here to reduce risks of `GpuParticleModel` from mismatching
@@ -83,17 +113,31 @@ impl From<GpuParticleModel> for ParticleModel {
     }
 }
 
+/// Combined elastic-plastic model for sand and granular materials.
+///
+/// Stores both elastic coefficients and Drucker-Prager plasticity state.
+/// The plastic state tracks accumulated plastic deformation.
 #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct SandModel {
+    /// Current plastic deformation state.
     pub plastic_state: DruckerPragerPlasticState,
+    /// Drucker-Prager plasticity model parameters.
     pub plastic: DruckerPrager,
+    /// Elastic coefficients (Lamé parameters).
     pub elastic: ElasticCoefficients,
 }
 
+/// Trait for types that can be used as GPU particle model data.
+///
+/// Implementors must provide conversion from CPU-side model representation
+/// and specify shader specialization modules for link-time code generation.
 pub trait GpuParticleModelData: NoUninit + Send + Sync {
+    /// CPU-side material model type.
     type Model: Copy;
+    /// Converts from CPU representation to GPU representation.
     fn from_model(model: Self::Model) -> Self;
+    /// Returns Slang module paths for shader specialization.
     fn specialization_modules() -> Vec<String>;
 }
 

@@ -1,3 +1,5 @@
+//! Particle-to-Grid transfer with Collision Detection Field for rigid bodies.
+
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
@@ -10,9 +12,14 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
 
+/// GPU kernel for P2G transfer from rigid body particles.
+///
+/// Transfers momentum from rigid body surface particles to grid nodes,
+/// enabling two-way coupling between MPM and rigid bodies.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::p2g_cdf")]
 pub struct WgP2GCdf<B: Backend> {
+    /// Compiled P2G-CDF compute shader.
     pub p2g_cdf: GpuFunction<B>,
 }
 
@@ -29,6 +36,15 @@ struct P2GCdfArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgP2GCdf<B> {
+    /// Launches P2G transfer from rigid body particles to grid.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `grid` - Target grid
+    /// * `rigid_particles` - Source rigid body particles
+    /// * `bodies` - Rigid body set for vertex data
     pub fn launch(
         &self,
         backend: &B,
