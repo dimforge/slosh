@@ -29,6 +29,7 @@ pub struct ParticleDynamics {
     pub init_volume: f32,
     pub init_radius: f32,
     pub mass: f32,
+    pub enabled: u32,
 }
 
 impl ParticleDynamics {
@@ -44,6 +45,7 @@ impl ParticleDynamics {
             init_radius: radius,
             mass: init_volume * density,
             cdf: Cdf::default(),
+            enabled: 1,
         }
     }
 

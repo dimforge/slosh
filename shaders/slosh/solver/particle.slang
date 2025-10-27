@@ -16,6 +16,7 @@ public struct Dynamics {
     public float init_volume;
     public float init_radius;
     public float mass;
+    public uint enabled;
 }
 
 public struct RigidParticleIndices {

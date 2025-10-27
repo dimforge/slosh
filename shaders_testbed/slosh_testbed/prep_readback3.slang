@@ -39,6 +39,7 @@ func prep_readback(
     let particle_id = invocation_id.x;
 
     if (particle_id < instances.getCount()) {
+        let failed = particles_dyn[particle_id].enabled == 0;
         let def_grad = particles_dyn[particle_id].def_grad;
         let init_deformation = diag(Vect<float>(particles_dyn[particle_id].init_radius * 2.0));
         instances[particle_id].deformation = clamp(def_grad, Mat<float>(-4.0), Mat<float>(4.0)) * init_deformation;
@@ -84,6 +85,10 @@ func prep_readback(
              } else {
                  instances[particle_id].color = float4(1.0, 0.0, 0.0, color.w);
              }
+         }
+
+         if (failed) {
+            instances[particle_id].color = float4(1.0, 0.0, 0.0, 1.0);
          }
     }
 }

@@ -160,7 +160,7 @@ func particle_g2p(
     var vel_grad_det = 0.0;
 
     // G2P
-    {
+    if (particles_dyn[particle_id].enabled != 0) {
         let particle_pos = particles_pos[particle_id];
         let particle_vel = particles_dyn[particle_id].velocity;
         let particle_cdf = particles_dyn[particle_id].cdf;
