@@ -30,7 +30,7 @@ static_assertions = { workspace = true }
 
 #wgcore = "0.2"
 #wgebra = "0.2"
-nexus2d = "0.1"
+nexus2d = "0.2"
 
 # TODO: make rapier optional?
 rapier2d = "0.30"
@@ -50,5 +50,5 @@ slosh_testbed2d = { path = "../slosh-testbed2d", features = ["dim2"] }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.1"
-nexus2d = "0.1" # to access its shaders at compile-time
+minislang = "0.2"
+nexus2d = "0.2" # to access its shaders at compile-time

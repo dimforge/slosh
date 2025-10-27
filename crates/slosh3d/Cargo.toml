@@ -27,7 +27,7 @@ bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
 static_assertions = { workspace = true }
-nexus3d = "0.1"
+nexus3d = "0.2"
 regex = "1"
 
 serde = "1"
@@ -45,5 +45,5 @@ slosh_testbed3d = { path = "../slosh-testbed3d" }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.1"
-nexus3d = "0.1" # to access its shaders at compile-time
+minislang = "0.2"
+nexus3d = "0.2" # to access its shaders at compile-time

@@ -25,7 +25,7 @@ encase = { workspace = true }
 
 slang-hal = { workspace = true }
 stensor = { workspace = true }
-nexus2d = "0.1"
+nexus2d = "0.2"
 
 futures-test = "0.3"
 serial_test = "3"
