@@ -4,13 +4,13 @@ use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
-use slosh::solver::Particle;
+use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
 
-pub struct AppState {
+pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,
     // pub render_config: RenderConfig,
     // pub gpu_render_config: GpuRenderConfig,
-    pub pipeline: MpmPipeline<WebGpu>,
+    pub pipeline: MpmPipeline<WebGpu, GpuModel>,
     // pub prep_vertex_buffer: WgPrepVertexBuffer,
     pub num_substeps: usize,
     pub gravity_factor: f32,
@@ -33,10 +33,41 @@ pub struct RapierData {
     pub islands: IslandManager,
 }
 
-pub struct PhysicsContext {
-    pub data: MpmData<WebGpu>,
+pub trait PhysicsCallback<GpuModel: GpuParticleModelData> {
+    fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>);
+}
+
+impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)>
+    PhysicsCallback<GpuModel> for F
+{
+    fn update(&mut self, state: &mut PhysicsState<'_, GpuModel>) {
+        (*self)(state);
+    }
+}
+
+pub struct PhysicsState<'a, GpuModel: GpuParticleModelData = GpuParticleModel> {
+    pub(crate) backend: &'a WebGpu,
+    pub(crate) data: &'a mut MpmData<WebGpu, GpuModel>,
+    pub(crate) step_id: usize,
+}
+
+impl<'a, GpuModel: GpuParticleModelData> PhysicsState<'a, GpuModel> {
+    pub fn step_id(&self) -> usize {
+        self.step_id
+    }
+
+    pub fn add_particles(&mut self, particles: &[Particle<GpuModel::Model>]) {
+        self.data
+            .particles
+            .append(self.backend, particles)
+            .expect("Failed to add particles.");
+    }
+}
+
+pub struct PhysicsContext<GpuModel: GpuParticleModelData = GpuParticleModel> {
+    pub data: MpmData<WebGpu, GpuModel>,
     pub rapier_data: RapierData,
-    pub particles: Vec<Particle>,
+    pub callbacks: Vec<Box<dyn PhysicsCallback<GpuModel>>>,
 }
 
 // #[derive(Default)]

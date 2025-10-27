@@ -1,17 +1,25 @@
+//! Grid-to-Particle transfer with Collision Detection Field updates.
+
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
 use crate::solver::{
-    GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams,
+    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
+    SimulationParams,
 };
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
 
+/// GPU kernel for G2P transfer with CDF updates for rigid body coupling.
+///
+/// Updates particle CDF (Collision Detection Field) data based on proximity
+/// to rigid bodies during the G2P phase.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::g2p_cdf")]
 pub struct WgG2PCdf<B: Backend> {
+    /// Compiled G2P-CDF compute shader.
     pub g2p_cdf: GpuFunction<B>,
 }
 
@@ -28,13 +36,22 @@ struct G2PCdfArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgG2PCdf<B> {
-    pub fn launch(
+    /// Launches G2P with CDF updates for MPM particles.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `sim_params` - Simulation parameters
+    /// * `grid` - Source grid
+    /// * `particles` - Target particles to update
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         pass: &mut B::Pass,
         sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
     ) -> Result<(), B::Error> {
         let args = G2PCdfArgs {
             params: &sim_params.params,
@@ -42,9 +59,9 @@ impl<B: Backend> WgG2PCdf<B> {
             hmap_entries: &grid.hmap_entries,
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
-            sorted_particle_ids: &particles.sorted_ids,
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
+            sorted_particle_ids: particles.sorted_ids(),
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
         };
         self.g2p_cdf.launch_indirect(
             backend,

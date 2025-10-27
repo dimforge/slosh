@@ -1,16 +1,29 @@
+//! Particle-to-Grid (P2G) transfer kernel.
+//!
+//! Transfers particle mass, momentum, and forces to nearby grid nodes using
+//! interpolation weights. This is the first major step of each MPM timestep.
+
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{GpuImpulses, GpuParticles, ParticleDynamics, ParticlePosition, RigidImpulse};
+use crate::solver::{
+    GpuImpulses, GpuParticleModelData, GpuParticles, ParticleDynamics, ParticlePosition,
+    RigidImpulse,
+};
 use nexus::dynamics::{GpuBodySet, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
 
+/// GPU compute kernel for Particle-to-Grid (P2G) momentum transfer.
+///
+/// Rasterizes particle mass and momentum onto the background grid using quadratic
+/// B-spline interpolation. Also handles impulse accumulation for rigid body coupling.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::p2g")]
 pub struct WgP2G<B: Backend> {
+    /// Compiled P2G compute shader.
     pub p2g: GpuFunction<B>,
 }
 
@@ -29,12 +42,22 @@ struct P2GArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgP2G<B> {
-    pub fn launch(
+    /// Launches the P2G kernel to transfer particle data to grid nodes.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for command recording
+    /// * `pass` - Compute pass to record commands into
+    /// * `grid` - Target grid to write momentum into
+    /// * `particles` - Source particles to read from
+    /// * `impulses` - Impulse buffers for rigid body coupling
+    /// * `bodies` - Rigid bodies for coupling
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         pass: &mut B::Pass,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
         impulses: &GpuImpulses<B>,
         bodies: &GpuBodySet<B>,
     ) -> Result<(), B::Error> {
@@ -44,9 +67,9 @@ impl<B: Backend> WgP2G<B> {
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
             nodes_linked_lists: &grid.nodes_linked_lists,
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
-            particle_node_linked_lists: &particles.node_linked_lists,
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
+            particle_node_linked_lists: particles.node_linked_lists(),
             body_vels: bodies.vels(),
             body_impulses: &impulses.incremental_impulses,
         };

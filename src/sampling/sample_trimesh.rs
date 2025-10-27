@@ -1,70 +1,15 @@
-use crate::models::{DruckerPrager, ElasticCoefficients};
-use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use nexus::dynamics::{body::BodyCouplingEntry, GpuBodySet};
-use nexus::shapes::ShapeBuffers;
-use nalgebra::{vector, Matrix3, Point3, Vector3, Vector4};
-use rapier::geometry::{Segment, Triangle};
-use rapier::prelude::{ColliderSet, TriMesh};
-use slang_hal::backend::Backend;
-use stensor::tensor::GpuVector;
+use nalgebra::{Point3, Vector3, vector};
+use rapier::geometry::{Segment, TriMesh, Triangle};
 use std::collections::HashSet;
-use wgpu::BufferUsages;
-// use nexus::shapes::ShapeBuffers;
-// use nexus::dynamics::body::BodyCouplingEntry;
-// use nexus::dynamics::GpuBodySet;
 
-#[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
-#[repr(C)]
-pub struct ParticleDynamics {
-    pub velocity: Vector3<f32>,
-    pub def_grad: Matrix3<f32>,
-    pub affine: Matrix3<f32>,
-    pub cdf: Cdf,
-    pub init_volume: f32,
-    pub init_radius: f32,
-    pub mass: f32,
-}
+// Epsilon used as a length threshold in various steps of the sampling. In particular, this avoids
+// degenerate geometries from generating invalid samples.
+const EPS: f32 = 1.0e-5;
 
-impl ParticleDynamics {
-    pub fn with_density(radius: f32, density: f32) -> Self {
-        let exponent = if cfg!(feature = "dim2") { 2 } else { 3 };
-        let init_volume = (radius * 2.0).powi(exponent); // NOTE: the particles are square-ish.
-        Self {
-            velocity: Vector3::zeros(),
-            def_grad: Matrix3::identity(),
-            affine: Matrix3::zeros(),
-            init_volume,
-            init_radius: radius,
-            mass: init_volume * density,
-            cdf: Cdf::default(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Pod, Zeroable)]
-#[repr(C)]
-pub struct ParticlePhase {
-    pub phase: f32,
-    pub max_stretch: f32,
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Default, ShaderType)]
-#[repr(C)]
-pub struct Cdf {
-    pub normal: Vector3<f32>,
-    pub rigid_vel: Vector3<f32>,
-    pub signed_distance: f32,
-    pub affinity: u32,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Particle {
-    pub position: Vector3<f32>,
-    pub dynamics: ParticleDynamics,
-    pub model: ElasticCoefficients,
-    pub plasticity: Option<DruckerPrager>,
-    pub phase: Option<ParticlePhase>,
+pub struct TriangleSample {
+    pub triangle_id: u32,
+    pub point: Point3<f32>,
 }
 
 #[derive(Copy, Clone, Debug, ShaderType)]
@@ -75,158 +20,20 @@ pub struct GpuSampleIds {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct SamplingParams {
-    base_vid: u32,
-    collider_id: u32,
-    sampling_step: f32,
+pub struct SamplingParams {
+    pub base_vid: u32,
+    pub collider_id: u32,
+    pub sampling_step: f32,
 }
 
 #[derive(Default, Clone)]
-struct SamplingBuffers {
-    local_samples: Vec<Point3<f32>>,
-    samples: Vec<Point3<f32>>,
-    samples_ids: Vec<GpuSampleIds>,
+pub struct SamplingBuffers {
+    pub local_samples: Vec<Point3<f32>>,
+    pub samples: Vec<Point3<f32>>,
+    pub samples_ids: Vec<GpuSampleIds>,
 }
 
-pub struct GpuRigidParticles<B: Backend> {
-    pub local_sample_points: GpuVector<Point3<f32>, B>,
-    pub sample_points: GpuVector<Point3<f32>, B>,
-    pub rigid_particle_needs_block: GpuVector<u32, B>,
-    pub node_linked_lists: GpuVector<u32, B>,
-    pub sample_ids: GpuVector<GpuSampleIds, B>,
-}
-
-impl<B: Backend> GpuRigidParticles<B> {
-    pub fn new(backend: &B) -> Result<Self, B::Error> {
-        Self::from_rapier(
-            backend,
-            &ColliderSet::default(),
-            &GpuBodySet::new(backend, &[], &[], &ShapeBuffers::default())?,
-            &[],
-            1.0,
-        )
-    }
-
-    pub fn from_rapier(
-        backend: &B,
-        colliders: &ColliderSet,
-        gpu_bodies: &GpuBodySet<B>,
-        coupling: &[BodyCouplingEntry],
-        sampling_step: f32,
-    ) -> Result<Self, B::Error> {
-        let mut sampling_buffers = SamplingBuffers::default();
-        for (collider_id, (coupling, gpu_data)) in coupling
-            .iter()
-            .zip(gpu_bodies.shapes_data().iter())
-            .enumerate()
-        {
-            let collider = &colliders[coupling.collider];
-            if let Some(trimesh) = collider.shape().as_trimesh() {
-                let rngs = gpu_data.trimesh_rngs();
-                let sampling_params = SamplingParams {
-                    collider_id: collider_id as u32,
-                    base_vid: rngs[0],
-                    sampling_step,
-                };
-                sample_trimesh(trimesh, &sampling_params, &mut sampling_buffers)
-            } else if let Some(heightfield) = collider.shape().as_heightfield() {
-                let (vtx, idx) = heightfield.to_trimesh();
-                let trimesh = TriMesh::new(vtx, idx).unwrap();
-                let rngs = gpu_data.trimesh_rngs();
-                let sampling_params = SamplingParams {
-                    collider_id: collider_id as u32,
-                    base_vid: rngs[0],
-                    sampling_step,
-                };
-                sample_trimesh(&trimesh, &sampling_params, &mut sampling_buffers)
-            }
-        }
-
-        Ok(Self {
-            local_sample_points: GpuVector::vector_encased(
-                backend,
-                &sampling_buffers.samples,
-                BufferUsages::STORAGE,
-            )?,
-            sample_points: GpuVector::vector_encased(
-                backend,
-                &sampling_buffers.samples,
-                BufferUsages::STORAGE,
-            )?,
-            node_linked_lists: unsafe {
-                GpuVector::vector_uninit(
-                    backend,
-                    sampling_buffers.samples.len() as u32,
-                    BufferUsages::STORAGE,
-                )?
-            },
-            sample_ids: GpuVector::vector_encased(
-                backend,
-                &sampling_buffers.samples_ids,
-                BufferUsages::STORAGE,
-            )?,
-            // NOTE: this is a packed bitmask so each u32 contains
-            //       the flag for 32 particles.
-            rigid_particle_needs_block: unsafe {
-                GpuVector::vector_uninit(
-                    backend,
-                    sampling_buffers.samples.len().div_ceil(32) as u32,
-                    BufferUsages::STORAGE,
-                )?
-            },
-        })
-    }
-
-    pub fn len(&self) -> u64 {
-        self.sample_points.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-pub type ParticlePosition = Vector4<f32>;
-
-pub struct GpuParticles<B: Backend> {
-    pub positions: GpuVector<ParticlePosition, B>,
-    pub dynamics: GpuVector<ParticleDynamics, B>,
-    pub sorted_ids: GpuVector<u32, B>,
-    pub node_linked_lists: GpuVector<u32, B>,
-}
-
-impl<B: Backend> GpuParticles<B> {
-    pub fn is_empty(&self) -> bool {
-        self.positions.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.positions.len() as usize
-    }
-
-    pub fn from_particles(backend: &B, particles: &[Particle]) -> Result<Self, B::Error> {
-        let positions: Vec<_> = particles.iter().map(|p| p.position.push(0.0)).collect();
-        let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
-
-        Ok(Self {
-            positions: GpuVector::vector(
-                backend,
-                &positions,
-                BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            )?,
-            dynamics: GpuVector::vector_encased(backend, &dynamics, BufferUsages::STORAGE)?,
-            sorted_ids: unsafe {
-                GpuVector::vector_uninit(backend, particles.len() as u32, BufferUsages::STORAGE)?
-            },
-            node_linked_lists: unsafe {
-                GpuVector::vector_uninit(backend, particles.len() as u32, BufferUsages::STORAGE)?
-            },
-        })
-    }
-}
-
-// TODO: move this elsewhere?
-fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut SamplingBuffers) {
+pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut SamplingBuffers) {
     let samples = sample_mesh(trimesh.vertices(), trimesh.indices(), params.sampling_step);
 
     for sample in samples {
@@ -249,15 +56,6 @@ fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut Samp
         buffers.samples.len(),
         trimesh.indices().len()
     );
-}
-
-// Epsilon used as a length threshold in various steps of the sampling. In particular, this avoids
-// degenerate geometries from generating invalid samples.
-const EPS: f32 = 1.0e-5;
-
-pub struct TriangleSample {
-    pub triangle_id: u32,
-    pub point: Point3<f32>,
 }
 
 /// Samples a triangle mesh with a set of points such that at least one point is generated

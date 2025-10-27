@@ -1,4 +1,7 @@
-use crate::solver::{GpuRigidParticles, GpuSampleIds};
+//! Rigid body particle transformation kernels.
+
+use crate::sampling::GpuSampleIds;
+use crate::solver::GpuRigidParticles;
 use nexus::dynamics::GpuBodySet;
 use nexus::math::{GpuSim, Point};
 use slang_hal::backend::Backend;
@@ -6,10 +9,16 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::GpuTensor;
 
+/// GPU kernels for updating rigid body particle positions.
+///
+/// Transforms surface-sampled particles from local to world coordinates
+/// as rigid bodies move.
 #[derive(Shader)]
 #[shader(module = "slosh::solver::rigid_particle_update")]
 pub struct WgRigidParticleUpdate<B: Backend> {
+    /// Kernel for transforming sample points.
     pub transform_sample_points: GpuFunction<B>,
+    /// Kernel for transforming shape vertex points.
     pub transform_shape_points: GpuFunction<B>,
 }
 
@@ -23,6 +32,16 @@ struct RigidParticleUpdateArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgRigidParticleUpdate<B> {
+    /// Transforms rigid body particles from local to world space.
+    ///
+    /// Updates surface particle positions based on current rigid body poses.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `bodies` - Rigid bodies with current poses
+    /// * `rigid_particles` - Particles to transform
     pub fn launch(
         &self,
         backend: &B,

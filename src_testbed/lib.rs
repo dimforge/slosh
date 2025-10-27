@@ -25,10 +25,10 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
 
 use crate::prep_readback::{GpuReadbackData, PrepReadback};
 use crate::step::SimulationStepResult;
-use nexus::math::DIM;
-use nexus::rapier::geometry::ShapeType;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
+use nexus::math::DIM;
+use nexus::rapier::geometry::ShapeType;
 use regex::Regex;
 use slang_hal::backend::WebGpu;
 use slang_hal::re_exports::include_dir;
@@ -36,23 +36,26 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 use slosh::pipeline::MpmPipeline;
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
+use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
 use wgpu::Limits;
 
-type SceneBuilders = Vec<(String, SceneBuildFn)>;
-type SceneBuildFn = fn(&WebGpu, &mut AppState) -> PhysicsContext;
+type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
+type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
 
 #[cfg(feature = "dim2")]
 type RenderNode = PlanarSceneNode;
 #[cfg(feature = "dim3")]
 type RenderNode = kiss3d::scene::SceneNode;
 
-struct Stage {
+struct Stage<GpuModel: GpuParticleModelData> {
     gpu: WebGpu,
 
-    builders: SceneBuilders,
-    physics: PhysicsContext,
-    app_state: AppState,
+    selected_demo: usize,
+    builders: SceneBuilders<GpuModel>,
+    physics: PhysicsContext<GpuModel>,
+    app_state: AppState<GpuModel>,
+    step_id: usize,
 
     step_result: SimulationStepResult,
     readback_shader: PrepReadback<WebGpu>,
@@ -63,13 +66,16 @@ struct Stage {
     instances: Vec<InstanceData>,
 }
 
-impl Stage {
-    pub fn new(builders: SceneBuilders) -> Stage {
+impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
+    pub async fn new(
+        mut compiler: SlangCompiler,
+        builders: SceneBuilders<GpuModel>,
+    ) -> Stage<GpuModel> {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 10, // Did the default get bumped down to 8???!!
+            max_storage_buffers_per_shader_stage: 10,
             ..Limits::default()
         };
-        let mut gpu = futures::executor::block_on(WebGpu::new(Default::default(), limits)).unwrap();
+        let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
         // TODO: this is a terrible, horrible, hack, to work around the fact that slang isn’t giving us access to
         //       `exch.exchanged` to properly handle the _weak_ nature of `atomicCompareExchangeWeak̀
         let reg =
@@ -83,7 +89,6 @@ impl Stage {
         ";
         gpu.append_hack(reg, replace.to_string());
 
-        let mut compiler = SlangCompiler::new(vec![]);
         crate::register_shaders(&mut compiler);
 
         compiler.set_global_macro("DIM", DIM);
@@ -91,7 +96,7 @@ impl Stage {
         let mpm_pipeline = MpmPipeline::new(&gpu, &compiler).unwrap();
         let mut app_state = AppState {
             pipeline: mpm_pipeline,
-            run_state: RunState::Running,
+            run_state: RunState::Paused,
             num_substeps: 1,
             gravity_factor: 1.0,
             restarting: false,
@@ -115,10 +120,13 @@ impl Stage {
             physics,
             app_state,
             step_result,
+            step_id: 0,
+            selected_demo: 0,
         }
     }
 
     pub fn set_demo(&mut self, demo_id: usize) {
+        self.selected_demo = demo_id;
         self.physics = (self.builders[demo_id]).1(&self.gpu, &mut self.app_state);
         self.readback = GpuReadbackData::new(&self.gpu, self.physics.data.particles.len()).unwrap();
         self.step_result
@@ -126,8 +134,8 @@ impl Stage {
             .resize(self.physics.data.particles.len(), Default::default());
     }
 
-    fn update(&mut self) {
-        if !self.step_simulation() {
+    async fn update(&mut self) {
+        if !self.step_simulation().await {
             return;
         }
 
@@ -162,33 +170,45 @@ impl Stage {
     }
 }
 
-pub fn run(scene_builders: SceneBuilders) {
+pub async fn run<GpuModel: GpuParticleModelData>(scene_builders: SceneBuilders<GpuModel>) {
+    run_with_compiler(SlangCompiler::new(vec![]), scene_builders).await
+}
+
+pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    scene_builders: SceneBuilders<GpuModel>,
+) {
     let mut colliders_gfx = HashMap::new();
-    let mut stage = Stage::new(scene_builders);
+    let mut stage = Stage::new(compiler, scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
-
-    let font = Font::default();
-    let font_sz = 40.0;
 
     window.set_light(Light::StickToCamera);
 
     #[cfg(feature = "dim2")]
-    let mut c = window.add_rectangle(0.1, 0.1);
+    let mut c = window.add_rectangle(1.0, 1.0);
     #[cfg(feature = "dim3")]
-    let mut c = window.add_cube(0.5, 0.5, 0.5);
+    let mut c = window.add_cube(1.0, 1.0, 1.0);
 
     #[cfg(feature = "dim2")]
     let mut camera3d = FixedView::new();
     #[cfg(feature = "dim3")]
-    let mut camera3d = ArcBall::new([40.0, 40.0, 40.0].into(), [0.0; 3].into());
+    let mut camera3d = ArcBall::new_with_frustum(
+        std::f32::consts::PI / 4.0,
+        0.1,
+        1000.0,
+        [40.0, 40.0, 40.0].into(),
+        [0.0; 3].into(),
+    );
     let mut camera2d = Sidescroll::new();
 
     while !window.should_close() {
+        let mut new_selected_demo = None;
+
         /*
          * Step simulation.
          */
-        stage.update();
+        stage.update().await;
 
         /*
          * Update rendering.
@@ -201,68 +221,74 @@ pub fn run(scene_builders: SceneBuilders) {
         /*
          * UI
          */
-        let mut offset = 0.0;
-        for (i, builder) in stage.builders.iter().enumerate() {
-            window.draw_text(
-                &format!("{} - {} demo", i + 1, builder.0),
-                &[0.0, offset].into(),
-                font_sz,
-                &font,
-                &[0.8, 0.8, 0.8].into(),
-            );
-            offset += font_sz;
-        }
-
-        window.draw_text(
-            &format!(
-                "total: {:.1}ms (encoding: {:.1}ms)",
-                stage.step_result.timings.total_step_time, stage.step_result.timings.encoding_time
-            ),
-            &[0.0, offset].into(),
-            font_sz / 2.0,
-            &font,
-            &[0.8, 0.8, 0.8].into(),
-        );
-        offset += font_sz / 2.0;
-        window.draw_text(
-            &format!("readback: {:.1}ms", stage.step_result.timings.readback_time),
-            &[0.0, offset].into(),
-            font_sz / 2.0,
-            &font,
-            &[0.8, 0.8, 0.8].into(),
-        );
-
-        /*
-         * Handle events
-         */
-        for event in window.events().iter() {
-            let mut new_selected_demo = None;
-
-            if let WindowEvent::Key(button, Action::Release, _) = event.value {
-                match button {
-                    Key::Key1 => new_selected_demo = Some(0),
-                    Key::Key2 => new_selected_demo = Some(1),
-                    Key::Key3 => new_selected_demo = Some(2),
-                    _ => {}
+        window.draw_ui(|ctx| {
+            kiss3d::egui::Window::new("Settings").show(ctx, |ui| {
+                let mut changed = false;
+                kiss3d::egui::ComboBox::from_label("selected sample")
+                    .selected_text(&stage.builders[stage.selected_demo].0)
+                    .show_ui(ui, |ui| {
+                        for (i, (name, _)) in stage.builders.iter().enumerate() {
+                            changed = ui
+                                .selectable_value(&mut stage.selected_demo, i, name)
+                                .changed()
+                                || changed;
+                        }
+                    });
+                if changed {
+                    new_selected_demo = Some(stage.selected_demo);
                 }
-            }
 
-            if let Some(demo) = new_selected_demo {
-                stage.set_demo(demo as usize);
-                render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
-            }
+                ui.label(format!(
+                    "total: {:.1}ms (encoding: {:.1}ms)",
+                    stage.step_result.timings.total_step_time,
+                    stage.step_result.timings.encoding_time
+                ));
+                ui.label(format!(
+                    "readback: {:.1}ms",
+                    stage.step_result.timings.readback_time
+                ));
+                ui.label(format!("particles: {}", stage.physics.data.particles.len()));
+
+                ui.horizontal(|ui| {
+                    let play_pause_label = if stage.app_state.run_state == RunState::Running {
+                        "Pause"
+                    } else {
+                        "Play"
+                    };
+                    if ui.button(play_pause_label).clicked() {
+                        if stage.app_state.run_state == RunState::Running {
+                            stage.app_state.run_state = RunState::Paused;
+                        } else {
+                            stage.app_state.run_state = RunState::Running;
+                        }
+                    }
+                    if ui.button("Step").clicked() {
+                        stage.app_state.run_state = RunState::Step;
+                    }
+                    if ui.button("Restart").clicked() {
+                        new_selected_demo = Some(stage.selected_demo);
+                    }
+                });
+            });
+        });
+
+        if let Some(demo) = new_selected_demo {
+            stage.set_demo(demo);
+            render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
         }
 
         /*
          * Render
          */
-        window.render_with_cameras(&mut camera3d, &mut camera2d);
+        window
+            .render_with_cameras(&mut camera3d, &mut camera2d)
+            .await;
     }
 }
 
-fn update_colliders(
+fn update_colliders<GpuModel: GpuParticleModelData>(
     window: &mut Window,
-    physics: &PhysicsContext,
+    physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,
 ) {
     for (handle, node) in colliders {
@@ -298,9 +324,9 @@ fn update_colliders(
     }
 }
 
-pub fn render_colliders(
+pub fn render_colliders<GpuModel: GpuParticleModelData>(
     window: &mut Window,
-    physics: &PhysicsContext,
+    physics: &PhysicsContext<GpuModel>,
     colliders: &mut HashMap<ColliderHandle, RenderNode>,
 ) {
     for (_, mut node) in colliders.drain() {
@@ -401,7 +427,7 @@ fn kiss3d_mesh_from_polyline(vertices: Vec<nalgebra::Point2<f32>>) -> PlanarMesh
 }
 
 #[cfg(feature = "dim3")]
-fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<Mesh> {
+fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<GpuMesh> {
     let mesh = match co_shape.shape_type() {
         ShapeType::Ball => {
             let ball = co_shape.as_ball().unwrap();
@@ -446,7 +472,7 @@ fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<Mesh> {
 }
 
 #[cfg(feature = "dim3")]
-fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::resource::Mesh {
+fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::resource::GpuMesh {
     let (vtx, idx) = buffers;
     let kiss_vtx: Vec<_> = vtx
         .into_iter()
@@ -456,7 +482,7 @@ fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::
         .into_iter()
         .map(|idx| kiss3d::nalgebra::Point3::new(idx[0], idx[1], idx[2]))
         .collect();
-    Mesh::new(kiss_vtx, kiss_idx, None, None, false)
+    GpuMesh::new(kiss_vtx, kiss_idx, None, None, false)
 }
 
 #[cfg(feature = "dim2")]

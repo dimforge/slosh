@@ -11,9 +11,10 @@ func touch_particle_blocks(
     RWStructuredBuffer<AtomicGridHashMapEntry> hmap_entries,
     RWStructuredBuffer<ActiveBlockHeader> active_blocks,
     StructuredBuffer<Position> particles_pos,
+    ConstantBuffer<uint> particles_len,
 ) {
     let id = invocation_id.x;
-    if (id < particles_pos.getCount()) {
+    if (id < particles_len) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
         var blocks = blocks_associated_to_point(cell_width, particle.pt);
@@ -97,10 +98,11 @@ func update_block_particle_count(
     StructuredBuffer<Grid> grid,
     StructuredBuffer<GridHashMapEntry> hmap_entries,
     StructuredBuffer<Position> particles_pos,
+    ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<AtomicActiveBlockHeader> active_blocks,
 ) {
     let id = invocation_id.x;
-    if (id < particles_pos.getCount()) {
+    if (id < particles_len) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
         let block_id = block_associated_to_point(cell_width, particle.pt);
@@ -144,6 +146,7 @@ func finalize_particles_sort(
     StructuredBuffer<Grid> grid,
     StructuredBuffer<GridHashMapEntry> hmap_entries,
     StructuredBuffer<Position> particles_pos,
+    ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<Atomic<uint>> scan_values,
     RWStructuredBuffer<AtomicNodeLinkedList> nodes_linked_lists,
     RWStructuredBuffer<uint> particle_node_linked_lists,
@@ -151,7 +154,7 @@ func finalize_particles_sort(
 
 ) {
     let id = invocation_id.x;
-    if (id < particles_pos.getCount()) {
+    if (id < particles_len) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
         let block_id = block_associated_to_point(cell_width, particle.pt);

@@ -2,8 +2,8 @@
 name = "slosh3d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 3D Material Point Method implementation."
-repository = "https://github.com/dimforge/stensor"
-version = "0.1.0"
+repository = "https://github.com/dimforge/slosh"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -26,13 +26,14 @@ encase = { workspace = true }
 bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
-nexus3d = "0.1"
+static_assertions = { workspace = true }
+nexus3d = "0.2.1"
 regex = "1"
 
 serde = "1"
 
 # TODO: make rapier optional?
-rapier3d = "0.28"
+rapier3d = "0.30"
 
 [dev-dependencies]
 nalgebra = { version = "0.34", features = ["rand"] }
@@ -41,7 +42,8 @@ serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
 slosh_testbed3d = { path = "../slosh-testbed3d" }
+kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.1"
-nexus3d = "0.1" # to access its shaders at compile-time
+minislang = "0.2"
+nexus3d = "0.2" # to access its shaders at compile-time

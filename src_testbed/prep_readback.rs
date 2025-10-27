@@ -3,11 +3,12 @@ use nalgebra::Vector4;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
-use stensor::tensor::GpuTensor;
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
 use slosh::solver::{
-    GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams,
+    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
+    SimulationParams,
 };
+use stensor::tensor::GpuTensor;
 use wgpu::BufferUsages;
 
 #[cfg(feature = "dim2")]
@@ -67,7 +68,7 @@ pub struct GpuReadbackData<B: Backend> {
 
 impl<B: Backend> GpuReadbackData<B> {
     pub fn new(backend: &B, num_particles: usize) -> Result<Self, B::Error> {
-        let config = RenderConfig::VELOCITY;
+        let config = RenderConfig::DEFAULT; // VELOCITY;
 
         let palette = [
             [124.0 / 255.0, 144.0 / 255.0, 1.0, 1.0],
@@ -93,13 +94,11 @@ impl<B: Backend> GpuReadbackData<B> {
                 instances,
                 BufferUsages::STORAGE | BufferUsages::COPY_SRC,
             )?,
-            instances_staging: unsafe {
-                GpuTensor::vector_uninit(
-                    backend,
-                    num_particles as u32,
-                    BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-                )?
-            },
+            instances_staging: GpuTensor::vector_uninit(
+                backend,
+                num_particles as u32,
+                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            )?,
         })
     }
 }
@@ -116,18 +115,18 @@ struct PrepReadbackArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> PrepReadback<B> {
-    pub fn launch(
+    pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         encoder: &mut B::Encoder,
         data: &mut GpuReadbackData<B>,
         sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
     ) -> Result<(), B::Error> {
         let args = PrepReadbackArgs {
-            particles_pos: &particles.positions,
-            particles_dyn: &particles.dynamics,
+            particles_pos: particles.positions(),
+            particles_dyn: particles.dynamics(),
             grid: &grid.meta,
             params: &sim_params.params,
             config: &data.mode,
@@ -135,12 +134,8 @@ impl<B: Backend> PrepReadback<B> {
             base_colors: &data.base_colors,
         };
         let mut pass = encoder.begin_pass();
-        self.prep_readback.launch(
-            backend,
-            &mut pass,
-            &args,
-            [particles.positions.len() as u32, 1, 1],
-        )?;
+        self.prep_readback
+            .launch(backend, &mut pass, &args, [particles.len() as u32, 1, 1])?;
         drop(pass);
 
         data.instances_staging

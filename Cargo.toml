@@ -9,13 +9,14 @@ resolver = "2"
 
 [workspace.dependencies]
 nalgebra = { version = "0.34", features = ["convert-bytemuck"] }
-wgpu = { version = "26", features = ["naga-ir"] }
+wgpu = { version = "27", features = ["naga-ir"] }
 encase = "0.12"
 bytemuck = { version = "1", features = ["derive"] }
 async-channel = "2"
+static_assertions = "1"
 
-slang-hal = "0.1"
-stensor = "0.1"
+slang-hal = "0.2"
+stensor = "0.2"
 
 [workspace.lints]
 rust.unexpected_cfgs = { level = "warn", check-cfg = [
@@ -23,14 +24,11 @@ rust.unexpected_cfgs = { level = "warn", check-cfg = [
 ] }
 
 [patch.crates-io]
-#shader-slang = { path = "../slang-rs" }
 #slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
 #slang-hal = { path = "../slang-hal/crates/slang-hal" }
 #minislang = { path = "../slang-hal/crates/minislang" }
 #stensor = { path = "../stensor" }
 #nexus2d = { path = "../nexus/crates/nexus2d" }
 #nexus3d = { path = "../nexus/crates/nexus3d" }
-#nalgebra = { path = "../nalgebra" }
-#kiss3d = { path = "../kiss3d" }
 
 [profile.release]

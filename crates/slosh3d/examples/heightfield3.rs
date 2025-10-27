@@ -1,14 +1,12 @@
-use slosh_testbed3d::{slosh, RapierData};
+use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{vector, DMatrix};
+use nalgebra::{DMatrix, point, vector};
 use rapier3d::geometry::HeightField;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
-use slosh::models::DruckerPrager;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, SimulationParams},
+    solver::{Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -26,7 +24,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     for i in 0..nxz {
         for j in 0..100 {
             for k in 0..nxz {
-                let position = vector![
+                let position = point![
                     i as f32 + 0.5 - nxz as f32 / 2.0,
                     j as f32 + 0.5 + 10.0,
                     k as f32 + 0.5 - nxz as f32 / 2.0
@@ -34,13 +32,8 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
                     / 2.0;
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
-                particles.push(Particle {
-                    position,
-                    dynamics: ParticleDynamics::with_density(radius, density),
-                    model: ElasticCoefficients::from_young_modulus(2_000_000_000.0, 0.2),
-                    plasticity: Some(DruckerPrager::new(2_000_000_000.0, 0.2)),
-                    phase: None,
-                });
+                let model = ParticleModel::sand(2.0e9, 0.2);
+                particles.push(Particle::new(position, radius, density, model));
             }
         }
     }
@@ -80,6 +73,6 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     PhysicsContext {
         data,
         rapier_data,
-        particles,
+        callbacks: vec![],
     }
 }

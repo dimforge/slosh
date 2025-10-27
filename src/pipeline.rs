@@ -1,24 +1,45 @@
+//! High-level MPM simulation pipeline orchestration.
+//!
+//! This module provides the main entry point for running MPM simulations. The pipeline
+//! coordinates the execution of all MPM algorithm stages on the GPU.
+
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::models::GpuModels;
 use crate::solver::{
-    GpuImpulses, GpuParticles, GpuRigidParticles, GpuSimulationParams, Particle, SimulationParams,
-    WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate,
-    WgRigidImpulses, WgRigidParticleUpdate,
+    GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams,
+    Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf,
+    WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate,
 };
-use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::dynamics::GpuBodySet;
+use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::ColliderSet;
+use slang_hal::Shader;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::re_exports::minislang::SlangCompiler;
-use slang_hal::Shader;
+use std::marker::PhantomData;
 use stensor::tensor::GpuVector;
 use wgpu::BufferUsages;
 
-pub struct MpmPipeline<B: Backend> {
+/// GPU compute pipeline for Material Point Method simulation.
+///
+/// This struct holds all the compiled compute shaders needed to execute a complete
+/// MPM simulation step. It orchestrates the following stages:
+/// 1. Update rigid body particles from coupled colliders
+/// 2. Sort particles into grid cells
+/// 3. Transfer data from particles to grid (P2G)
+/// 4. Update grid velocities with forces and boundary conditions
+/// 5. Transfer data from grid back to particles (G2P)
+/// 6. Update particle positions and deformation gradients
+/// 7. Apply impulses to coupled rigid bodies
+///
+/// # Type Parameters
+///
+/// * `B` - Backend type implementing GPU operations
+/// * `GpuModel` - Particle material model data layout (must match shader expectations)
+pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     grid: WgGrid<B>,
     prefix_sum: WgPrefixSum<B>,
     sort: WgSort<B>,
@@ -30,27 +51,74 @@ pub struct MpmPipeline<B: Backend> {
     g2p: WgG2P<B>,
     g2p_cdf: WgG2PCdf<B>,
     rigid_particles_update: WgRigidParticleUpdate<B>,
+    /// Rigid body impulse computation kernel (publicly accessible for external use).
     pub impulses: WgRigidImpulses<B>,
+    _phantom: PhantomData<GpuModel>,
 }
 
-pub struct MpmData<B: Backend> {
+/// GPU-resident simulation state for MPM.
+///
+/// Contains all the data needed to execute an MPM simulation step, including
+/// particles, grid, rigid body coupling information, and simulation parameters.
+/// All data lives in GPU memory for efficient computation.
+///
+/// # Type Parameters
+///
+/// * `B` - Backend type implementing GPU operations
+/// * `GpuModel` - Particle material model data layout
+pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
+    /// Global simulation parameters (gravity, timestep).
     pub sim_params: GpuSimulationParams<B>,
+    /// Spatial grid for momentum transfer.
     pub grid: GpuGrid<B>,
-    pub particles: GpuParticles<B>, // TODO: keep private?
+    /// MPM particles (positions, velocities, masses, material properties).
+    pub particles: GpuParticles<B, GpuModel>, // TODO: keep private?
+    /// Particles sampled from rigid body collider surfaces for two-way coupling.
     pub rigid_particles: GpuRigidParticles<B>,
+    /// Rigid bodies coupled with the MPM simulation.
     pub bodies: GpuBodySet<B>,
+    /// Accumulated impulses to apply to rigid bodies from MPM interactions.
     pub impulses: GpuImpulses<B>,
+    /// Staging buffer for reading rigid body poses back to CPU.
     pub poses_staging: GpuVector<GpuSim, B>,
     prefix_sum: PrefixSumWorkspace<B>,
-    models: GpuModels<B>,
     coupling: Vec<BodyCouplingEntry>,
 }
 
-impl<B: Backend> MpmData<B> {
+/// Shader specialization configuration for the MPM pipeline.
+///
+/// Defines module paths for specializing parts of the MPM pipeline using Slang's
+/// link-time specialization feature. This allows compiling different material models
+/// without code duplication.
+pub struct MpmSpecializations {
+    /// Module paths defining particle material model implementations.
+    pub particle_model: Vec<String>,
+}
+
+impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
+    /// Creates new MPM simulation data with default two-way coupling for all colliders.
+    ///
+    /// Automatically configures one-way coupling (MPM affects rigid bodies, but not vice versa)
+    /// for all colliders attached to rigid bodies. For custom coupling configuration,
+    /// use [`with_select_coupling`](Self::with_select_coupling).
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for buffer allocation
+    /// * `params` - Global simulation parameters (gravity, timestep)
+    /// * `particles` - Initial CPU-side particle data to upload
+    /// * `bodies` - Rigid bodies from Rapier physics engine
+    /// * `colliders` - Colliders from Rapier (used for MPM-rigid body coupling)
+    /// * `cell_width` - Spatial width of each grid cell
+    /// * `grid_capacity` - Maximum number of active grid cells
+    ///
+    /// # Returns
+    ///
+    /// GPU-resident simulation state ready for stepping.
     pub fn new(
         backend: &B,
         params: SimulationParams,
-        particles: &[Particle],
+        particles: &[Particle<GpuModel::Model>],
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         cell_width: f32,
@@ -79,10 +147,29 @@ impl<B: Backend> MpmData<B> {
         )
     }
 
+    /// Creates new MPM simulation data with custom rigid body coupling configuration.
+    ///
+    /// Allows fine-grained control over which colliders participate in MPM-rigid body
+    /// coupling and the coupling mode (one-way vs. two-way).
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for buffer allocation
+    /// * `params` - Global simulation parameters (gravity, timestep)
+    /// * `particles` - Initial CPU-side particle data to upload
+    /// * `bodies` - Rigid bodies from Rapier physics engine
+    /// * `colliders` - Colliders from Rapier
+    /// * `coupling` - Explicit list of collider-body pairs to couple with MPM
+    /// * `cell_width` - Spatial width of each grid cell
+    /// * `grid_capacity` - Maximum number of active grid cells
+    ///
+    /// # Returns
+    ///
+    /// GPU-resident simulation state ready for stepping.
     pub fn with_select_coupling(
         backend: &B,
         params: SimulationParams,
-        particles: &[Particle],
+        particles: &[Particle<GpuModel::Model>],
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         coupling: Vec<BodyCouplingEntry>,
@@ -92,20 +179,17 @@ impl<B: Backend> MpmData<B> {
         let sampling_step = cell_width; // TODO: * 1.5 ?
         let bodies = GpuBodySet::from_rapier(backend, bodies, colliders, &coupling)?;
         let sim_params = GpuSimulationParams::new(backend, params)?;
-        let models = GpuModels::from_particles(backend, particles)?;
         let particles = GpuParticles::from_particles(backend, particles)?;
         let rigid_particles =
             GpuRigidParticles::from_rapier(backend, colliders, &bodies, &coupling, sampling_step)?;
         let grid = GpuGrid::with_capacity(backend, grid_capacity, cell_width)?;
         let prefix_sum = PrefixSumWorkspace::with_capacity(backend, grid_capacity)?;
         let impulses = GpuImpulses::new(backend)?;
-        let poses_staging = unsafe {
-            GpuVector::vector_uninit(
-                backend,
-                bodies.len(),
-                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            )?
-        };
+        let poses_staging = GpuVector::vector_uninit(
+            backend,
+            bodies.len(),
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )?;
 
         Ok(Self {
             sim_params,
@@ -115,18 +199,35 @@ impl<B: Backend> MpmData<B> {
             impulses,
             grid,
             prefix_sum,
-            models,
             poses_staging,
             coupling,
         })
     }
 
+    /// Returns the list of rigid body coupling entries.
+    ///
+    /// Each entry specifies a collider-body pair that participates in MPM-rigid body
+    /// interaction and the coupling mode.
     pub fn coupling(&self) -> &[BodyCouplingEntry] {
         &self.coupling
     }
 }
 
-impl<B: Backend> MpmPipeline<B> {
+impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
+    /// Creates a new MPM compute pipeline by compiling all necessary shaders.
+    ///
+    /// This compiles and prepares all GPU compute kernels needed for the MPM algorithm.
+    /// Shader compilation happens once at initialization; the resulting pipeline can
+    /// execute many simulation steps efficiently.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for shader compilation
+    /// * `compiler` - Slang compiler with registered shader modules (see [`crate::register_shaders`])
+    ///
+    /// # Returns
+    ///
+    /// A ready-to-use MPM pipeline, or an error if shader compilation fails.
     pub fn new(backend: &B, compiler: &SlangCompiler) -> Result<Self, B::Error> {
         Ok(Self {
             grid: WgGrid::from_backend(backend, compiler)?,
@@ -136,19 +237,50 @@ impl<B: Backend> MpmPipeline<B> {
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
-            particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
+            particles_update: WgParticleUpdate::with_specializations(
+                backend,
+                compiler,
+                &GpuModel::specialization_modules(),
+            )?,
             rigid_particles_update: WgRigidParticleUpdate::from_backend(backend, compiler)?,
             g2p: WgG2P::from_backend(backend, compiler)?,
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
+            _phantom: PhantomData,
         })
     }
 
+    /// Executes one complete MPM simulation timestep.
+    ///
+    /// Advances the simulation forward by the timestep defined in `data.sim_params.dt`.
+    /// This method orchestrates all stages of the MPM algorithm:
+    ///
+    /// 1. **Rigid particle update**: Update particles sampled from rigid body surfaces
+    /// 2. **Grid sort**: Sort particles into grid cells for efficient neighbor queries
+    /// 3. **P2G transfers**: Transfer particle mass/momentum to grid (both MPM and rigid particles)
+    /// 4. **Grid update**: Apply forces and solve momentum equations on grid
+    /// 5. **G2P transfers**: Interpolate grid velocities back to particles
+    /// 6. **Particle update**: Integrate particle positions and update deformation gradients
+    /// 7. **Impulse application**: Apply accumulated forces back to rigid bodies
+    ///
+    /// All operations execute as GPU compute passes. The encoder records commands but
+    /// does not submit them; call `backend.queue().submit()` after this returns.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for command recording
+    /// * `encoder` - Command encoder to record GPU operations into
+    /// * `data` - Mutable simulation state (particles, grid, etc.)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if all GPU commands were recorded successfully, or an error if
+    /// any kernel launch fails.
     pub fn launch_step(
         &self,
         backend: &B,
         encoder: &mut B::Encoder,
-        data: &mut MpmData<B>,
+        data: &mut MpmData<B, GpuModel>,
         // mut timestamps: Option<&mut GpuTimestamps>,
     ) -> Result<(), B::Error> {
         {
@@ -253,14 +385,13 @@ impl<B: Backend> MpmPipeline<B> {
                 &data.sim_params,
                 &data.grid,
                 &data.particles,
-                &data.models,
                 &data.bodies,
             )?;
         }
 
         {
             let mut pass = encoder.begin_pass(); // ("integrate_bodies", timestamps.as_deref_mut());
-                                                 // TODO: should this be in a separate pipeline? Within impulse probably?
+            // TODO: should this be in a separate pipeline? Within impulse probably?
             self.impulses.launch(
                 backend,
                 &mut pass,

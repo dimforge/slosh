@@ -380,7 +380,7 @@ func fetch_next_particle(
 #endif
                 let curr_particle_id = shared_nodes[shared_flat_index].particle_id;
 
-                if (curr_particle_id != NONE) {
+                if (curr_particle_id != NONE && particles_dyn[curr_particle_id].enabled != 0) {
                     shared_affinities[shared_flat_index] = particles_dyn[curr_particle_id].cdf.affinity;
                     shared_normals[shared_flat_index] = particles_dyn[curr_particle_id].cdf.normal;
                     shared_pos[shared_flat_index] = particles_pos[curr_particle_id];

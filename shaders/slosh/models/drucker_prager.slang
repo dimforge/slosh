@@ -130,6 +130,16 @@ public struct DruckerPragerPlasticity {
             return DruckerPragerResult(state, deformation_gradient);
         }
 
+//        if (true) {
+//            let svd = Svd3(deformation_gradient);
+////            let j = svd.S.x * svd.S.y * svd.S.z;
+//            var new_sigvals = clamp(svd.S, float3(1.0 - 2.5e-2), float3(1.0 + 7.5e-3));
+////            let new_j = new_sigvals.x * new_sigvals.y * new_sigvals.z;
+//            // new_sigvals *= sqrt(abs(new_j / j));
+//            let new_def_grad = Svd3(svd.U, new_sigvals, svd.Vt).recompose();
+//            return DruckerPragerResult(state, new_def_grad);
+//        }
+
         let svd = Svd3(deformation_gradient);
         let alpha = this.alpha(state.plastic_hardening);
         let projection = this.project_deformation_gradient(svd.S, state.log_vol_gain, alpha);

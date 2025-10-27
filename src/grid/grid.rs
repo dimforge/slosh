@@ -1,16 +1,21 @@
+//! Grid data structures and GPU kernels for sparse grid management.
+
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuParticles, GpuRigidParticles, ParticlePosition};
+use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
 use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
-use stensor::tensor::{GpuScalar, GpuVector};
 use std::sync::Arc;
+use stensor::tensor::{GpuScalar, GpuVector};
 use wgpu::BufferUsages;
 
+/// GPU kernels for grid initialization and management.
+///
+/// Handles sparse grid allocation, reset, and indirect dispatch setup.
 #[derive(Shader)]
 #[shader(module = "slosh::grid::grid")]
 pub struct WgGrid<B: Backend> {
@@ -34,6 +39,7 @@ struct GridArgs<'a, B: Backend> {
     scan_values: &'a GpuVector<u32, B>,
     // From particles
     particles_pos: &'a GpuVector<ParticlePosition, B>,
+    particles_len: &'a GpuScalar<u32, B>,
     active_blocks: &'a GpuVector<GpuActiveBlockHeader, B>,
     rigid_particles_pos: &'a GpuVector<Point<f32>, B>,
     rigid_particle_needs_block: &'a GpuVector<u32, B>,
@@ -42,12 +48,30 @@ struct GridArgs<'a, B: Backend> {
 }
 
 impl<B: Backend> WgGrid<B> {
-    // Returns the pair (number of active blocks, number of GPU dispatch blocks needed to cover all the particles).
-    pub fn launch_sort<'a>(
+    /// Sorts particles into grid cells and allocates sparse grid blocks.
+    ///
+    /// This orchestrates the entire particle sorting process including:
+    /// 1. Resetting the grid hashmap
+    /// 2. Touching blocks where particles exist
+    /// 3. Computing per-block particle counts
+    /// 4. Running prefix sums for particle indexing
+    /// 5. Finalizing sorted particle IDs
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend
+    /// * `pass` - Compute pass
+    /// * `particles` - MPM particles to sort
+    /// * `rigid_particles` - Rigid body particles to consider
+    /// * `grid` - Target grid
+    /// * `prefix_sum` - Workspace for prefix sum operations
+    /// * `sort_module` - Sorting compute kernels
+    /// * `prefix_sum_module` - Prefix sum kernel
+    pub fn launch_sort<'a, GpuModel: GpuParticleModelData>(
         &'a self,
         backend: &B,
         pass: &mut B::Pass,
-        particles: &GpuParticles<B>,
+        particles: &GpuParticles<B, GpuModel>,
         rigid_particles: &GpuRigidParticles<B>,
         grid: &GpuGrid<B>,
         prefix_sum: &mut PrefixSumWorkspace<B>,
@@ -63,12 +87,13 @@ impl<B: Backend> WgGrid<B> {
             nodes_linked_lists: &grid.nodes_linked_lists,
             rigid_nodes_linked_lists: &grid.rigid_nodes_linked_lists,
             scan_values: &grid.scan_values,
-            particles_pos: &particles.positions,
+            particles_pos: particles.positions(),
+            particles_len: particles.gpu_len(),
             active_blocks: &grid.active_blocks,
             rigid_particles_pos: &rigid_particles.sample_points,
             rigid_particle_needs_block: &rigid_particles.rigid_particle_needs_block,
-            sorted_particle_ids: &particles.sorted_ids,
-            particle_node_linked_lists: &particles.node_linked_lists,
+            sorted_particle_ids: particles.sorted_ids(),
+            particle_node_linked_lists: particles.node_linked_lists(),
         };
 
         // Retry until we allocated enough room on the sparse grid for all the blocks.
@@ -162,6 +187,9 @@ impl<B: Backend> WgGrid<B> {
     }
 }
 
+/// Grid metadata stored on GPU.
+///
+/// Contains information about the sparse grid structure and capacity.
 #[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuGridMetadata {
@@ -171,6 +199,10 @@ pub struct GpuGridMetadata {
     capacity: u32,
 }
 
+/// A single grid node storing momentum and collision detection data.
+///
+/// Each active grid cell has associated nodes that accumulate particle
+/// contributions during the P2G phase.
 #[derive(Copy, Clone, PartialEq, ShaderType)]
 #[repr(C)]
 pub struct GpuGridNode {
@@ -178,6 +210,10 @@ pub struct GpuGridNode {
     cdf: GpuGridNodeCdf,
 }
 
+/// Virtual block identifier in sparse grid space.
+///
+/// Uniquely identifies a block in the infinite virtual grid before mapping
+/// to physical storage via the hashmap.
 #[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct BlockVirtualId {
@@ -187,6 +223,10 @@ pub struct BlockVirtualId {
     id: nalgebra::Vector4<i32>, // Vector3 with padding.
 }
 
+/// Hash map entry mapping virtual block IDs to physical storage indices.
+///
+/// The sparse grid uses a hash table to map infinite virtual coordinates
+/// to bounded physical memory.
 #[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuGridHashMapEntry {
@@ -203,6 +243,9 @@ pub struct GpuGridHashMapEntry {
     pad1: nalgebra::Vector3<u32>,
 }
 
+/// Header for an active grid block containing particles.
+///
+/// Tracks which particles belong to this block for efficient iteration.
 #[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuActiveBlockHeader {
@@ -211,29 +254,58 @@ pub struct GpuActiveBlockHeader {
     num_particles: u32,
 }
 
+/// Collision detection field data for a grid node.
+///
+/// Stores signed distance and affinity information for MPM-rigid body coupling.
 #[derive(Copy, Clone, PartialEq, Default, Debug, ShaderType)]
 #[repr(C)]
 pub struct GpuGridNodeCdf {
+    /// Signed distance to nearest rigid body surface.
     pub distance: f32,
+    /// Bitmask of rigid body affinities for this node.
     pub affinities: u32,
+    /// ID of the closest rigid body.
     pub closest_id: u32,
 }
 
+/// GPU-resident sparse grid structure.
+///
+/// The MPM grid uses a sparse representation with a hashmap to efficiently
+/// store only active blocks (blocks containing particles). This dramatically
+/// reduces memory usage for spatially localized simulations.
 pub struct GpuGrid<B: Backend> {
+    /// CPU copy of grid metadata for readback.
     pub cpu_meta: GpuGridMetadata,
+    /// GPU buffer containing grid metadata.
     pub meta: GpuScalar<GpuGridMetadata, B>,
+    /// Hash map entries for virtual-to-physical block mapping.
     pub hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
+    /// Grid node data (momentum, mass, CDF).
     pub nodes: GpuVector<GpuGridNode, B>,
+    /// Active block headers tracking particle ranges.
     pub active_blocks: GpuVector<GpuActiveBlockHeader, B>,
+    /// Workspace for prefix sum operations.
     pub scan_values: GpuVector<u32, B>,
+    /// Per-node linked lists for MPM particles.
     pub nodes_linked_lists: GpuVector<[u32; 2], B>,
+    /// Per-node linked lists for rigid body particles.
     pub rigid_nodes_linked_lists: GpuVector<[u32; 2], B>,
+    /// Indirect dispatch arguments for block-parallel kernels.
     pub indirect_n_blocks_groups: Arc<GpuScalar<[u32; 3], B>>,
+    /// Indirect dispatch arguments for node-parallel kernels.
     pub indirect_n_g2p_p2g_groups: Arc<GpuScalar<[u32; 3], B>>,
+    /// Debug buffer for GPU-side diagnostics.
     pub debug: GpuVector<u32, B>,
 }
 
 impl<B: Backend> GpuGrid<B> {
+    /// Creates a new sparse grid with the specified capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for buffer allocation
+    /// * `capacity` - Maximum number of grid blocks (rounded up to power of 2)
+    /// * `cell_width` - Width of each grid cell in meters
     pub fn with_capacity(backend: &B, capacity: u32, cell_width: f32) -> Result<Self, B::Error> {
         const NODES_PER_BLOCK: u32 = 64; // 8 * 8 in 2D and 4 * 4 * 4 in 3D.
         let capacity = capacity.next_power_of_two();
@@ -248,37 +320,26 @@ impl<B: Backend> GpuGrid<B> {
             cpu_meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
-        let hmap_entries =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
-        let nodes = unsafe {
-            GpuVector::vector_uninit_encased(
-                backend,
-                capacity * NODES_PER_BLOCK,
-                BufferUsages::STORAGE,
-            )?
-        };
-        let nodes_linked_lists = unsafe {
-            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?
-        };
-        let rigid_nodes_linked_lists = unsafe {
-            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?
-        };
-        let active_blocks =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
-        let scan_values =
-            unsafe { GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)? };
-        let indirect_n_blocks_groups = unsafe {
-            Arc::new(GpuVector::scalar_uninit(
-                backend,
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?)
-        };
-        let indirect_n_g2p_p2g_groups = unsafe {
-            Arc::new(GpuVector::scalar_uninit(
-                backend,
-                BufferUsages::STORAGE | BufferUsages::INDIRECT,
-            )?)
-        };
+        let hmap_entries = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let nodes = GpuVector::vector_uninit_encased(
+            backend,
+            capacity * NODES_PER_BLOCK,
+            BufferUsages::STORAGE,
+        )?;
+        let nodes_linked_lists =
+            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
+        let rigid_nodes_linked_lists =
+            GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
+        let active_blocks = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let scan_values = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let indirect_n_blocks_groups = Arc::new(GpuVector::scalar_uninit(
+            backend,
+            BufferUsages::STORAGE | BufferUsages::INDIRECT,
+        )?);
+        let indirect_n_g2p_p2g_groups = Arc::new(GpuVector::scalar_uninit(
+            backend,
+            BufferUsages::STORAGE | BufferUsages::INDIRECT,
+        )?);
         let debug = GpuVector::vector(backend, [0, 0], BufferUsages::STORAGE)?;
 
         Ok(Self {

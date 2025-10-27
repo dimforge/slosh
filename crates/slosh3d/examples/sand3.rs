@@ -1,13 +1,11 @@
-use slosh_testbed3d::{slosh, RapierData};
+use slosh_testbed3d::{PhysicsState, RapierData, slosh};
 
-use nalgebra::vector;
+use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
-use slosh::models::DruckerPrager;
 use slosh::{
-    models::ElasticCoefficients,
     pipeline::MpmData,
-    solver::{Particle, ParticleDynamics, SimulationParams},
+    solver::{Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -15,6 +13,11 @@ use slosh_testbed3d::{AppState, PhysicsContext};
 fn main() {
     panic!("Run the `testbed3` example instead.");
 }
+
+// const YOUNG_MODULUS: f32 = 2.0e5;
+// const DENSITY: f32 = 400.0;
+const DENSITY: f32 = 2700.0;
+const YOUNG_MODULUS: f32 = 2.0e9;
 
 pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let mut rapier_data = RapierData::default();
@@ -25,24 +28,40 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     for i in 0..nxz {
         for j in 0..100 {
             for k in 0..nxz {
-                let position = vector![
+                let position = point![
                     i as f32 + 0.5 - nxz as f32 / 2.0,
                     j as f32 + 0.5 + 10.0,
                     k as f32 + 0.5 - nxz as f32 / 2.0
                 ] * cell_width
                     / 2.0;
-                let density = 2700.0;
                 let radius = cell_width / 4.0;
-                particles.push(Particle {
-                    position,
-                    dynamics: ParticleDynamics::with_density(radius, density),
-                    model: ElasticCoefficients::from_young_modulus(2_000_000_000.0, 0.2),
-                    plasticity: Some(DruckerPrager::new(2_000_000_000.0, 0.2)),
-                    phase: None,
-                });
+                let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
+                particles.push(Particle::new(position, radius, DENSITY, model));
             }
         }
     }
+
+    // let nxz = 2; // 45;
+    // let cell_width = 1.0;
+    // let mut particles = vec![];
+    // for i in 0..nxz {
+    //     for j in 0..1 {
+    //         for k in 0..nxz {
+    //             let position = point![
+    //                 i as f32 * 4.0 + 0.5 - nxz as f32 / 2.0,
+    //                 j as f32 + 0.5 + 10.0,
+    //                 k as f32 * 4.0 + 0.5 - nxz as f32 / 2.0
+    //             ] * cell_width
+    //                 / 2.0;
+    //             let radius = cell_width / 4.0;
+    //             particles.push(
+    //                 ParticleBuilder::new(position, radius, DENSITY)
+    //                     .sand(YOUNG_MODULUS, 0.2)
+    //                     .build()
+    //             );
+    //         }
+    //     }
+    // }
 
     if !app_state.restarting {
         app_state.num_substeps = 20;
@@ -106,9 +125,30 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         60_000,
     )
     .unwrap();
+
+    let callback = move |phx: &mut PhysicsState| {
+        if phx.step_id().is_multiple_of(50) {
+            let mut particles = vec![];
+            for i in 0..nxz {
+                for k in 0..nxz {
+                    let position = point![
+                        i as f32 + 0.5 - nxz as f32 / 2.0,
+                        110.0,
+                        k as f32 + 0.5 - nxz as f32 / 2.0
+                    ] * cell_width
+                        / 2.0;
+                    let radius = cell_width / 4.0;
+                    let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
+                    particles.push(Particle::new(position, radius, DENSITY, model));
+                }
+            }
+            phx.add_particles(&particles);
+        }
+    };
+
     PhysicsContext {
         data,
         rapier_data,
-        particles,
+        callbacks: vec![Box::new(callback)],
     }
 }

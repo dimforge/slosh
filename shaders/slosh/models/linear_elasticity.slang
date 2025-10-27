@@ -4,11 +4,15 @@ module linear_elasticity;
 
 import stensor.geometry.svd2;
 import stensor.geometry.svd3;
+import nexus.aliases;
+import slosh.models.utils;
+import slosh.solver.timestep_bound;
+import slosh.models.interfaces;
 
-
-public struct LinearElasticCoefficients {
+public struct LinearElasticModel {
     public float lambda;
     public float mu;
+    public float cfl_coeff;
 
     // TODO: have these be methods of ElasticCoefficient
     #if DIM == 2
@@ -41,4 +45,21 @@ public struct LinearElasticCoefficients {
         return result;
     }
     #endif
+
+    public func timestep_bound(
+        particle_density0: float,
+        particle_velocity: Vect<float>,
+        elastic_hardening: float,
+        cell_width: float,
+    ) -> float {
+        let bulk_modulus = bulk_modulus_from_lame(this.lambda, this.mu);
+        let shear_modulus = shear_modulus_from_lame(this.lambda, this.mu);
+
+        let bound = ElasticitySoundSpeedTimestepBound(
+            this.cfl_coeff,
+            bulk_modulus * elastic_hardening,
+            shear_modulus * elastic_hardening,
+        );
+        return bound.timestep_bound(particle_density0, particle_velocity, cell_width);
+    }
 }
