@@ -46,7 +46,7 @@ futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh_testbed2d = { path = "../slosh-testbed2d", features = ["dim2"] }
+slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"] }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]

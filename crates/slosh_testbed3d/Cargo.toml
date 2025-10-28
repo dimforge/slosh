@@ -1,5 +1,7 @@
 [package]
 name = "slosh_testbed3d"
+authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
+description = "Testbed for the slosh GPU-based MPM physics simulation library (3D version)."
 version = "0.2.0"
 license = "Apache-2.0"
 edition = "2021"
@@ -31,7 +33,7 @@ futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh3d = { path = "../slosh3d" }
+slosh3d = { version = "0.2", path = "../slosh3d" }
 regex = "1"
 
 kiss3d = { version = "0.37", features = [ "vertex_index_u32", "egui" ] }

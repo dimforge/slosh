@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/slosh-testbed2d",
-    "crates/slosh-testbed3d",
+    "crates/slosh_testbed2d",
+    "crates/slosh_testbed3d",
     "crates/slosh2d",
     "crates/slosh3d",
 ]
