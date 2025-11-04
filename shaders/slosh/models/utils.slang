@@ -96,3 +96,41 @@ public struct DecomposedTensor {
         return result;
     }
 }
+
+public struct ElasticitySoundSpeedTimestepBound {
+    public float alpha;
+    public float bulk_modulus;
+    public float shear_modulus;
+
+    public __init(float alpha, float young_modulus, float poisson_ratio) {
+        this.alpha = alpha;
+        this.bulk_modulus = hook_to_bulk_modulus(young_modulus, poisson_ratio);
+        this.shear_modulus = hook_to_shear_modulus(young_modulus, poisson_ratio);
+    }
+
+    public static func from_elasticity(float alpha, float young_modulus, float poisson_ratio) -> ElasticitySoundSpeedTimestepBound {
+        return ElasticitySoundSpeedTimestepBound(
+            alpha,
+            hook_to_bulk_modulus(young_modulus, poisson_ratio),
+            hook_to_shear_modulus(young_modulus, poisson_ratio),
+        );
+    }
+
+    public func timestep_bound(
+        density0: float,
+        def_grad_det: float,
+        velocity: Vect<float>,
+        cell_width: float,
+    ) -> float {
+        let curr_density = density0 / max(def_grad_det, 1.0e-6); // avoid division by zero.
+
+        // Speed of sound of pressure waves.
+        let sound_speed = sqrt((this.bulk_modulus + this.shear_modulus * 4.0 / 3.0)
+            / curr_density);
+        // Take the max between sound speed and physical velocity.
+        // Note that we don’t calculate the speed of sound for the shear waves since that’s
+        // always slower than for the pressure wave.
+        let max_speed = max(length(velocity), sound_speed);
+        return this.alpha * cell_width / max_speed;
+    }
+}

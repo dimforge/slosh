@@ -34,10 +34,18 @@ public struct ParticleUpdateData {
 public interface IParticleModel {
     public func model_flags(models: RWByteAddressBuffer, particle_id: uint) -> ModelFlags;
     public func update(
-            models: RWByteAddressBuffer,
-            data: ParticleUpdateData,
-            // TODO PERF: define as inout to ensure it’s passed by-ref (to avoid useless copy)?
-            in vel_grad: Mat<float>,
-            inout def_grad: Mat<float>
+        models: RWByteAddressBuffer,
+        data: ParticleUpdateData,
+        // TODO PERF: define as inout to ensure it’s passed by-ref (to avoid useless copy)?
+        in vel_grad: Mat<float>,
+        inout def_grad: Mat<float>
     ) -> ModelUpdateResult;
+    public func timestep_bound(
+        models: ByteAddressBuffer,
+        particle_id: uint,
+        particle_density0: float,
+        def_grad: Mat<float>,
+        particle_velocity: Vect<float>,
+        cell_width: float,
+    ) -> float;
 }

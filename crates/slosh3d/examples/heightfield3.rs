@@ -26,7 +26,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
             for k in 0..nxz {
                 let position = point![
                     i as f32 + 0.5 - nxz as f32 / 2.0,
-                    j as f32 + 0.5 + 10.0,
+                    j as f32 + 0.5 + 14.0,
                     k as f32 + 0.5 - nxz as f32 / 2.0
                 ] * cell_width
                     / 2.0;
@@ -39,13 +39,14 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     }
 
     if !app_state.restarting {
-        app_state.num_substeps = 20;
+        app_state.min_num_substeps = 10;
+        app_state.max_num_substeps = 40;
         app_state.gravity_factor = 1.0;
     };
 
     let params = SimulationParams {
         gravity: vector![0.0, -9.81, 0.0] * app_state.gravity_factor,
-        dt: (1.0 / 60.0) / (app_state.num_substeps as f32),
+        dt: 1.0 / 60.0,
     };
 
     let heights = DMatrix::from_fn(200, 200, |i, j| {

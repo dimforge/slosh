@@ -6,11 +6,7 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{
-    GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams,
-    Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf,
-    WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate,
-};
+use crate::solver::{GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::GpuSim;
@@ -20,7 +16,8 @@ use slang_hal::Shader;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::re_exports::minislang::SlangCompiler;
 use std::marker::PhantomData;
-use stensor::tensor::GpuVector;
+use std::ops::RangeInclusive;
+use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
 use wgpu::BufferUsages;
 
 /// GPU compute pipeline for Material Point Method simulation.
@@ -51,6 +48,7 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     g2p: WgG2P<B>,
     g2p_cdf: WgG2PCdf<B>,
     rigid_particles_update: WgRigidParticleUpdate<B>,
+    pub timestep_bounds: WgTimestepBounds<B>,
     /// Rigid body impulse computation kernel (publicly accessible for external use).
     pub impulses: WgRigidImpulses<B>,
     _phantom: PhantomData<GpuModel>,
@@ -67,6 +65,8 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
 /// * `B` - Backend type implementing GPU operations
 /// * `GpuModel` - Particle material model data layout
 pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
+    /// The simulation timestep.
+    pub base_dt: f32,
     /// Global simulation parameters (gravity, timestep).
     pub sim_params: GpuSimulationParams<B>,
     /// Spatial grid for momentum transfer.
@@ -81,6 +81,8 @@ pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     pub impulses: GpuImpulses<B>,
     /// Staging buffer for reading rigid body poses back to CPU.
     pub poses_staging: GpuVector<GpuSim, B>,
+    pub timestep_bounds: GpuScalar<GpuTimestepBounds, B>,
+    pub timestep_bounds_staging: GpuScalar<GpuTimestepBounds, B>,
     prefix_sum: PrefixSumWorkspace<B>,
     coupling: Vec<BodyCouplingEntry>,
 }
@@ -190,6 +192,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
             bodies.len(),
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         )?;
+        let bounds = GpuTimestepBounds::new();
+        let timestep_bounds = GpuTensor::scalar(backend, bounds, BufferUsages::STORAGE | BufferUsages::COPY_SRC)?;
+        let timestep_bounds_staging = GpuTensor::scalar(backend, bounds, BufferUsages::COPY_DST | BufferUsages::MAP_READ)?;
 
         Ok(Self {
             sim_params,
@@ -201,6 +206,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
             prefix_sum,
             poses_staging,
             coupling,
+            timestep_bounds,
+            timestep_bounds_staging,
+            base_dt: params.dt,
         })
     }
 
@@ -246,6 +254,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             g2p: WgG2P::from_backend(backend, compiler)?,
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
+            timestep_bounds: WgTimestepBounds::with_specializations(backend, compiler, &GpuModel::specialization_modules())?,
             _phantom: PhantomData,
         })
     }
@@ -276,7 +285,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
     ///
     /// `Ok(())` if all GPU commands were recorded successfully, or an error if
     /// any kernel launch fails.
-    pub fn launch_step(
+    pub async fn launch_step(
         &self,
         backend: &B,
         encoder: &mut B::Encoder,

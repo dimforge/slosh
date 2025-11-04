@@ -39,13 +39,14 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     }
 
     if !app_state.restarting {
-        app_state.num_substeps = 20;
+        app_state.min_num_substeps = 10;
+        app_state.max_num_substeps = 40;
         app_state.gravity_factor = 4.0;
     };
 
     let params = SimulationParams {
         gravity: vector![0.0, -9.81, 0.0] * app_state.gravity_factor,
-        dt: (1.0 / 60.0) / (app_state.num_substeps as f32),
+        dt: 1.0 / 60.0,
     };
 
     let rb = RigidBodyBuilder::fixed().translation(vector![0.0, -4.0, 0.0]);

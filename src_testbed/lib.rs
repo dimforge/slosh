@@ -97,12 +97,15 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let mut app_state = AppState {
             pipeline: mpm_pipeline,
             run_state: RunState::Paused,
+            max_num_substeps: 1,
+            min_num_substeps: 1,
             num_substeps: 1,
             gravity_factor: 1.0,
             restarting: false,
             show_rigid_particles: false,
         };
         let physics = (builders[0].1)(&gpu, &mut app_state);
+        app_state.num_substeps = 0; // Ensures it will be updated at the next step.
 
         let readback_shader = PrepReadback::from_backend(&gpu, &compiler).unwrap();
         let readback = GpuReadbackData::new(&gpu, physics.data.particles.len()).unwrap();

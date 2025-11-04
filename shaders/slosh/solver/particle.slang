@@ -17,6 +17,10 @@ public struct Dynamics {
     public float init_radius;
     public float mass;
     public uint enabled;
+
+    public func init_density() -> float {
+        return this.mass / this.init_volume;
+    }
 }
 
 public struct RigidParticleIndices {

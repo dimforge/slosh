@@ -46,6 +46,7 @@ pub use grid_update_cdf::WgGridUpdateCdf;
 pub use particle_update::WgParticleUpdate;
 pub use rigid_impulses::{GpuImpulses, RigidImpulse, WgRigidImpulses};
 pub use rigid_particle_update::WgRigidParticleUpdate;
+pub use timestep_bound::{WgTimestepBounds, TimestepBoundsArgs, GpuTimestepBounds};
 
 mod g2p;
 mod g2p_cdf;
@@ -60,3 +61,4 @@ mod grid_update;
 mod grid_update_cdf;
 mod particle;
 mod particle_model;
+mod timestep_bound;

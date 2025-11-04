@@ -90,4 +90,39 @@ public struct DefaultParticleModel: IParticleModel {
                 return ModelUpdateResult(Mat<float>(0.0));
         }
     }
+
+    public func timestep_bound(
+        models: ByteAddressBuffer,
+        particle_id: uint,
+        particle_density0: float,
+        def_grad: Mat<float>,
+        particle_velocity: Vect<float>,
+        cell_width: float,
+    ) -> float {
+        let tag_offset = particle_id * BYTES_STRIDE;
+        let model_offset = tag_offset + 4;
+        let model_tag = models.Load(tag_offset);
+        let def_grad_det = determinant(def_grad);
+
+        switch (DefaultParticleModelType(model_tag)) {
+            case DefaultParticleModelType::ElasticLinear: {
+                let model = models.Load<LinearElasticModel>(model_offset);
+                return model.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::ElasticNeoHookean: {
+                let model = models.Load<NeoHookeanModel>(model_offset);
+                return model.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::SandLinear: {
+                let model = models.Load<SandModel<LinearElasticModel>>(model_offset);
+                return model.elastic.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::SandNeoHookean: {
+                let model = models.Load<SandModel<NeoHookeanModel>>(model_offset);
+                return model.elastic.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            default:
+                return 0.0;
+        }
+    }
 }

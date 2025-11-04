@@ -6,7 +6,6 @@ import stensor.geometry.svd2;
 import stensor.geometry.svd3;
 import nexus.aliases;
 import slosh.models.utils;
-import slosh.solver.timestep_bound;
 import slosh.models.interfaces;
 
 public struct LinearElasticModel {
@@ -49,6 +48,7 @@ public struct LinearElasticModel {
     public func timestep_bound(
         particle_density0: float,
         particle_velocity: Vect<float>,
+        particle_def_grad_det: float,
         elastic_hardening: float,
         cell_width: float,
     ) -> float {
@@ -60,6 +60,6 @@ public struct LinearElasticModel {
             bulk_modulus * elastic_hardening,
             shear_modulus * elastic_hardening,
         );
-        return bound.timestep_bound(particle_density0, particle_velocity, cell_width);
+        return bound.timestep_bound(particle_density0, particle_def_grad_det, particle_velocity, cell_width);
     }
 }
