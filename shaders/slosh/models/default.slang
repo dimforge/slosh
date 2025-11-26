@@ -28,13 +28,16 @@ public struct SandModel<ElasticModel> {
     }
 }
 
-public struct DefaultParticleModel: IParticleModel {
-    uint dummy; // naga doesn’t allow empty structs so we add an unused field.
+// TODO: hard-coding this is quite fragile as is must match the size of
+//       the host-side enum. Should it be configured by the host?
+// This **MUST** match the byte size of `GpuParticleModel` on the rust side.
+public static const uint DEFAULT_MODEL_BYTES_STRIDE = 52;
 
-    // TODO: hard-coding this is quite fragile as is must match the size of
-    //       the host-side enum. Should it be configured by the host?
-    // This **MUST** match the byte size of `GpuParticleModel` on the rust side.
-    public static const uint BYTES_STRIDE = 52;
+// NOTE: the BYTES_STRIDE parameter exists so that third-party models extending this default model
+//       can specify their own stride if it differ from the default one (i.e. if the extended union
+//       type is bigger than the default union type).
+public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_STRIDE>: IParticleModel {
+    uint dummy; // Dummy field because naga doesn’t accept empty structs.
 
     public __init() {
         this.dummy = 0;

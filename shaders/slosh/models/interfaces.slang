@@ -20,12 +20,14 @@ public struct ParticleUpdateData {
     public float cell_width;
     public uint particle_id;
     public float init_volume;
+    public float phase;
 
-    public __init(float dt, float cell_width, uint particle_id, float init_volume) {
+    public __init(float dt, float cell_width, uint particle_id, float init_volume, float phase) {
         this.dt = dt;
         this.cell_width = cell_width;
         this.particle_id = particle_id;
         this.init_volume = init_volume;
+        this.phase = phase;
     }
 }
 

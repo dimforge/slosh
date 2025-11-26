@@ -19,6 +19,15 @@ required-features = ["dim2"]
 default = ["dim2"]
 dim2 = []
 
+comptime = [ "nexus2d/comptime", "slosh_testbed2d/comptime" ]
+runtime = [ "nexus2d/runtime", "slosh_testbed2d/runtime" ]
+
+webgpu = [ "nexus2d/webgpu", "slosh_testbed2d/webgpu" ]
+vulkan = [ "nexus2d/vulkan", "slosh_testbed2d/vulkan" ]
+metal = [ "nexus2d/metal", "slosh_testbed2d/metal" ]
+cpu = [ "nexus2d/cpu", "slosh_testbed2d/cpu" ]
+cuda = [ "nexus2d/cuda", "slosh_testbed2d/cuda" ]
+
 [dependencies]
 nalgebra = { workspace = true }
 wgpu = { workspace = true }
@@ -33,7 +42,7 @@ static_assertions = { workspace = true }
 nexus2d = "0.2.1"
 
 # TODO: make rapier optional?
-rapier2d = "0.30"
+rapier2d = "0.31"
 
 # For wasm?
 getrandom = { version = "0.3.1", features = ["wasm_js"] }
@@ -46,9 +55,11 @@ futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"] }
+slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"], default-features = false }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
 minislang = "0.2"
+include_dir = "0.7"
+slang-hal-build = "0.2"
 nexus2d = "0.2" # to access its shaders at compile-time

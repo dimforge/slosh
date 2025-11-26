@@ -14,7 +14,7 @@ import stensor.utils.mat;
 import nexus.shapes.cuboid;
 import nexus.aliases;
 
-#if COMPILE_CHECK
+#if COMPTIME
     // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
     import slosh.models.default;
     extern struct ParticleModel : IParticleModel = DefaultParticleModel;
@@ -38,7 +38,6 @@ func particle_update(
     RWStructuredBuffer<Position> particles_pos,
     RWStructuredBuffer<Dynamics> particles_dyn,
     ConstantBuffer<uint> particles_len,
-//    RWStructuredBuffer<Phase> phases,
 ) {
     let particle_id = invocation_id.x;
 
@@ -97,39 +96,8 @@ func particle_update(
     /*
      * Constitutive model.
      */
-    let update_data = ParticleUpdateData(dt, cell_width, particle_id, dynamics.init_volume);
+    let update_data = ParticleUpdateData(dt, cell_width, particle_id, dynamics.init_volume, dynamics.phase);
     let update_result = model.update(particles_model, update_data, dynamics.affine, new_deformation_gradient);
-
-//    var phase = phases[particle_id].phase;
-//
-//    // Update Phase.
-//    // TODO: should be stress based instead.
-//    let max_stretch = phases[particle_id].max_stretch;
-//    if (phase > 0.0 && max_stretch > 0.0) {
-//    #if DIM == 2
-//        let svd = Svd2(new_deformation_gradient);
-//        if (svd.S.x > max_stretch || svd.S.y > max_stretch) {
-//            phases[particle_id].phase = 0.0;
-//            phase = 0.0;
-//        }
-//    #else
-//        let svd = Svd3(new_deformation_gradient);
-//        if (svd.S.x > max_stretch || svd.S.y > max_stretch || svd.S.z > max_stretch) {
-//            phases[particle_id].phase = 0.0;
-//            phase = 0.0;
-//        }
-//    #endif
-//    }
-//
-//    // Plasticity.
-//    if (phase == 0.0) {
-//        let projection = plasticity[particle_id].project(plastic_state[particle_id], new_deformation_gradient);
-//        plastic_state[particle_id] = projection.state;
-//        new_deformation_gradient = projection.deformation_gradient;
-//    }
-//
-//    // Elasticity.
-//    let stress = constitutive_model[particle_id].kirchoff_stress(new_deformation_gradient);
 
     /*
      * Affine matrix for APIC transfer.

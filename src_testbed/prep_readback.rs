@@ -2,14 +2,13 @@ use bytemuck::{Pod, Zeroable};
 use nalgebra::Vector4;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs};
+use slang_hal::{Shader, ShaderArgs, BufferUsages};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
 use slosh::solver::{
     GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
     SimulationParams,
 };
 use stensor::tensor::GpuTensor;
-use wgpu::BufferUsages;
 
 #[cfg(feature = "dim2")]
 #[derive(Default, Copy, Clone, Debug, Pod, Zeroable)]
@@ -36,6 +35,48 @@ pub struct ReadbackData {
     pub position: Vector4<f32>,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum RenderMode {
+    Default = 0,
+    Volume = 1,
+    Velocity = 2,
+    Phase = 3,
+    CdfNormals = 4,
+    CdfDistances = 5,
+    CdfSigns = 6,
+}
+
+impl RenderMode {
+    pub fn text(&self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Volume => "volume",
+            Self::Velocity => "velocity",
+            Self::Phase => "phase",
+            Self::CdfNormals => "cdf (normals)",
+            Self::CdfDistances => "cdf (distances)",
+            Self::CdfSigns => "cdf (signs)",
+        }
+    }
+
+    pub fn from_u32(val: u32) -> Self {
+        match val {
+            0 => Self::Default,
+            1 => Self::Volume,
+            2 => Self::Velocity,
+            3 => Self::Phase,
+            4 => Self::CdfNormals,
+            5 => Self::CdfDistances,
+            6 => Self::CdfSigns,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn config(self) -> RenderConfig {
+        RenderConfig { mode: self as u32 }
+    }
+}
+
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct RenderConfig {
@@ -47,9 +88,10 @@ impl RenderConfig {
     pub const DEFAULT: Self = Self { mode: 0 };
     pub const VOLUME: Self = Self { mode: 1 };
     pub const VELOCITY: Self = Self { mode: 2 };
-    pub const CDF_NORMALS: Self = Self { mode: 3 };
-    pub const CDF_DISTANCES: Self = Self { mode: 4 };
-    pub const CDF_SIGNS: Self = Self { mode: 5 };
+    pub const PHASE: Self = Self { mode: 3 };
+    pub const CDF_NORMALS: Self = Self { mode: 4 };
+    pub const CDF_DISTANCES: Self = Self { mode: 5 };
+    pub const CDF_SIGNS: Self = Self { mode: 6 };
 }
 
 #[derive(Shader)]
@@ -67,9 +109,8 @@ pub struct GpuReadbackData<B: Backend> {
 }
 
 impl<B: Backend> GpuReadbackData<B> {
-    pub fn new(backend: &B, num_particles: usize) -> Result<Self, B::Error> {
-        let config = RenderConfig::DEFAULT; // VELOCITY;
-
+    pub fn new(backend: &B, num_particles: usize, mode: RenderMode) -> Result<Self, B::Error> {
+        let config = mode.config();
         let palette = [
             [124.0 / 255.0, 144.0 / 255.0, 1.0, 1.0],
             [8.0 / 255.0, 144.0 / 255.0, 1.0, 1.0],
@@ -87,7 +128,7 @@ impl<B: Backend> GpuReadbackData<B> {
             .collect();
 
         Ok(Self {
-            mode: GpuTensor::scalar(backend, config, BufferUsages::STORAGE)?,
+            mode: GpuTensor::scalar(backend, config, BufferUsages::STORAGE | BufferUsages::COPY_DST)?,
             base_colors: GpuTensor::vector(backend, base_colors, BufferUsages::STORAGE)?,
             instances: GpuTensor::vector(
                 backend,

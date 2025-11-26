@@ -21,6 +21,6 @@ pub fn main() {
     // Note: slang-hal-build will automatically detect which backends to compile for
     // based on the cargo features enabled during the build.
     compiler
-        .compile_shaders_dir("../../shaders", &[])
+        .compile_shaders_dir("../../shaders_testbed", &[])
         .expect("Failed to compile shaders");
 }

@@ -5,8 +5,7 @@ use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
-use slang_hal::backend::Backend;
-use wgpu::BufferUsages;
+use slang_hal::{backend::Backend, BufferUsages};
 // use nexus::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
@@ -41,6 +40,8 @@ pub struct ParticleDynamics {
     pub init_radius: f32,
     /// Particle mass (kg).
     pub mass: f32,
+    /// The particle phase (used by materials that can break).
+    pub phase: f32,
     /// Whether this particle is active (1) or disabled (0).
     pub enabled: u32,
 }
@@ -66,6 +67,7 @@ impl ParticleDynamics {
             init_radius: radius,
             mass: init_volume * density,
             cdf: Cdf::default(),
+            phase: 1.0,
             enabled: 1,
         }
     }

@@ -19,6 +19,15 @@ required-features = ["dim3"]
 default = ["dim3"]
 dim3 = []
 
+comptime = [ "nexus3d/comptime", "slosh_testbed3d/comptime" ]
+runtime = [ "nexus3d/runtime", "slosh_testbed3d/runtime" ]
+
+webgpu = [ "nexus3d/webgpu", "slosh_testbed3d/webgpu" ]
+vulkan = [ "nexus3d/vulkan", "slosh_testbed3d/vulkan" ]
+metal = [ "nexus3d/metal", "slosh_testbed3d/metal" ]
+cpu = [ "nexus3d/cpu", "slosh_testbed3d/cpu" ]
+cuda = [ "nexus3d/cuda", "slosh_testbed3d/cuda" ]
+
 [dependencies]
 nalgebra = { workspace = true }
 wgpu = { workspace = true }
@@ -33,7 +42,7 @@ regex = "1"
 serde = "1"
 
 # TODO: make rapier optional?
-rapier3d = "0.30"
+rapier3d = "0.31"
 
 [dev-dependencies]
 nalgebra = { version = "0.34", features = ["rand"] }
@@ -46,4 +55,6 @@ kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
 minislang = "0.2"
+include_dir = "0.7"
+slang-hal-build = "0.2"
 nexus3d = "0.2" # to access its shaders at compile-time

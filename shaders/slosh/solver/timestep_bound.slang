@@ -6,7 +6,7 @@ import slosh.models.utils;
 import slosh.models.interfaces;
 import slosh.solver.particle;
 
-#if COMPILE_CHECK
+#if COMPTIME
     // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
     import slosh.models.default;
     extern struct ParticleModel : IParticleModel = DefaultParticleModel;

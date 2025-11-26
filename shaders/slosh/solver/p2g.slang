@@ -391,9 +391,6 @@ func fetch_next_particle(
 #else
                     shared_vel_mass[shared_flat_index] = float4(particles_dyn[curr_particle_id].velocity, particles_dyn[curr_particle_id].mass);
 #endif
-
-                    let next_particle_id = particle_node_linked_lists[curr_particle_id];
-                    shared_nodes[shared_flat_index].particle_id = next_particle_id;
                 } else {
                     // TODO: would it be worth skipping writing zeros if we already
                     //       did it at the previous step? (if we already reached the end
@@ -409,6 +406,12 @@ func fetch_next_particle(
                     shared_affine[shared_flat_index] = float3x3(float3(0.0), float3(0.0), float3(0.0));
                     shared_vel_mass[shared_flat_index] = float4(0.0);
 #endif
+                }
+
+                if (curr_particle_id != NONE) {
+                    // NOTE: if the particle is disabled, we still want to traverse other particles.
+                    let next_particle_id = particle_node_linked_lists[curr_particle_id];
+                    shared_nodes[shared_flat_index].particle_id = next_particle_id;
                 }
             }
         }

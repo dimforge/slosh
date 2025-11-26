@@ -1,13 +1,13 @@
-use nexus::dynamics::GpuBodySet;
+use crate::grid::grid::{GpuGrid, GpuGridMetadata};
+use crate::solver::{GpuParticleModelData, GpuParticles, ParticleDynamics};
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuTensor};
-use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::solver::{GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics};
 
 #[derive(Copy, Clone, PartialEq, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
+/// The GPU representation of a maximum timestep estimate.
 pub struct GpuTimestepBounds {
     compute_max_dt_as_uint: u32,
 }
@@ -15,12 +15,15 @@ pub struct GpuTimestepBounds {
 impl GpuTimestepBounds {
     // NOTE: this **MUST** match the constant in the GPU slang shader.
     const FLOAT_TO_INT: f32 = 1.0e12;
+
+    /// Initializes the timestep bound (defaults to 0).
     pub fn new() -> GpuTimestepBounds {
         Self {
             compute_max_dt_as_uint: 0,
         }
     }
 
+    /// The time estimate, in seconds.
     pub fn computed_dt(&self) -> f32 {
         self.compute_max_dt_as_uint as f32 / Self::FLOAT_TO_INT
     }
@@ -31,13 +34,17 @@ impl GpuTimestepBounds {
     module = "slosh::solver::timestep_bound",
     specialize = ["slosh::models::specializations"]
 )]
+/// GPU kernel responsible for computing an estimate on the maximum timestep that can
+/// be taken by the simulation without blowing up.
+///
+/// Note that this a best-effort estimate. It does not completely eliminate risks of divergence.
 pub struct WgTimestepBounds<B: Backend> {
-    pub reset_timestep_bound: GpuFunction<B>,
-    pub estimate_timestep_bound: GpuFunction<B>,
+    reset_timestep_bound: GpuFunction<B>,
+    estimate_timestep_bound: GpuFunction<B>,
 }
 
 #[derive(ShaderArgs)]
-pub struct TimestepBoundsArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
+struct TimestepBoundsArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     particles_model: &'a GpuTensor<GpuModel, B>,
     particles_dyn: &'a GpuTensor<ParticleDynamics, B>,
@@ -46,6 +53,7 @@ pub struct TimestepBoundsArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
 }
 
 impl<B: Backend> WgTimestepBounds<B> {
+    /// Launches the timestep bounds estimation, and return the estimated maximum timestep length.
     pub async fn compute_bounds<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
@@ -62,11 +70,13 @@ impl<B: Backend> WgTimestepBounds<B> {
         backend.submit(encoder)?;
 
         let mut result = [GpuTimestepBounds::new()];
-        backend.read_buffer(bounds_staging.buffer(), &mut result).await?;
+        backend
+            .read_buffer(bounds_staging.buffer(), &mut result)
+            .await?;
         Ok(result[0].computed_dt())
     }
 
-    pub fn launch<GpuModel: GpuParticleModelData>(
+    fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
         pass: &mut B::Pass,
@@ -81,7 +91,8 @@ impl<B: Backend> WgTimestepBounds<B> {
             particles_len: particles.gpu_len(),
             result: bounds,
         };
-        self.reset_timestep_bound.launch(backend, pass, &args, [1; 3])?;
+        self.reset_timestep_bound
+            .launch(backend, pass, &args, [1; 3])?;
         self.estimate_timestep_bound
             .launch(backend, pass, &args, [particles.len() as u32, 1, 1])
     }

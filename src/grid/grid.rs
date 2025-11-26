@@ -8,10 +8,9 @@ use encase::ShaderType;
 use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs};
+use slang_hal::{Shader, ShaderArgs, BufferUsages};
 use std::sync::Arc;
 use stensor::tensor::{GpuScalar, GpuVector};
-use wgpu::BufferUsages;
 
 /// GPU kernels for grid initialization and management.
 ///
@@ -24,7 +23,7 @@ pub struct WgGrid<B: Backend> {
     init_indirect_workgroups: GpuFunction<B>,
 }
 
-// TODO: should we have all the kernel launchs just use
+// TODO: should we have all the kernel launches just use
 //       the same ShaderArgs to avoid duplication?
 //       Or maybe implement ShaderArgs for `GpuGrid`, `GpuParticles`, etc.
 #[derive(ShaderArgs)]

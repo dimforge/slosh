@@ -18,26 +18,28 @@ mod step;
 
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../shaders_testbed");
+
+#[cfg(feature = "runtime")]
 pub fn register_shaders(compiler: &mut SlangCompiler) {
     slosh::register_shaders(compiler);
     compiler.add_dir(SLANG_SRC_DIR.clone());
 }
 
-use crate::prep_readback::{GpuReadbackData, PrepReadback};
+use crate::prep_readback::{GpuReadbackData, PrepReadback, RenderMode};
 use crate::step::SimulationStepResult;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
-use nexus::math::DIM;
 use nexus::rapier::geometry::ShapeType;
 use regex::Regex;
-use slang_hal::backend::WebGpu;
+use slang_hal::SlangCompiler;
+use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::re_exports::include_dir;
-use slang_hal::re_exports::minislang::SlangCompiler;
-use slosh::pipeline::MpmPipeline;
+use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
 use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
+use kiss3d::egui;
 use wgpu::Limits;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
@@ -48,14 +50,17 @@ type RenderNode = PlanarSceneNode;
 #[cfg(feature = "dim3")]
 type RenderNode = kiss3d::scene::SceneNode;
 
+
 struct Stage<GpuModel: GpuParticleModelData> {
     gpu: WebGpu,
 
     selected_demo: usize,
     builders: SceneBuilders<GpuModel>,
     physics: PhysicsContext<GpuModel>,
+    hooks: Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     app_state: AppState<GpuModel>,
     step_id: usize,
+    render_mode: RenderMode,
 
     step_result: SimulationStepResult,
     readback_shader: PrepReadback<WebGpu>,
@@ -68,11 +73,14 @@ struct Stage<GpuModel: GpuParticleModelData> {
 
 impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
     pub async fn new(
+        #[allow(unused_mut)] // mut is needed for the `runtime` feature.
         mut compiler: SlangCompiler,
+        hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
         builders: SceneBuilders<GpuModel>,
     ) -> Stage<GpuModel> {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 10,
+            max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
             ..Limits::default()
         };
         let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
@@ -89,9 +97,12 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         ";
         gpu.append_hack(reg, replace.to_string());
 
-        crate::register_shaders(&mut compiler);
 
-        compiler.set_global_macro("DIM", DIM);
+        #[cfg(feature = "runtime")]
+        {
+            crate::register_shaders(&mut compiler);
+            compiler.set_global_macro("DIM", nexus::math::DIM);
+        }
 
         let mpm_pipeline = MpmPipeline::new(&gpu, &compiler).unwrap();
         let mut app_state = AppState {
@@ -104,11 +115,12 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             restarting: false,
             show_rigid_particles: false,
         };
+        let hooks = hooks(&gpu, &compiler);
         let physics = (builders[0].1)(&gpu, &mut app_state);
         app_state.num_substeps = 0; // Ensures it will be updated at the next step.
 
         let readback_shader = PrepReadback::from_backend(&gpu, &compiler).unwrap();
-        let readback = GpuReadbackData::new(&gpu, physics.data.particles.len()).unwrap();
+        let readback = GpuReadbackData::new(&gpu, physics.data.particles.len(), RenderMode::Default).unwrap();
         let mut step_result = SimulationStepResult::default();
         step_result
             .instances
@@ -117,10 +129,12 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         Stage {
             builders,
             instances: vec![],
+            render_mode: RenderMode::Default,
             readback,
             readback_shader,
             gpu,
             physics,
+            hooks,
             app_state,
             step_result,
             step_id: 0,
@@ -131,7 +145,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
     pub fn set_demo(&mut self, demo_id: usize) {
         self.selected_demo = demo_id;
         self.physics = (self.builders[demo_id]).1(&self.gpu, &mut self.app_state);
-        self.readback = GpuReadbackData::new(&self.gpu, self.physics.data.particles.len()).unwrap();
+        self.readback = GpuReadbackData::new(&self.gpu, self.physics.data.particles.len(), self.render_mode).unwrap();
+        self.app_state.num_substeps = 1; // Reset so it gets reinitialized automatically if needed.
         self.step_result
             .instances
             .resize(self.physics.data.particles.len(), Default::default());
@@ -174,15 +189,23 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 }
 
 pub async fn run<GpuModel: GpuParticleModelData>(scene_builders: SceneBuilders<GpuModel>) {
-    run_with_compiler(SlangCompiler::new(vec![]), scene_builders).await
+    run_with_compiler(SlangCompiler::default(), scene_builders).await
 }
 
 pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     scene_builders: SceneBuilders<GpuModel>,
 ) {
+    run_with_hooks(compiler, |_, _| Box::new(()), scene_builders).await
+}
+
+pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    scene_builders: SceneBuilders<GpuModel>,
+) {
     let mut colliders_gfx = HashMap::new();
-    let mut stage = Stage::new(compiler, scene_builders).await;
+    let mut stage = Stage::new(compiler, hooks, scene_builders).await;
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
 
@@ -224,6 +247,7 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
         /*
          * UI
          */
+        // TODO: refactor in a different file
         window.draw_ui(|ctx| {
             kiss3d::egui::Window::new("Settings").show(ctx, |ui| {
                 let mut changed = false;
@@ -239,6 +263,31 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
                     });
                 if changed {
                     new_selected_demo = Some(stage.selected_demo);
+                }
+
+                let mut changed = false;
+                egui::ComboBox::from_label("render mode")
+                    .selected_text(stage.render_mode.text())
+                    .show_ui(ui, |ui| {
+                        for i in 0..6 {
+                            let mode_i = RenderMode::from_u32(i);
+                            changed = ui
+                                .selectable_value(
+                                    &mut stage.render_mode,
+                                    mode_i,
+                                    mode_i.text(),
+                                )
+                                .changed()
+                                || changed;
+                        }
+                    });
+
+                if changed {
+                    stage.gpu.write_buffer(
+                        stage.readback.mode.buffer_mut(),
+                        0,
+                        bytemuck::bytes_of(&(stage.render_mode as u32))
+                    ).unwrap();
                 }
 
                 ui.label(format!(
