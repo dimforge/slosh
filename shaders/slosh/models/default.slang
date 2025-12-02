@@ -51,8 +51,7 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
     public func update(
         models: RWByteAddressBuffer,
         data: ParticleUpdateData,
-        in vel_grad: Mat<float>,
-        inout def_grad: Mat<float>,
+        inout dynamics: Dynamics,
     ) -> ModelUpdateResult {
         let tag_offset = data.particle_id * BYTES_STRIDE;
         let model_offset = tag_offset + 4;
@@ -61,32 +60,32 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
         switch (DefaultParticleModelType(model_tag)) {
             case DefaultParticleModelType::ElasticLinear: {
                 let model = models.Load<LinearElasticModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(dynamics.def_grad);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::ElasticNeoHookean: {
                 let model = models.Load<NeoHookeanModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(dynamics.def_grad);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::SandLinear: {
                 let model = models.Load<SandModel<LinearElasticModel>>(model_offset);
-                let projection = model.plastic.project(model.plastic_state, def_grad);
+                let projection = model.plastic.project(model.plastic_state, dynamics.def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
                 let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
-                // TODO PERF: have plasticity modify def_grad in-place?
-                def_grad = projection.deformation_gradient;
+                // TODO PERF: have plasticity modify dynamics.def_grad in-place?
+                dynamics.def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::SandNeoHookean: {
                 let model = models.Load<SandModel<NeoHookeanModel>>(model_offset);
-                let projection = model.plastic.project(model.plastic_state, def_grad);
+                let projection = model.plastic.project(model.plastic_state, dynamics.def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
                 let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
-                // TODO PERF: have plasticity modify def_grad in-place?
-                def_grad = projection.deformation_gradient;
+                // TODO PERF: have plasticity modify dynamics.def_grad in-place?
+                dynamics.def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
             }
             default:

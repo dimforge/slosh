@@ -1,6 +1,7 @@
 module interfaces;
 
 import nexus.aliases;
+import slosh.solver.particle;
 
 public struct ModelUpdateResult {
     public Mat<float> kirchoff_stress;
@@ -19,15 +20,11 @@ public struct ParticleUpdateData {
     public float dt;
     public float cell_width;
     public uint particle_id;
-    public float init_volume;
-    public float phase;
 
-    public __init(float dt, float cell_width, uint particle_id, float init_volume, float phase) {
+    public __init(float dt, float cell_width, uint particle_id) {
         this.dt = dt;
         this.cell_width = cell_width;
         this.particle_id = particle_id;
-        this.init_volume = init_volume;
-        this.phase = phase;
     }
 }
 
@@ -38,9 +35,7 @@ public interface IParticleModel {
     public func update(
         models: RWByteAddressBuffer,
         data: ParticleUpdateData,
-        // TODO PERF: define as inout to ensure it’s passed by-ref (to avoid useless copy)?
-        in vel_grad: Mat<float>,
-        inout def_grad: Mat<float>
+        inout dynamics: Dynamics,
     ) -> ModelUpdateResult;
     public func timestep_bound(
         models: ByteAddressBuffer,

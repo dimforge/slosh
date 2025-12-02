@@ -10,6 +10,9 @@ public struct Dynamics {
     //       of the struct in 2D.
     public vector<float, DIM> velocity;
     public matrix<float, DIM, DIM> def_grad;
+    // NOTE: when running the particle_update shader, this contains the
+    //       particle’s velocity gradient. After particle_update, this
+    //       contains the affine matrix for APIC transfer.
     public matrix<float, DIM, DIM> affine;
     public float vel_grad_det;
     public Cdf cdf;
