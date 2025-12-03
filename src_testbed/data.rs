@@ -1,5 +1,7 @@
+use nalgebra::Vector3;
 use slang_hal::backend::WebGpu;
 use slosh::pipeline::{MpmData, MpmPipeline};
+use slosh::rapier::math::Vector;
 use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
@@ -48,8 +50,8 @@ impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)>
 }
 
 pub struct PhysicsState<'a, GpuModel: GpuParticleModelData = GpuParticleModel> {
-    pub(crate) backend: &'a WebGpu,
-    pub(crate) data: &'a mut MpmData<WebGpu, GpuModel>,
+    pub backend: &'a WebGpu,
+    pub data: &'a mut MpmData<WebGpu, GpuModel>,
     pub(crate) step_id: usize,
 }
 

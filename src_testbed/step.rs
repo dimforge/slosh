@@ -85,7 +85,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         }
 
         if prev_num_substeps != self.app_state.num_substeps {
-            let gravity = Vector::y() * -9.81 * self.app_state.gravity_factor;
+            let gravity = physics.data.gravity;
             let params = SimulationParams {
                 gravity,
                 dt: base_dt / self.app_state.num_substeps as f32,

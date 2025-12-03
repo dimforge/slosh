@@ -13,7 +13,7 @@ use crate::solver::{
 };
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
-use nexus::math::GpuSim;
+use nexus::math::{GpuSim, Vector};
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::ColliderSet;
 use slang_hal::{Shader, BufferUsages, SlangCompiler};
@@ -117,6 +117,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipelineHooks<B, GpuModel> f
 pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     /// The simulation timestep.
     pub base_dt: f32,
+    pub gravity: Vector<f32>,
     /// Global simulation parameters (gravity, timestep).
     pub sim_params: GpuSimulationParams<B>,
     /// Spatial grid for momentum transfer.
@@ -259,6 +260,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
         Ok(Self {
             sim_params,
             particles,
+            gravity: params.gravity,
             rigid_particles,
             bodies,
             impulses,

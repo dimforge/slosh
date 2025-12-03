@@ -40,7 +40,9 @@ use slosh::rapier::prelude::ColliderHandle;
 use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
 use kiss3d::egui;
+use nalgebra::Vector3;
 use wgpu::Limits;
+use slosh::rapier::math::Vector;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
 type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
@@ -196,13 +198,15 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     scene_builders: SceneBuilders<GpuModel>,
 ) {
-    run_with_hooks(compiler, |_, _| Box::new(()), scene_builders).await
+    run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector3::y()).await
 }
 
 pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
+    #[cfg(feature = "dim3")]
+    up_axis: Vector3<f32>
 ) {
     let mut colliders_gfx = HashMap::new();
     let mut stage = Stage::new(compiler, hooks, scene_builders).await;
@@ -226,6 +230,10 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
         [40.0, 40.0, 40.0].into(),
         [0.0; 3].into(),
     );
+    #[cfg(feature = "dim3")]
+    {
+        camera3d.set_up_axis(up_axis);
+    }
     let mut camera2d = Sidescroll::new();
 
     while !window.should_close() {
