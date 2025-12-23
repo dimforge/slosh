@@ -399,7 +399,9 @@ func reset(
 //   }
 }
 
+// TODO: remove this, moved to boundary_condition.slang
 public func project_velocity(vel: Vect, n: Vect) -> Vect {
+    return Vect<float>(0.0);
     // TODO: this should depend on the collider’s material
     //       properties.
     let normal_vel = dot(vel, n);

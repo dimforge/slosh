@@ -199,7 +199,12 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     scene_builders: SceneBuilders<GpuModel>,
 ) {
-    run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector3::y()).await
+    #[cfg(feature = "dim2")]{
+        run_with_hooks(compiler, |_, _| Box::new(()), scene_builders).await;
+    }
+    #[cfg(feature = "dim3")]{
+        run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector3::y()).await;
+    }
 }
 
 pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(

@@ -82,15 +82,18 @@ pub fn convert_trimesh_to_gpu(shape: &TriMesh, buffers: &mut ShapeBuffers) -> Gp
     );
 
     // Append the actual mesh vertex/index buffers.
-    let pn = shape.pseudo_normals().expect("trimeshes without pseudo-normals are not supported");
-    buffers.vertices.extend_from_slice(shape.vertices());
-    buffers.vertices.extend(
-        pn.vertices_pseudo_normal.iter().map(|n| Point::from(*n))
-    );
-    assert_eq!(shape.vertices().len(), pn.vertices_pseudo_normal.len());
-    buffers.vertices.extend(
-        pn.edges_pseudo_normal.iter().flat_map(|n| n.map(|n| Point::from(n)))
-    );
+    #[cfg(feature = "dim3")]
+    {
+        let pn = shape.pseudo_normals().expect("trimeshes without pseudo-normals are not supported");
+        buffers.vertices.extend_from_slice(shape.vertices());
+        buffers.vertices.extend(
+            pn.vertices_pseudo_normal.iter().map(|n| Point::from(*n))
+        );
+        assert_eq!(shape.vertices().len(), pn.vertices_pseudo_normal.len());
+        buffers.vertices.extend(
+            pn.edges_pseudo_normal.iter().flat_map(|n| n.map(|n| Point::from(n)))
+        );
+    }
     buffers
         .indices
         .extend(shape.indices().iter().flat_map(|tri| tri.iter().copied()));

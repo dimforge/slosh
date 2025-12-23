@@ -8,6 +8,7 @@ use slosh::rapier::prelude::{
 };
 use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
 use std::any::Any;
+use crate::step::SimulationStepResult;
 
 pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,
@@ -53,6 +54,7 @@ impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)>
 pub struct PhysicsState<'a, GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub backend: &'a WebGpu,
     pub data: &'a mut MpmData<WebGpu, GpuModel>,
+    pub results: &'a SimulationStepResult,
     pub(crate) step_id: usize,
 }
 

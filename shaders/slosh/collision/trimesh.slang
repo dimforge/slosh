@@ -6,11 +6,11 @@ import nexus.aliases;
 
 // A triangle mesh.
 //
-// The triangle mesh is composed of multiple buffers packed into a Vec<uint> (the "index buffer") and a Vec<float3> (the "vertex buffer").
+// The triangle mesh is composed of multiple buffers packed into a Vec<uint> (the "index buffer") and a Vec<Vect> (the "vertex buffer").
 // The "index buffer" contains: [BVH topology, triangle indices]
 // The "vertex buffer" contains: [BVH AABBs, triangle vertices, vertex pseudo-normals, edges pseudo-normals].
-// The `vertex pseudo-normal` contains one float3 per vertex, in the same order as the vertices in `triangle vertices`.
-// The `edges pseudo-normal` contains three float3 per triangle (one for each edge), in the same order as `triangle indices`.
+// The `vertex pseudo-normal` contains one Vect per vertex, in the same order as the vertices in `triangle vertices`.
+// The `edges pseudo-normal` contains three Vect per triangle (one for each edge), in the same order as `triangle indices`.
 public struct TriMesh {
     /// Index of the root AABB in the vertex buffer.
     uint bvh_vtx_root_id;
@@ -31,7 +31,7 @@ public struct TriMesh {
 //    }
 
     public func bvh_node_aabb(
-        vtx: StructuredBuffer<float3>,
+        vtx: StructuredBuffer<Vect>,
         node_id: uint
     ) -> Aabb {
         let vid = this.bvh_vtx_root_id + node_id * 2u; // Multiply by 2 since there are two values per AABB (min/max).
@@ -60,7 +60,7 @@ public struct TriMesh {
 
     public func triangle(
         idx: StructuredBuffer<uint>,
-        vtx: StructuredBuffer<float3>,
+        vtx: StructuredBuffer<Vect>,
         tri_id: uint
     ) -> Triangle {
         let vids = this.triangle_vids(idx, tri_id);
@@ -72,11 +72,11 @@ public struct TriMesh {
 
     public func pseudo_normal(
         idx: StructuredBuffer<uint>,
-        vtx: StructuredBuffer<float3>,
+        vtx: StructuredBuffer<Vect>,
         tri_id: uint,
         feat_type: uint,
         feat_id: uint
-    ) -> float3 {
+    ) -> Vect {
         switch (feat_type) {
             case FEATURE_VERTEX: {
                 let vids = this.triangle_vids(idx, tri_id);
@@ -94,6 +94,7 @@ public struct TriMesh {
                     + tri_id * 3u;
                 return vtx[base_vid + feat_id];
             }
+            #if DIM == 3
             case FEATURE_SOLID:
             case FEATURE_FACE: {
                 let tri = this.triangle(idx, vtx, tri_id);
@@ -101,7 +102,8 @@ public struct TriMesh {
                 let ac = tri.c - tri.a;
                 return cross(ab, ac);
             }
-            default: { return float3(0.0); }
+            #endif
+            default: { return Vect<float>(0.0); }
         }
     }
 
@@ -109,8 +111,8 @@ public struct TriMesh {
         // Contains BVH topology, triangle indices
         StructuredBuffer<uint> idx,
         // Contains AABBs, vertices, and pseudo-normals.
-        StructuredBuffer<float3> vtx,
-        float3 pt,
+        StructuredBuffer<Vect> vtx,
+        Vect pt,
     ) -> ProjectionResult {
         var curr = 0u;
         var best = 1.0e10;
@@ -167,18 +169,18 @@ public struct BvhIdx {
  *
  */
 public struct Aabb {
-    float3 mins;
-    float3 maxs;
+    Vect mins;
+    Vect maxs;
 
-    public __init(float3 mins, float3 maxs) {
+    public __init(Vect mins, Vect maxs) {
         this.mins = mins;
         this.maxs = maxs;
     }
 
-    public func project_local_point(pt: float3) -> float3 {
+    public func project_local_point(pt: Vect) -> Vect {
         let mins_pt = this.mins - pt;
         let pt_maxs = pt - this.maxs;
-        let shift = max(mins_pt, float3(0.0)) - max(pt_maxs, float3(0.0));
+        let shift = max(mins_pt, Vect<float>(0.0)) - max(pt_maxs, Vect<float>(0.0));
         return pt + shift;
     }
 }
@@ -202,13 +204,13 @@ static const uint FEATURE_FACE = 2;
 static const uint FEATURE_SOLID = 3;
 
 struct ProjectionWithLocation {
-    float3 point;
+    Vect point;
     float3 bcoords;
     uint feature_type;
     uint id;
     bool inside;
 
-    __init(float3 point, float3 bcoords, uint feature_type, uint id, bool inside) {
+    __init(Vect point, float3 bcoords, uint feature_type, uint id, bool inside) {
         this.point = point;
         this.bcoords = bcoords;
         this.feature_type = feature_type;
@@ -216,19 +218,19 @@ struct ProjectionWithLocation {
         this.inside = inside;
     }
 
-    static func vertex(pt: float3, id: uint, inside: bool) -> ProjectionWithLocation {
+    static func vertex(pt: Vect, id: uint, inside: bool) -> ProjectionWithLocation {
         return ProjectionWithLocation(pt, float3(0.0), FEATURE_VERTEX, id, inside);
     }
 
-    static func edge(pt: float3, bcoords: float2, id: uint, inside: bool) -> ProjectionWithLocation {
+    static func edge(pt: Vect, bcoords: float2, id: uint, inside: bool) -> ProjectionWithLocation {
         return ProjectionWithLocation(pt, float3(bcoords, 0.0), FEATURE_EDGE, id, inside);
     }
 
-    static func face(pt: float3, bcoords: float3, id: uint, inside: bool) -> ProjectionWithLocation {
+    static func face(pt: Vect, bcoords: float3, id: uint, inside: bool) -> ProjectionWithLocation {
         return ProjectionWithLocation(pt, bcoords, FEATURE_FACE, id, inside);
     }
 
-    static func solid(pt: float3) -> ProjectionWithLocation {
+    static func solid(pt: Vect) -> ProjectionWithLocation {
         return ProjectionWithLocation(pt, float3(0.0), FEATURE_SOLID, 0, true);
     }
 }
@@ -242,12 +244,12 @@ struct ProjectionInfo {
 // For 2D and 3D, it uses explicit cross/perp products that are
 // more numerically stable.
 func stable_check_edges_voronoi(
-    ab: float3,
-    ac: float3,
-    bc: float3,
-    ap: float3,
-    bp: float3,
-    cp: float3,
+    ab: Vect,
+    ac: Vect,
+    bc: Vect,
+    ap: Vect,
+    bp: Vect,
+    cp: Vect,
     ab_ap: float,
     ab_bp: float,
     ac_ap: float,
@@ -255,6 +257,7 @@ func stable_check_edges_voronoi(
     ac_bp: float,
     ab_cp: float,
 ) -> ProjectionInfo {
+#if DIM == 3
     let n = cross(ab, ac);
     let vc = dot(n, cross(ab, ap));
     if (vc < 0.0 && ab_ap >= 0.0 && ab_bp <= 0.0) {
@@ -276,9 +279,13 @@ func stable_check_edges_voronoi(
     } else {
         return ProjectionInfo(FACE_CCW, float3(va, vb, vc));
     }
+#else
+    // TODO
+    return ProjectionInfo(FACE_CW, float3(0.0));
+#endif
 }
 
-func triangle_project_local_point_and_get_location(shape: Triangle, pt: float3) -> ProjectionWithLocation {
+func triangle_project_local_point_and_get_location(shape: Triangle, pt: Vect) -> ProjectionWithLocation {
     // To understand the ideas, consider reading the slides below
     // https://box2d.org/files/ErinCatto_GJK_GDC2010.pdf
     let a = shape.a;

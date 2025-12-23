@@ -54,7 +54,12 @@ func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_po
     let mass = momentum_velocity_mass.z;
     let inv_mass = select(mass > 0.0, 1.0 / mass, 0.0);
     var velocity = (momentum_velocity_mass.xy + mass * sim_params.gravity * sim_params.dt) * inv_mass;
-    // Clamp the velocity so it doesn’t exceed 1 grid cell in one step.
+
+    // Apply Rayleigh mass-proportional damping (implicit integration for stability).
+    // v_new = v / (1 + damping * dt)
+    velocity = velocity / (1.0 + sim_params.damping * sim_params.dt);
+
+    // Clamp the velocity so it doesn't exceed 1 grid cell in one step.
     let vel_limit = float2(cell_width / sim_params.dt);
     velocity = clamp(velocity, -vel_limit, vel_limit);
     return float3(velocity, mass);
@@ -65,7 +70,11 @@ func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_po
     let inv_mass = select(mass > 0.0, 1.0 / mass, 0.0);
     var velocity = (momentum_velocity_mass.xyz + mass * sim_params.gravity * sim_params.dt) * inv_mass;
 
-    // Clamp the velocity so it doesn’t exceed 1 grid cell in one step.
+    // Apply Rayleigh mass-proportional damping (implicit integration for stability).
+    // v_new = v / (1 + damping * dt)
+    velocity = velocity / (1.0 + sim_params.damping * sim_params.dt);
+
+    // Clamp the velocity so it doesn't exceed 1 grid cell in one step.
     let vel_limit = float3(cell_width / sim_params.dt);
     velocity = clamp(velocity, -vel_limit, vel_limit);
     return float4(velocity, mass);

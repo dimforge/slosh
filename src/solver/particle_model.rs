@@ -42,6 +42,13 @@ impl ParticleModel {
         ))
     }
 
+    pub fn elastic_neo_hookean(young_modulus: f32, poisson_ratio: f32) -> Self {
+        Self::ElasticNeoHookean(ElasticCoefficients::from_young_modulus(
+            young_modulus,
+            poisson_ratio,
+        ))
+    }
+
     /// Creates a sand/granular material model with Drucker-Prager plasticity.
     ///
     /// # Arguments

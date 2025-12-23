@@ -32,6 +32,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             let mut phx = PhysicsState {
                 backend: &self.gpu,
                 data: &mut physics.data,
+                results: &self.step_result,
                 step_id: self.step_id,
             };
             callback.update(&mut phx);

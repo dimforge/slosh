@@ -12,7 +12,7 @@ use slosh2d::solver::ParticleModel;
 
 #[allow(dead_code)]
 fn main() {
-    panic!("Run the `testbed3` example instead.");
+    panic!("Run the `testbed2` example instead.");
 }
 
 pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
@@ -169,5 +169,6 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         data,
         rapier_data,
         callbacks: vec![],
+        hooks_state: None
     }
 }
