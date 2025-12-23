@@ -242,6 +242,18 @@ pub struct GpuGridHashMapEntry {
     pad1: nalgebra::Vector3<u32>,
 }
 
+impl Default for GpuGridHashMapEntry {
+    fn default() -> Self {
+        Self {
+            state: u32::MAX,
+            pad0: Default::default(),
+            key: BlockVirtualId::zeroed(),
+            value: 0,
+            pad1: Default::default(),
+        }
+    }
+}
+
 /// Header for an active grid block containing particles.
 ///
 /// Tracks which particles belong to this block for efficient iteration.
@@ -277,8 +289,12 @@ pub struct GpuGrid<B: Backend> {
     pub cpu_meta: GpuGridMetadata,
     /// GPU buffer containing grid metadata.
     pub meta: GpuScalar<GpuGridMetadata, B>,
+    /// Pong buffer for grid metadata.
+    pub prev_meta: GpuScalar<GpuGridMetadata, B>,
     /// Hash map entries for virtual-to-physical block mapping.
     pub hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
+    /// Pong buffer for hmap entries
+    pub prev_hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
     /// Grid node data (momentum, mass, CDF).
     pub nodes: GpuVector<GpuGridNode, B>,
     /// Active block headers tracking particle ranges.
@@ -319,7 +335,14 @@ impl<B: Backend> GpuGrid<B> {
             cpu_meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
-        let hmap_entries = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let prev_meta = GpuScalar::scalar(
+            backend,
+            cpu_meta,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        )?;
+        let default_entries = vec![GpuGridHashMapEntry::default(); capacity as usize];
+        let prev_hmap_entries = GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
+        let hmap_entries = GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
         let nodes = GpuVector::vector_uninit_encased(
             backend,
             capacity * NODES_PER_BLOCK,
@@ -344,7 +367,9 @@ impl<B: Backend> GpuGrid<B> {
         Ok(Self {
             cpu_meta,
             meta,
+            prev_meta,
             hmap_entries,
+            prev_hmap_entries,
             nodes,
             active_blocks,
             scan_values,
@@ -354,6 +379,11 @@ impl<B: Backend> GpuGrid<B> {
             rigid_nodes_linked_lists,
             debug,
         })
+    }
+
+    pub fn swap_buffers(&mut self) {
+        std::mem::swap(&mut self.meta, &mut self.prev_meta);
+        std::mem::swap(&mut self.prev_hmap_entries, &mut self.hmap_entries);
     }
 }
 

@@ -7,6 +7,7 @@ use slosh::rapier::prelude::{
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
 use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
+use std::any::Any;
 
 pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,
@@ -72,6 +73,7 @@ pub struct PhysicsContext<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub data: MpmData<WebGpu, GpuModel>,
     pub rapier_data: RapierData,
     pub callbacks: Vec<Box<dyn PhysicsCallback<GpuModel>>>,
+    pub hooks_state: Option<Box<dyn Any>>,
 }
 
 // #[derive(Default)]

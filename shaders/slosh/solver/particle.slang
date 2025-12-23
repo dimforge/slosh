@@ -14,6 +14,14 @@ public struct Dynamics {
     //       particle’s velocity gradient. After particle_update, this
     //       contains the affine matrix for APIC transfer.
     public matrix<float, DIM, DIM> affine;
+    // Additional user-defined force applied indirectly to the particle.
+    // Reset at each particle_update invocation.
+    // TODO: unclear if we should apply the force to the particle itself
+    //       instead of going through the grid.
+    // NOTE: we store the force multiplied by dt instead of just
+    //       the force so we don’t have to have access to dt in p2g
+    //       (adding that access would exceed 10 bindings…)
+    public vector<float, DIM> force_dt;
     public float vel_grad_det;
     public Cdf cdf;
     public float init_volume;

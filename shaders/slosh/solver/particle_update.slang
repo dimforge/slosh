@@ -115,6 +115,7 @@ func particle_update(
         dynamics.affine = Mat<float>(0.0);
         dynamics.mass = 0.0;
     }
+    dynamics.force_dt = Vect<float>(0.0);
 
     particles_dyn[particle_id] = dynamics;
 }

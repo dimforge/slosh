@@ -146,10 +146,12 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 
         //// Step the simulation.
 
+        let mut no_state = Box::new(());
+        let hooks_state = physics.hooks_state.as_deref_mut().unwrap_or(&mut no_state);
         for _ in 0..self.app_state.num_substeps {
             self.app_state
                 .pipeline
-                .launch_step(&self.gpu, &mut encoder, &mut physics.data, &mut *self.hooks)
+                .launch_step(&self.gpu, &mut encoder, &mut physics.data, &mut *self.hooks, hooks_state)
                 .await
                 .unwrap();
         }

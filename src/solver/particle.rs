@@ -30,6 +30,10 @@ pub struct ParticleDynamics {
     pub def_grad: Matrix<f32>,
     /// APIC affine velocity matrix for improved momentum conservation.
     pub affine: Matrix<f32>,
+    /// Additional force applied indirectly to the particle.
+    /// Resets automatically at the `particle_update` stage of the
+    /// MPM pipeline.
+    pub force_dt: Vector<f32>,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
     /// Collision detection field data for rigid body coupling.
@@ -62,6 +66,7 @@ impl ParticleDynamics {
             velocity: Vector::zeros(),
             def_grad: Matrix::identity(),
             affine: Matrix::zeros(),
+            force_dt: Vector::zeros(),
             vel_grad_det: 0.0,
             init_volume,
             init_radius: radius,

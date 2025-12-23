@@ -15,6 +15,7 @@ static const uint WORKGROUP_SIZE_Z = 1;
 static const uint NUM_SHARED_CELLS = 10 * 10; // block-size plus 2 from adjacent blocks: (8 + 2)^2
 groupshared float3 shared_vel_mass[NUM_SHARED_CELLS];
 groupshared float2x2 shared_affine[NUM_SHARED_CELLS];
+groupshared float2 shared_force_dt[NUM_SHARED_CELLS];
 #else
 static const uint WORKGROUP_SIZE_X = 4;
 static const uint WORKGROUP_SIZE_Y = 4;
@@ -22,6 +23,7 @@ static const uint WORKGROUP_SIZE_Z = 4;
 static const uint NUM_SHARED_CELLS = 6 * 6 * 6; // block-size plus 2 from adjacent blocks: (4 + 2)^3
 groupshared float4 shared_vel_mass[NUM_SHARED_CELLS];
 groupshared float3x3 shared_affine[NUM_SHARED_CELLS];
+groupshared float3 shared_force_dt[NUM_SHARED_CELLS];
 #endif
 groupshared SharedNode shared_nodes[NUM_SHARED_CELLS];
 groupshared Position shared_pos[NUM_SHARED_CELLS];
@@ -186,6 +188,7 @@ func p2g_step(
         let particle_pos = shared_pos[nbh_shared_index];
         let particle_vel_mass = shared_vel_mass[nbh_shared_index];
         let particle_affine = shared_affine[nbh_shared_index];
+        let particle_force_dt = shared_force_dt[nbh_shared_index];
         let ref_elt_pos_minus_particle_pos = dir_to_associated_grid_node(particle_pos, cell_width);
         // TODO: only compute the one weight we need.
         let w = QuadraticKernel::precompute_weights(ref_elt_pos_minus_particle_pos, cell_width);
@@ -201,7 +204,7 @@ func p2g_step(
         let particle_vel = particle_vel_mass.xyz;
         let particle_mass = particle_vel_mass.w;
         let shift = uint3(2u, 2, 2) - NBH_SHIFTS[i];
-        let momentum = particle_vel * particle_mass;
+        let momentum = particle_vel * particle_mass + particle_force_dt;
         let dpt = ref_elt_pos_minus_particle_pos + float3(shift) * cell_width; // cell_pos - particle_pos
         let weight = w[0][shift.x] * w[1][shift.y] * w[2][shift.z];
 #endif
@@ -385,6 +388,7 @@ func fetch_next_particle(
                     shared_normals[shared_flat_index] = particles_dyn[curr_particle_id].cdf.normal;
                     shared_pos[shared_flat_index] = particles_pos[curr_particle_id];
                     shared_affine[shared_flat_index] = particles_dyn[curr_particle_id].affine;
+                    shared_force_dt[shared_flat_index] = particles_dyn[curr_particle_id].force_dt;
 
 #if DIM == 2
                     shared_vel_mass[shared_flat_index] = float3(particles_dyn[curr_particle_id].velocity, particles_dyn[curr_particle_id].mass);
@@ -401,10 +405,12 @@ func fetch_next_particle(
                     shared_pos[shared_flat_index].pt = float2(0.0);
                     shared_affine[shared_flat_index] = float2x2(float2(0.0), float2(0.0));
                     shared_vel_mass[shared_flat_index] = float3(0.0);
+                    shared_force_dt[shared_flat_index] = float2(0.0);
 #else
                     shared_pos[shared_flat_index].pt = float3(0.0);
                     shared_affine[shared_flat_index] = float3x3(float3(0.0), float3(0.0), float3(0.0));
                     shared_vel_mass[shared_flat_index] = float4(0.0);
+                    shared_force_dt[shared_flat_index] = float3(0.0);
 #endif
                 }
 

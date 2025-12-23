@@ -74,6 +74,7 @@ pub mod models;
 pub mod pipeline;
 pub(crate) mod sampling;
 pub mod solver;
+pub mod trimesh;
 
 /// Embedded directory containing Slang shader source files.
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =

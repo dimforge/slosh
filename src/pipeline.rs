@@ -11,6 +11,7 @@ use crate::solver::{
     GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf,
     WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
 };
+use std::any::Any;
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::{GpuSim, Vector};
@@ -64,19 +65,21 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         _backend: &B,
         _encoder: &mut B::Encoder,
         _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
     ) -> Result<(), B::Error> {
         Ok(())
     }
 
     /// Custom operation run after the main Particle-To-Grid transfer.
-    fn after_p2g(&mut self, _backend: &B, _encoder: &mut B::Encoder, _data: &mut MpmData<B, GpuModel>) -> Result<(), B::Error> { Ok(()) }
+    fn after_p2g(&mut self, _backend: &B, _encoder: &mut B::Encoder, _data: &mut MpmData<B, GpuModel>,
+    _state: &mut dyn Any) -> Result<(), B::Error> { Ok(()) }
 
     /// Custom operation run after updating the grid.
     fn after_grid_update(
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>,
+        _data: &mut MpmData<B, GpuModel>, _state: &mut dyn Any
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -86,7 +89,7 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>,
+        _data: &mut MpmData<B, GpuModel>,_state: &mut dyn Any
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -96,7 +99,7 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>,
+        _data: &mut MpmData<B, GpuModel>,_state: &mut dyn Any
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -369,6 +372,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         encoder: &mut B::Encoder,
         data: &mut MpmData<B, GpuModel>,
         hooks: &mut dyn MpmPipelineHooks<B, GpuModel>,
+        hooks_state: &mut dyn Any,
         // mut timestamps: Option<&mut GpuTimestamps>,
     ) -> Result<(), B::Error> {
         {
@@ -389,6 +393,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
 
         {
             let mut pass = encoder.begin_pass(); // ("grid sort", timestamps.as_deref_mut());
+            data.grid.swap_buffers();
             self.grid.launch_sort(
                 backend,
                 &mut pass,
@@ -407,7 +412,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_particle_sort(backend, encoder, data)?;
+        hooks.after_particle_sort(backend, encoder, data, hooks_state)?;
 
         {
             let mut pass = encoder.begin_pass(); // ("grid_update_cdf", timestamps.as_deref_mut());
@@ -449,7 +454,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_p2g(backend, encoder, data)?;
+        hooks.after_p2g(backend, encoder, data, hooks_state)?;
 
         {
             let mut pass = encoder.begin_pass(); // ("grid_update", timestamps.as_deref_mut());
@@ -457,7 +462,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 .launch(backend, &mut pass, &data.sim_params, &data.grid)?;
         }
 
-        hooks.after_grid_update(backend, encoder, data)?;
+        hooks.after_grid_update(backend, encoder, data, hooks_state)?;
 
         {
             let mut pass = encoder.begin_pass(); // ("g2p", timestamps.as_deref_mut());
@@ -471,7 +476,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_g2p(backend, encoder, data)?;
+        hooks.after_g2p(backend, encoder, data, hooks_state)?;
 
         {
             let mut pass = encoder.begin_pass(); // ("particles_update", timestamps.as_deref_mut());
@@ -485,7 +490,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_particles_update(backend, encoder, data)?;
+        hooks.after_particles_update(backend, encoder, data, hooks_state)?;
 
         {
             let mut pass = encoder.begin_pass(); // ("integrate_bodies", timestamps.as_deref_mut());

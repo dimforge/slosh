@@ -75,5 +75,6 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         data,
         rapier_data,
         callbacks: vec![],
+        hooks_state: None,
     }
 }

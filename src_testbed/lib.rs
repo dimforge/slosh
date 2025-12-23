@@ -11,6 +11,7 @@ pub use data::*;
 use slang_hal::Shader;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::any::Any;
 
 mod data;
 mod prep_readback;
