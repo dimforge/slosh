@@ -71,7 +71,9 @@ func p2g(
 
 ) {
     let bid = block_id.x;
-    let vid = active_blocks[bid].virtual_id;
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid = BlockVirtualId(active_blocks[bid].virtual_id.id);
 
     // Figure out how many time we’ll have to iterate through
     // the particle linked-list to traverse them all.
