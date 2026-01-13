@@ -96,8 +96,9 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         &particles,
         &rapier_data.bodies,
         &rapier_data.colliders,
+        &[],
         cell_width,
-        60_000,
+        30_000,
     )
     .unwrap();
     PhysicsContext {
