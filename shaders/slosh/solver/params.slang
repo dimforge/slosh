@@ -8,6 +8,4 @@ public struct SimulationParams {
 #endif
 
     public float dt;
-    /// Rayleigh mass-proportional damping coefficient (1/s).
-    public float damping;
 }

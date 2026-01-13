@@ -2,6 +2,7 @@ module p2g;
 
 import slosh.solver.params;
 import slosh.solver.particle;
+import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 import slosh.solver.rigid_impulses;
@@ -68,10 +69,13 @@ func p2g(
     RWStructuredBuffer<Node> nodes,
     StructuredBuffer<BodyVelocity> body_vels,
     RWStructuredBuffer<IntegerImpulseAtomic> body_impulses,
-
+    StructuredBuffer<BoundaryCondition> body_materials,
 ) {
     let bid = block_id.x;
-    let vid = active_blocks[bid].virtual_id;
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid_ = active_blocks[bid].virtual_id.id;
+    let vid = BlockVirtualId(vid_);
 
     // Figure out how many time we’ll have to iterate through
     // the particle linked-list to traverse them all.
@@ -114,7 +118,7 @@ func p2g(
         fetch_next_particle(particles_pos, particles_dyn, particle_node_linked_lists, tid);
         GroupMemoryBarrierWithGroupSync();
 
-        let partial_result = p2g_step(body_vels, body_impulses, packed_cell_index_in_block, grid[0].cell_width, node_affinities, collider_id);
+        let partial_result = p2g_step(body_vels, body_impulses, body_materials, packed_cell_index_in_block, grid[0].cell_width, node_affinities, collider_id);
         total_result.new_momentum_velocity_mass += partial_result.new_momentum_velocity_mass;
         total_result.impulse += partial_result.impulse;
         total_result.ang_impulse += partial_result.ang_impulse;
@@ -160,6 +164,7 @@ func p2g_step(
     body_vels: StructuredBuffer<BodyVelocity>,
     // NOTE: could have been StructuredBuffer but the kernel itself needs RW.
     body_impulses: RWStructuredBuffer<IntegerImpulseAtomic>,
+    body_materials: StructuredBuffer<BoundaryCondition>,
     packed_cell_index_in_block: uint,
     cell_width: float,
     node_affinity: uint,
@@ -215,9 +220,10 @@ func p2g_step(
                 let particle_normal = shared_normals[nbh_shared_index];
                 let body_vel = body_vels[collider_id];
                 let body_com = body_impulses[collider_id].com;
+                let body_material = body_materials[collider_id];
                 let cell_center = dpt + particle_pos.pt;
                 let body_pt_vel = body_velocity_at_point(body_com, body_vel, cell_center);
-                let particle_ghost_vel = body_pt_vel + project_velocity(particle_vel - body_pt_vel, particle_normal);
+                let particle_ghost_vel = body_pt_vel + body_material.project_velocity(particle_vel - body_pt_vel, particle_normal);
                 let delta_impulse = (particle_vel - particle_ghost_vel) * (weight * particle_mass);
 
                 // TODO: we could do the ang impulse calcs only once after all the `p2g_step` executions.

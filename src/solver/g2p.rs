@@ -6,10 +6,7 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::solver::{
-    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
-    SimulationParams,
-};
+use crate::solver::{GpuBoundaryCondition, GpuMaterials, GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition, SimulationParams};
 use nexus::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -39,6 +36,7 @@ struct G2PArgs<'a, B: Backend> {
     particles_dyn: &'a GpuVector<ParticleDynamics, B>,
     body_vels: &'a GpuVector<GpuVelocity, B>,
     body_mprops: &'a GpuVector<GpuMassProperties, B>,
+    body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
 }
 
 impl<B: Backend> WgG2P<B> {
@@ -60,6 +58,7 @@ impl<B: Backend> WgG2P<B> {
         grid: &GpuGrid<B>,
         particles: &GpuParticles<B, GpuModel>,
         bodies: &GpuBodySet<B>,
+        body_materials: &GpuMaterials<B>
     ) -> Result<(), B::Error> {
         let args = G2PArgs {
             params: &sim_params.params,
@@ -72,6 +71,7 @@ impl<B: Backend> WgG2P<B> {
             particles_dyn: particles.dynamics(),
             body_vels: bodies.vels(),
             body_mprops: bodies.mprops(),
+            body_materials: &body_materials.materials,
         };
         self.g2p.launch_indirect(
             backend,

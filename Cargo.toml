@@ -25,18 +25,18 @@ rust.unexpected_cfgs = { level = "warn", check-cfg = [
 ] }
 
 [patch.crates-io]
-slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
-slang-hal-build = { path = "../slang-hal/crates/slang-hal-build" }
-slang-hal = { path = "../slang-hal/crates/slang-hal" }
-minislang = { path = "../slang-hal/crates/minislang" }
+#slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
+#slang-hal-build = { path = "../slang-hal/crates/slang-hal-build" }
+#slang-hal = { path = "../slang-hal/crates/slang-hal" }
+#minislang = { path = "../slang-hal/crates/minislang" }
 #stensor = { path = "../stensor" }
 #nexus2d = { path = "../nexus/crates/nexus2d" }
 #nexus3d = { path = "../nexus/crates/nexus3d" }
 
-#slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-#slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-#slang-hal = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-#minislang = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+slang-hal = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+minislang = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
 stensor = { git = "https://github.com/dimforge/stensor", branch = "comptime" }
 nexus2d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }
 nexus3d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }

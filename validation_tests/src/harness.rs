@@ -10,11 +10,12 @@ use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::{BufferUsages, SlangCompiler};
 use slosh3d::{
     pipeline::{MpmData, MpmPipeline},
-    solver::{GpuParticleModel, Particle, ParticleModel, ParticlePosition, SimulationParams},
+    solver::{GpuParticleModel, Particle, ParticleModel, ParticlePosition, SimulationParams, GpuBoundaryCondition},
 };
 use std::any::Any;
 use std::path::Path;
 use std::time::Instant;
+use rapier3d::geometry::ColliderHandle;
 use stensor::tensor::GpuTensor;
 use wgpu::Limits;
 
@@ -111,6 +112,7 @@ pub struct ScenarioConfig {
     pub particles: Vec<Particle<ParticleModel>>,
     pub bodies: RigidBodySet,
     pub colliders: ColliderSet,
+    pub materials: Vec<(ColliderHandle, GpuBoundaryCondition)>,
     pub gravity: Vector3<f32>,
     pub cell_width: f32,
     pub dt: f32,
@@ -128,6 +130,7 @@ impl Default for ScenarioConfig {
             particles: vec![],
             bodies: RigidBodySet::new(),
             colliders: ColliderSet::new(),
+            materials: vec![],
             gravity: vector![0.0, -9.81, 0.0],
             cell_width: 1.0,
             dt: 1.0 / 60.0,
@@ -155,7 +158,7 @@ impl ValidationHarness {
     /// Create a new validation harness with GPU backend.
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 10,
+            max_storage_buffers_per_shader_stage: 11,
             max_compute_workgroup_storage_size: 32768,
             ..Limits::default()
         };
@@ -190,6 +193,7 @@ impl ValidationHarness {
             &config.particles,
             &config.bodies,
             &config.colliders,
+            &config.materials,
             config.cell_width,
             config.grid_capacity,
         )?;
@@ -377,10 +381,10 @@ pub fn create_ground_plane(
     bodies: &mut RigidBodySet,
     colliders: &mut ColliderSet,
     y_position: f32,
-) {
+) -> ColliderHandle {
     let hy = 1.0;
     let rb = RigidBodyBuilder::fixed().translation(vector![0.0, y_position - hy, 0.0]);
     let rb_handle = bodies.insert(rb);
     let co = ColliderBuilder::cuboid(100.0, hy, 100.0);
-    colliders.insert_with_parent(co, rb_handle, bodies);
+    colliders.insert_with_parent(co, rb_handle, bodies)
 }

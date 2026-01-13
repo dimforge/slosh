@@ -47,6 +47,7 @@ pub use particle_update::WgParticleUpdate;
 pub use rigid_impulses::{GpuImpulses, RigidImpulse, WgRigidImpulses};
 pub use rigid_particle_update::WgRigidParticleUpdate;
 pub use timestep_bound::{GpuTimestepBounds, WgTimestepBounds};
+pub use boundary_condition::{GpuBoundaryCondition, GpuMaterials};
 
 mod g2p;
 mod g2p_cdf;
@@ -56,6 +57,7 @@ mod params;
 mod particle_update;
 mod rigid_impulses;
 mod rigid_particle_update;
+mod boundary_condition;
 
 mod grid_update;
 mod grid_update_cdf;

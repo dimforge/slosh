@@ -398,21 +398,3 @@ func reset(
    }
 //   }
 }
-
-// TODO: remove this, moved to boundary_condition.slang
-public func project_velocity(vel: Vect, n: Vect) -> Vect {
-    return Vect<float>(0.0);
-    // TODO: this should depend on the collider’s material
-    //       properties.
-    let normal_vel = dot(vel, n);
-
-    if (normal_vel < 0.0) {
-        let friction = 20.0;
-        let tangent_vel = vel - n * normal_vel;
-        let tangent_vel_len = length(tangent_vel);
-        let tangent_vel_dir = select(tangent_vel_len > 1.0e-8, tangent_vel / tangent_vel_len, Vect<float>(0.0));
-        return tangent_vel_dir * max(0.0, tangent_vel_len + friction * normal_vel);
-    } else {
-        return vel;
-    }
-}

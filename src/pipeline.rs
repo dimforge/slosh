@@ -6,20 +6,17 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{
-    GpuImpulses, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams,
-    GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf,
-    WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
-};
+use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
 use std::any::Any;
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::{GpuSim, Vector};
 use rapier::dynamics::RigidBodySet;
-use rapier::geometry::ColliderSet;
+use rapier::geometry::{ColliderHandle, ColliderSet};
 use slang_hal::{Shader, BufferUsages, SlangCompiler};
 use slang_hal::backend::{Backend, Encoder};
 use std::marker::PhantomData;
+use rapier::data::Coarena;
 use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
 
 /// GPU compute pipeline for Material Point Method simulation.
@@ -131,6 +128,8 @@ pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     pub rigid_particles: GpuRigidParticles<B>,
     /// Rigid bodies coupled with the MPM simulation.
     pub bodies: GpuBodySet<B>,
+    /// MPM materials associated to each rigid-body.
+    pub body_materials: GpuMaterials<B>,
     /// Accumulated impulses to apply to rigid bodies from MPM interactions.
     pub impulses: GpuImpulses<B>,
     /// Staging buffer for reading rigid body poses back to CPU.
@@ -179,6 +178,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
         particles: &[Particle<GpuModel::Model>],
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
+        materials: &[(ColliderHandle, GpuBoundaryCondition)],
         cell_width: f32,
         grid_capacity: u32,
     ) -> Result<Self, B::Error> {
@@ -193,6 +193,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
                 })
             })
             .collect();
+        let materials: Vec<_> = coupling.iter().map(|c| {
+            materials.iter().find(|e| e.0 == c.collider)
+                .map(|e| e.1)
+                .unwrap_or_default()
+        }).collect();
         Self::with_select_coupling(
             backend,
             params,
@@ -200,6 +205,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
             bodies,
             colliders,
             coupling,
+            &materials,
             cell_width,
             grid_capacity,
         )
@@ -231,11 +237,15 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         coupling: Vec<BodyCouplingEntry>,
+        materials: &[GpuBoundaryCondition], // Must have the same size as `coupling`.
         cell_width: f32,
         grid_capacity: u32,
     ) -> Result<Self, B::Error> {
+        assert_eq!(coupling.len(), materials.len());
+
         let sampling_step = cell_width; // TODO: * 1.5 ?
         let bodies = GpuBodySet::from_rapier(backend, bodies, colliders, &coupling)?;
+        let body_materials = GpuMaterials::new(backend, &materials)?;
         let sim_params = GpuSimulationParams::new(backend, params)?;
         let particles = GpuParticles::from_particles(backend, particles)?;
         let rigid_particles =
@@ -266,6 +276,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
             gravity: params.gravity,
             rigid_particles,
             bodies,
+            body_materials,
             impulses,
             grid,
             prefix_sum,
@@ -451,6 +462,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 &data.particles,
                 &data.impulses,
                 &data.bodies,
+                &data.body_materials,
             )?;
         }
 
@@ -473,6 +485,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 &data.grid,
                 &data.particles,
                 &data.bodies,
+                &data.body_materials,
             )?;
         }
 

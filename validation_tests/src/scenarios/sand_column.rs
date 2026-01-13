@@ -13,7 +13,7 @@ use crate::harness::{
 };
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use slosh3d::solver::ParticleModel;
+use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
 
 /// Parameters for the sand column collapse test.
 #[derive(Clone, Debug)]
@@ -107,13 +107,14 @@ pub fn sand_column_scenario(params: SandColumnParams) -> ScenarioConfig {
     let mut colliders = ColliderSet::new();
 
     // Ground plane
-    create_ground_plane(&mut bodies, &mut colliders, 0.0);
+    let floor = create_ground_plane(&mut bodies, &mut colliders, 0.0);
 
     ScenarioConfig {
         name: "sand_column_collapse".to_string(),
         particles,
         bodies,
         colliders,
+        materials: vec![(floor, GpuBoundaryCondition::stick())],
         gravity: vector![0.0, -params.gravity, 0.0],
         cell_width: params.cell_width,
         dt: 1.0 / 60.0,

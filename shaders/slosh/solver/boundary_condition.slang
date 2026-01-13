@@ -43,8 +43,10 @@ public struct BoundaryCondition {
                 }
             }
             case BoundaryConditionType::NonReflecting: {
-                /* TODO */
-                return Vect<float>(0.0);
+                return vel;
+            }
+            default: {
+                return vel;
             }
         }
     }

@@ -17,7 +17,7 @@ use crate::harness::{
 };
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, ColliderSet, RigidBodyBuilder, RigidBodySet};
-use slosh3d::solver::ParticleModel;
+use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
 
 /// Parameters for the elastic beam test.
 #[derive(Clone, Debug)]
@@ -89,7 +89,7 @@ pub fn elastic_beam_scenario(params: ElasticBeamParams) -> ScenarioConfig {
     let clamp_rb = RigidBodyBuilder::fixed().translation(vector![-0.5, center.y, 0.0]);
     let clamp_handle = bodies.insert(clamp_rb);
     let clamp_co = ColliderBuilder::cuboid(0.5, params.height, params.width);
-    colliders.insert_with_parent(clamp_co, clamp_handle, &mut bodies);
+    let wall = colliders.insert_with_parent(clamp_co, clamp_handle, &mut bodies);
 
     // Ground plane (below the beam)
     create_ground_plane(&mut bodies, &mut colliders, 0.0);
@@ -99,6 +99,7 @@ pub fn elastic_beam_scenario(params: ElasticBeamParams) -> ScenarioConfig {
         particles,
         bodies,
         colliders,
+        materials: vec![(wall, GpuBoundaryCondition::stick())],
         gravity: vector![0.0, -params.gravity, 0.0],
         cell_width: params.cell_width,
         dt: 1.0 / 60.0,

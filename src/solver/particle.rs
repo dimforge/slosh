@@ -44,6 +44,11 @@ pub struct ParticleDynamics {
     pub init_radius: f32,
     /// Particle mass (kg).
     pub mass: f32,
+    /// Rayleigh mass-proportional damping coefficient (1/s).
+    ///
+    /// Applies a damping force proportional to velocity: F_damp = -damping * m * v.
+    /// Typical values: 0.0 (no damping) to 10.0 (heavy damping).
+    pub damping: f32,
     /// The particle phase (used by materials that can break).
     pub phase: f32,
     /// Whether this particle is active (1) or disabled (0).
@@ -71,10 +76,16 @@ impl ParticleDynamics {
             init_volume,
             init_radius: radius,
             mass: init_volume * density,
+            damping: 0.0,
             cdf: Cdf::default(),
             phase: 1.0,
             enabled: 1,
         }
+    }
+
+    /// Sets the damping coefficient for this particle.
+    pub fn set_damping(&mut self, damping: f32) {
+        self.damping = damping;
     }
 
     /// Updates the particle mass based on a new density.

@@ -13,7 +13,7 @@ use crate::harness::{
 };
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use slosh3d::solver::ParticleModel;
+use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
 
 /// Parameters for the bouncing ball test.
 #[derive(Clone, Debug)]
@@ -99,7 +99,7 @@ pub fn bouncing_ball_scenario(params: BouncingBallParams) -> ScenarioConfig {
     let mut colliders = ColliderSet::new();
 
     // Ground plane
-    create_ground_plane(&mut bodies, &mut colliders, 0.0);
+    let ground_handle = create_ground_plane(&mut bodies, &mut colliders, 0.0);
     let disp = params.expected_displacement();
     println!("EXPECTED: {}", disp);
 
@@ -108,6 +108,7 @@ pub fn bouncing_ball_scenario(params: BouncingBallParams) -> ScenarioConfig {
         particles,
         bodies,
         colliders,
+        materials: vec![(ground_handle, GpuBoundaryCondition::separate(0.0))],
         gravity: vector![0.0, -params.gravity, 0.0],
         cell_width: params.cell_width,
         dt: 1.0 / 60.0,

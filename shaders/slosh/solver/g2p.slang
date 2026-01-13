@@ -2,6 +2,7 @@ module g2p;
 
 import slosh.solver.params;
 import slosh.solver.particle;
+import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 import slosh.models.linear_elasticity;
@@ -44,11 +45,17 @@ func g2p(
     RWStructuredBuffer<Dynamics> particles_dyn,
     StructuredBuffer<BodyVelocity> body_vels,
     StructuredBuffer<BodyMassProperties> body_mprops,
+    StructuredBuffer<BoundaryCondition> body_materials,
 ) {
     let bid = block_id.x;
 
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid_ = active_blocks[bid].virtual_id.id;
+    let vid = BlockVirtualId(vid_);
+
     // Block -> shared memory transfer.
-    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, active_blocks[bid].virtual_id);
+    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, vid);
 
     // Sync after shared memory initialization.
     GroupMemoryBarrierWithGroupSync();
@@ -62,7 +69,7 @@ func g2p(
          sorted_particle_id < max_particle_id;
          sorted_particle_id += WORKGROUP_SIZE) {
         let particle_id = sorted_particle_ids[sorted_particle_id];
-        particle_g2p(body_vels, body_mprops, particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
+        particle_g2p(body_vels, body_mprops, body_materials, particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
     }
 }
 
@@ -137,6 +144,7 @@ func global_shared_memory_transfers(
 func particle_g2p(
     body_vels: StructuredBuffer<BodyVelocity>,
     body_mprops: StructuredBuffer<BodyMassProperties>,
+    body_materials: StructuredBuffer<BoundaryCondition>,
     particles_pos: StructuredBuffer<Position>,
     particles_dyn: RWStructuredBuffer<Dynamics>,
     particle_id: uint,
@@ -200,9 +208,10 @@ func particle_g2p(
                 if (cell_cdf.closest_id != NONE) {
                     let body_vel = body_vels[cell_cdf.closest_id]; // TODO: invalid if there is no body.
                     let body_com = body_mprops[cell_cdf.closest_id].com;
+                    let body_material = body_materials[cell_cdf.closest_id];
                     let cell_center = dpt + particle_pos.pt;
                     let body_pt_vel =  body_velocity_at_point(body_com, body_vel, cell_center);
-                    let particle_ghost_vel = body_pt_vel + project_velocity(particle_vel - body_pt_vel, particle_cdf.normal);
+                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(particle_vel - body_pt_vel, particle_cdf.normal);
 
 #if DIM == 2
                     cpic_cell_data = float3(particle_ghost_vel, cell_data.z);

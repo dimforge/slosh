@@ -70,6 +70,10 @@ func particle_update(
         dynamics.velocity = dynamics.velocity / length(dynamics.velocity) * cell_width / dt;
     }
 
+    // Apply Rayleigh mass-proportional damping (implicit integration for stability).
+    // v_new = v / (1 + damping * dt)
+    dynamics.velocity = dynamics.velocity / (1.0 + dynamics.damping * dt);
+
     let new_particle_pos = particle_pos + dynamics.velocity * dt;
 
     /*

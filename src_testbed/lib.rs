@@ -82,7 +82,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         builders: SceneBuilders<GpuModel>,
     ) -> Stage<GpuModel> {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 10,
+            max_storage_buffers_per_shader_stage: 11,
             max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
             ..Limits::default()
         };
