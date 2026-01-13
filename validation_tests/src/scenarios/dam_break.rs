@@ -15,7 +15,7 @@ use crate::harness::{
 };
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, ColliderSet, RigidBodyBuilder, RigidBodySet};
-use slosh3d::solver::ParticleModel;
+use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
 
 /// Parameters for the dam break test.
 #[derive(Clone, Debug)]
@@ -41,13 +41,13 @@ pub struct DamBreakParams {
 impl Default for DamBreakParams {
     fn default() -> Self {
         Self {
-            width: 8.0,
-            height: 4.0,
+            width: 4.0,
+            height: 8.0,
             depth: 4.0,
             young_modulus: 1.0e7,
             poisson_ratio: 0.2,
             density: 2700.0,
-            cell_width: 0.5,
+            cell_width: 0.15,
             gravity: 9.81,
         }
     }
@@ -92,43 +92,51 @@ pub fn dam_break_scenario(params: DamBreakParams) -> ScenarioConfig {
     let mut colliders = ColliderSet::new();
 
     // Ground plane
-    create_ground_plane(&mut bodies, &mut colliders, 0.0);
+    let floor = create_ground_plane(&mut bodies, &mut colliders, 0.0);
 
     // Left wall (keeps fluid in place initially - can be removed in Taichi version)
     let left_rb = RigidBodyBuilder::fixed().translation(vector![-0.5, params.height / 2.0, 0.0]);
     let left_handle = bodies.insert(left_rb);
     let left_co = ColliderBuilder::cuboid(0.5, params.height, params.depth);
-    colliders.insert_with_parent(left_co, left_handle, &mut bodies);
+    let left = colliders.insert_with_parent(left_co, left_handle, &mut bodies);
 
-    // // Back and front walls
-    // let back_rb = RigidBodyBuilder::fixed().translation(vector![
-    //     params.width * 2.0,
-    //     params.height / 2.0,
-    //     -params.depth / 2.0 - 0.5
-    // ]);
-    // let back_handle = bodies.insert(back_rb);
-    // let back_co = ColliderBuilder::cuboid(params.width * 4.0, params.height, 0.5);
-    // colliders.insert_with_parent(back_co, back_handle, &mut bodies);
-    //
-    // let front_rb = RigidBodyBuilder::fixed().translation(vector![
-    //     params.width * 2.0,
-    //     params.height / 2.0,
-    //     params.depth / 2.0 + 0.5
-    // ]);
-    // let front_handle = bodies.insert(front_rb);
-    // let front_co = ColliderBuilder::cuboid(params.width * 4.0, params.height, 0.5);
-    // colliders.insert_with_parent(front_co, front_handle, &mut bodies);
+    // Back and front walls
+    let back_rb = RigidBodyBuilder::fixed().translation(vector![
+        params.width * 2.0,
+        params.height / 2.0,
+        -params.depth / 2.0 - 0.5
+    ]);
+    let back_handle = bodies.insert(back_rb);
+    let back_co = ColliderBuilder::cuboid(params.width * 4.0, params.height, 0.5);
+    let back = colliders.insert_with_parent(back_co, back_handle, &mut bodies);
+
+    let front_rb = RigidBodyBuilder::fixed().translation(vector![
+        params.width * 2.0,
+        params.height / 2.0,
+        params.depth / 2.0 + 0.5
+    ]);
+    let front_handle = bodies.insert(front_rb);
+    let front_co = ColliderBuilder::cuboid(params.width * 4.0, params.height, 0.5);
+    let front = colliders.insert_with_parent(front_co, front_handle, &mut bodies);
+
+    let materials = vec![
+        (back, GpuBoundaryCondition::slip()),
+        (front, GpuBoundaryCondition::slip()),
+        (floor, GpuBoundaryCondition::default()),
+        (left, GpuBoundaryCondition::slip()),
+    ];
 
     ScenarioConfig {
         name: "dam_break".to_string(),
         particles,
         bodies,
         colliders,
+        materials,
         gravity: vector![0.0, -params.gravity, 0.0],
         cell_width: params.cell_width,
         dt: 1.0 / 60.0,
         num_substeps: 20,
-        total_steps: 300, // 5 seconds
+        total_steps: 600, // 5 seconds
         snapshot_interval: 5,
         grid_capacity: 30_000,
         material_params: MaterialParams {

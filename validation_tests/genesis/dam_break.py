@@ -1,5 +1,5 @@
 # Dam Break - Genesis MPM Reference
-# Compare with Slosh MPM simulation. Uses liquid material.
+# Compare with Slosh MPM simulation. Uses sand material.
 # Uses Genesis physics engine (https://github.com/Genesis-Embodied-AI/Genesis)
 
 import genesis as gs
@@ -15,16 +15,16 @@ POISSON_RATIO = 0.2
 DENSITY = 2700
 
 # Geometry
-WIDTH = 8
-HEIGHT = 4
+WIDTH = 4
+HEIGHT = 8
 DEPTH = 4
-CELL_WIDTH = 0.5
+CELL_WIDTH = 0.15
 
 # Simulation parameters
 GRAVITY = 9.81
 DT = 1.0 / 60.0
 N_SUBSTEPS = 20
-TOTAL_FRAMES = 300
+TOTAL_FRAMES = 600
 SNAPSHOT_INTERVAL = 5
 
 def sanitize_value(val):
@@ -43,7 +43,7 @@ def run_simulation():
 
     # Compute domain bounds - fluid starts at left, spreads to right
     margin = 2.0
-    lower_bound = (-margin, 0, -DEPTH - margin)
+    lower_bound = (-margin, -4.0, -DEPTH - margin)
     upper_bound = (WIDTH * 4 + margin, HEIGHT + margin, DEPTH + margin)
 
     # Create scene with MPM solver
@@ -63,18 +63,39 @@ def run_simulation():
     )
 
     # Add ground plane
-    plane = scene.add_entity(morph=gs.morphs.Plane())
+    plane = scene.add_entity(
+        morph=gs.morphs.Plane(pos=(0, 0, 0), euler=(-90, 0, 0)),
+        material=gs.materials.Rigid(coup_friction=1.0),
+    )
+
+    # Add left wall (keeps fluid in place initially)
+    left_wall = scene.add_entity(
+        morph=gs.morphs.Plane(pos=(0, HEIGHT / 2, 0), euler=(0, 90, 0)),
+        material=gs.materials.Rigid(coup_friction=0.0),
+    )
+
+    # Add back wall
+    back_wall = scene.add_entity(
+        morph=gs.morphs.Plane(pos=(WIDTH * 2, HEIGHT / 2, -DEPTH / 2), euler=(0, 0, 0)),
+        material=gs.materials.Rigid(coup_friction=0.0),
+    )
+
+    # Add front wall
+    front_wall = scene.add_entity(
+        morph=gs.morphs.Plane(pos=(WIDTH * 2, HEIGHT / 2, DEPTH / 2), euler=(180, 0, 0)),
+        material=gs.materials.Rigid(coup_friction=0.0),
+    )
 
     # Add fluid column (dam)
     fluid = scene.add_entity(
-        material=gs.materials.MPM.Liquid(
+        material=gs.materials.MPM.Sand(
             E=YOUNG_MODULUS,
             nu=POISSON_RATIO,
             rho=DENSITY,
             sampler="regular",
         ),
         morph=gs.morphs.Box(
-            pos=(WIDTH/2, HEIGHT/2 + 1.0, 0.0),
+            pos=(WIDTH/2, HEIGHT/2, 0.0),
             size=(WIDTH, HEIGHT, DEPTH),
         ),
         surface=gs.surfaces.Default(
@@ -143,7 +164,7 @@ def run_simulation():
                 "young_modulus": YOUNG_MODULUS,
                 "poisson_ratio": POISSON_RATIO,
                 "density": DENSITY,
-                "material_type": "liquid"
+                "material_type": "sand"
             }
         }
     }
