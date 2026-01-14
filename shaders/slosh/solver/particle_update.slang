@@ -2,6 +2,7 @@ module particle_update;
 
 import slosh.solver.params;
 import slosh.solver.particle;
+import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 //import slosh.models.neo_hookean_elasticity;
@@ -57,12 +58,13 @@ func particle_update(
      */
      // TODO: double check that we never need the reprojection below.
      //       This reprojection isn’t part of the original MPM-MLS/CPIC paper but we added
-     //       it at some point as it appearered that we’d still get some penetrating particles.
+     //       it at some point as it appeared that we’d still get some penetrating particles.
      //       However, that might have been caused by other bugs so it is unsure if we need to
      //       keep it now.
-     //    if (dynamics.cdf.signed_distance < -0.05 * cell_width) {
-     //        dynamics.velocity = dynamics.cdf.rigid_vel + project_velocity((dynamics.velocity - dynamics.cdf.rigid_vel), dynamics.cdf.normal);
-     //    }
+     if (dynamics.cdf.signed_distance < -0.05 * cell_width) {
+         let slip = BoundaryCondition(BoundaryConditionType::Slip, 0.0);
+         dynamics.velocity = dynamics.cdf.rigid_vel + slip.project_velocity((dynamics.velocity - dynamics.cdf.rigid_vel), dynamics.cdf.normal);
+     }
 
     // Clamp the max velocity a particle can get.
     // TODO: clamp the grid velocities instead?
@@ -81,12 +83,12 @@ func particle_update(
      */
      // TODO: apply the penalty impulse as an extra force on the grid instead of on
      //       changing the particle velocity directly?
-//     static const float PENALTY_COEFF = 1.0e3;
-//     if (dynamics.cdf.signed_distance < -0.05 * cell_width) { // && dynamics.cdf.signed_distance > -0.3 * cell_width {
-//         let corrected_dist = max(dynamics.cdf.signed_distance, -0.3 * cell_width);
-//         let impulse = (dt * -corrected_dist * PENALTY_COEFF) * dynamics.cdf.normal;
-//         dynamics.velocity += impulse; // / curr_particle_vol.mass;
-//     }
+     static const float PENALTY_COEFF = 1.0e3;
+     if (dynamics.cdf.signed_distance < -0.05 * cell_width) { // && dynamics.cdf.signed_distance > -0.3 * cell_width {
+         let corrected_dist = max(dynamics.cdf.signed_distance, -0.3 * cell_width);
+         let impulse = (dt * -corrected_dist * PENALTY_COEFF) * dynamics.cdf.normal;
+         dynamics.velocity += impulse; // / curr_particle_vol.mass;
+     }
 
     /*
      * Deformation gradient update.

@@ -20,6 +20,11 @@ public struct BoundaryCondition {
     BoundaryConditionType type;
     float friction;
 
+    public __init(BoundaryConditionType type, float friction) {
+        this.type = type;
+        this.friction = friction;
+    }
+
     public func project_velocity(vel: Vect, n: Vect) -> Vect {
         switch (this.type) {
             case BoundaryConditionType::Stick: {

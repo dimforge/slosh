@@ -127,7 +127,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         &rapier_data.colliders,
         &[],
         cell_width,
-        60_000,
+        30_000,
     )
     .unwrap();
 

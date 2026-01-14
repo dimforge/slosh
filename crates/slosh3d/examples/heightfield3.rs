@@ -6,7 +6,7 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
     pipeline::MpmData,
-    solver::{Particle, ParticleModel, SimulationParams},
+    solver::{Particle, ParticleModel, SimulationParams, GpuBoundaryCondition},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
@@ -57,7 +57,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     let rb = RigidBodyBuilder::fixed();
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::trimesh(vtx, idx).unwrap();
-    rapier_data
+    let floor = rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
@@ -67,9 +67,9 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         &particles,
         &rapier_data.bodies,
         &rapier_data.colliders,
-        &[],
+        &[(floor, GpuBoundaryCondition::stick())],
         cell_width,
-        60_000,
+        30_000,
     )
     .unwrap();
     PhysicsContext {

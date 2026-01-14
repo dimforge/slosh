@@ -47,7 +47,7 @@ impl Default for GpuBoundaryCondition {
     fn default() -> Self {
         // TODO: figure out why the friction needs to be so
         //       high with CPIC.
-        Self::separate(20.0)
+        Self::separate(1.0)
     }
 }
 

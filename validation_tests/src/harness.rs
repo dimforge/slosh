@@ -137,7 +137,7 @@ impl Default for ScenarioConfig {
             num_substeps: 10,
             total_steps: 300,
             snapshot_interval: 1,
-            grid_capacity: 60_000,
+            grid_capacity: 30_000,
             material_params: MaterialParams {
                 young_modulus: 1.0e6,
                 poisson_ratio: 0.3,

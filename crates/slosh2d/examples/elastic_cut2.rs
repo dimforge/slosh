@@ -26,6 +26,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         for j in 0..700 {
             let position =
                 point![i as f32 + 0.5, j as f32 + 0.5] * cell_width / 2.0 + Vector2::y() * offset_y;
+
             let density = 1000.0;
             let radius = cell_width / 4.0;
             let model = ParticleModel::elastic(5.0e6, 0.2);

@@ -74,7 +74,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         &rapier_data.colliders,
         &co_boundary_condition,
         cell_width,
-        60_000,
+        30_000,
     )
         .unwrap();
 

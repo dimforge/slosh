@@ -206,6 +206,7 @@ pub struct GpuGridMetadata {
 #[repr(C)]
 pub struct GpuGridNode {
     momentum_velocity_mass: nalgebra::Vector4<f32>,
+    momentum_velocity_mass_incompatible: nalgebra::Vector4<f32>,
     cdf: GpuGridNodeCdf,
 }
 

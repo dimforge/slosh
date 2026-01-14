@@ -8,7 +8,7 @@ use slosh::{
     solver::{Particle, SimulationParams},
 };
 use slosh_testbed2d::{AppState, PhysicsContext};
-use slosh2d::solver::ParticleModel;
+use slosh2d::solver::{GpuBoundaryCondition, ParticleModel};
 
 #[allow(dead_code)]
 fn main() {
@@ -57,7 +57,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let rb = RigidBodyBuilder::fixed().translation(vector![0.0, height / 2.0]).build();
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(fixed_part, height);
-    rapier_data
+    let ground = rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
@@ -67,7 +67,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         &particles,
         &rapier_data.bodies,
         &rapier_data.colliders,
-        &[],
+        &[(ground, GpuBoundaryCondition::stick())],
         cell_width,
         30_000,
     )

@@ -271,6 +271,11 @@ public struct Node {
     /// (depending on the context). The fourth component contains the cell’s mass.
     // TODO: maybe we don’t really need to pack ourself.
     public vector<float, DIM + 1> momentum_velocity_mass;
+    // If a particle is incompatible with this node (as pepr CPIC’s concept of compatibility
+    // based on affinities), it will contribute to this field instead of `momentum_velocity_mass`.
+    // That way the P2G/G2P transfers on incompatible nodes still work properly and we don’t
+    // loose the contributions of other compatible particles influencing this incompatible node too.
+    public vector<float, DIM + 1> momentum_velocity_mass_incompatible;
     public NodeCdf cdf;
 }
 
@@ -390,6 +395,7 @@ func reset(
 //   for (var i = invocation_id.x; i < num_nodes; i += num_threads) {
     if (i < num_nodes) {
        nodes[i].momentum_velocity_mass = vector<float, DIM + 1>(0.0);
+       nodes[i].momentum_velocity_mass_incompatible = vector<float, DIM + 1>(0.0);
        nodes[i].cdf = NodeCdf(0.0, 0, NONE);
        nodes_linked_lists[i].head = NONE;
        nodes_linked_lists[i].len = 0u;

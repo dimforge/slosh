@@ -114,7 +114,7 @@ pub fn sand_column_scenario(params: SandColumnParams) -> ScenarioConfig {
         particles,
         bodies,
         colliders,
-        materials: vec![(floor, GpuBoundaryCondition::stick())],
+        materials: vec![(floor, GpuBoundaryCondition::default())],
         gravity: vector![0.0, -params.gravity, 0.0],
         cell_width: params.cell_width,
         dt: 1.0 / 60.0,

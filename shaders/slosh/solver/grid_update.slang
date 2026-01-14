@@ -45,8 +45,11 @@ func grid_update(
 
     let global_id = global_node_id.id;
     let momentum_velocity_mass = nodes[global_id].momentum_velocity_mass;
+    let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
     let new_grid_velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass);
+    let new_grid_velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible);
     nodes[global_id].momentum_velocity_mass = new_grid_velocity_mass;
+    nodes[global_id].momentum_velocity_mass_incompatible = new_grid_velocity_mass_incompatible;
 }
 
 #if DIM == 2
