@@ -5,25 +5,25 @@
 
 use crate::harness::SimulationTrajectory;
 use kiss3d::camera::ArcBall;
+use kiss3d::egui;
 use kiss3d::light::Light;
 use kiss3d::nalgebra::{Point3, Vector3};
 use kiss3d::scene::SceneNode;
 use kiss3d::window::Window;
-use kiss3d::egui;
-use std::path::Path;
 use rapier3d::prelude::Aabb;
+use std::path::Path;
 
 /// Default color palette for distinguishing trajectories.
 /// Colors are RGBA in [0, 1] range.
 const TRAJECTORY_COLORS: &[[f32; 4]] = &[
-    [0.4, 0.6, 1.0, 1.0],   // Blue (original color)
-    [1.0, 0.4, 0.3, 1.0],   // Red
-    [0.3, 0.9, 0.4, 1.0],   // Green
-    [1.0, 0.8, 0.2, 1.0],   // Yellow
-    [0.8, 0.4, 1.0, 1.0],   // Purple
-    [0.2, 0.9, 0.9, 1.0],   // Cyan
-    [1.0, 0.5, 0.0, 1.0],   // Orange
-    [1.0, 0.4, 0.7, 1.0],   // Pink
+    [0.4, 0.6, 1.0, 1.0], // Blue (original color)
+    [1.0, 0.4, 0.3, 1.0], // Red
+    [0.3, 0.9, 0.4, 1.0], // Green
+    [1.0, 0.8, 0.2, 1.0], // Yellow
+    [0.8, 0.4, 1.0, 1.0], // Purple
+    [0.2, 0.9, 0.9, 1.0], // Cyan
+    [1.0, 0.5, 0.0, 1.0], // Orange
+    [1.0, 0.4, 0.7, 1.0], // Pink
 ];
 
 /// Configuration for the trajectory viewer.
@@ -61,23 +61,36 @@ pub struct TrajectoryViewer {
 impl TrajectoryViewer {
     /// Create a new viewer for the given trajectory.
     pub fn new(trajectory: SimulationTrajectory, config: ViewerConfig) -> Self {
-        Self { trajectories: vec![trajectory], config }
+        Self {
+            trajectories: vec![trajectory],
+            config,
+        }
     }
 
     /// Create a new viewer for multiple trajectories.
     pub fn new_multi(trajectories: Vec<SimulationTrajectory>, config: ViewerConfig) -> Self {
-        Self { trajectories, config }
+        Self {
+            trajectories,
+            config,
+        }
     }
 
     /// Load a trajectory from a JSON file.
-    pub fn from_json(path: &Path, config: ViewerConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_json(
+        path: &Path,
+        config: ViewerConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let trajectory = SimulationTrajectory::load_json(path)?;
         Ok(Self::new(trajectory, config))
     }
 
     /// Load multiple trajectories from JSON files for comparison.
-    pub fn from_json_multi(paths: &[&Path], config: ViewerConfig) -> Result<Self, Box<dyn std::error::Error>> {
-        let trajectories: Result<Vec<_>, _> = paths.iter()
+    pub fn from_json_multi(
+        paths: &[&Path],
+        config: ViewerConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let trajectories: Result<Vec<_>, _> = paths
+            .iter()
             .map(|p| SimulationTrajectory::load_json(p))
             .collect();
         Ok(Self::new_multi(trajectories?, config))
@@ -122,7 +135,9 @@ impl TrajectoryViewer {
         }
 
         // Find the maximum number of snapshots across all trajectories
-        let max_snapshots = self.trajectories.iter()
+        let max_snapshots = self
+            .trajectories
+            .iter()
             .map(|t| t.snapshots.len())
             .max()
             .unwrap_or(0);
@@ -136,7 +151,9 @@ impl TrajectoryViewer {
         let loop_playback = self.config.loop_playback;
 
         // Get total simulation time from the longest trajectory
-        let total_time = self.trajectories.iter()
+        let total_time = self
+            .trajectories
+            .iter()
             .filter_map(|t| t.snapshots.last().map(|s| s.time))
             .max_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap_or(0.0);
@@ -153,11 +170,19 @@ impl TrajectoryViewer {
         println!("  Left/Right arrows: Step through snapshots");
         println!("  R: Reset to beginning");
         println!("  Escape: Quit");
-        println!("\nLoaded {} trajectory/trajectories:", self.trajectories.len());
+        println!(
+            "\nLoaded {} trajectory/trajectories:",
+            self.trajectories.len()
+        );
         for (i, (name, num_particles, _color)) in trajectory_info.iter().enumerate() {
             let num_snapshots = self.trajectories[i].snapshots.len();
-            println!("  [{}] {} ({} particles, {} snapshots)",
-                     i + 1, name, num_particles, num_snapshots);
+            println!(
+                "  [{}] {} ({} particles, {} snapshots)",
+                i + 1,
+                name,
+                num_particles,
+                num_snapshots
+            );
         }
         while !window.should_close() {
             // Handle keyboard input
@@ -216,13 +241,15 @@ impl TrajectoryViewer {
                 let snapshot = &traj.snapshots[snap_idx];
                 let color = TRAJECTORY_COLORS[traj_idx % TRAJECTORY_COLORS.len()];
 
-                let instance_data: Vec<_> = snapshot.particles.iter().map(|p| {
-                    kiss3d::prelude::InstanceData {
+                let instance_data: Vec<_> = snapshot
+                    .particles
+                    .iter()
+                    .map(|p| kiss3d::prelude::InstanceData {
                         position: kiss3d::nalgebra::Point3::from(p.position),
                         color,
                         ..Default::default()
-                    }
-                }).collect();
+                    })
+                    .collect();
                 particle_nodes[traj_idx].set_instances(&instance_data);
 
                 // Use the time from the first trajectory for display
@@ -258,7 +285,9 @@ impl TrajectoryViewer {
                         ui.label(format!("Particles: {}", trajectory_info_clone[0].1));
                     } else {
                         ui.label(format!("Comparing {} trajectories:", num_trajectories));
-                        for (_i, (name, num_particles, color)) in trajectory_info_clone.iter().enumerate() {
+                        for (_i, (name, num_particles, color)) in
+                            trajectory_info_clone.iter().enumerate()
+                        {
                             ui.horizontal(|ui| {
                                 // Color indicator
                                 let color32 = egui::Color32::from_rgba_unmultiplied(
@@ -280,7 +309,10 @@ impl TrajectoryViewer {
 
                     ui.label(format!("AABB mins: {:?}", particles_aabb.mins));
                     ui.label(format!("AABB maxs: {:?}", particles_aabb.maxs));
-                    ui.label(format!("AABB sz: {:?}", particles_aabb.half_extents() * 2.0));
+                    ui.label(format!(
+                        "AABB sz: {:?}",
+                        particles_aabb.half_extents() * 2.0
+                    ));
                     ui.label(format!("COM: {:?}", center_of_mass));
                     ui.separator();
 
@@ -298,7 +330,8 @@ impl TrajectoryViewer {
                             current_snapshot_idx -= 1;
                             accumulated_time = 0.0;
                         }
-                        if ui.button("▶ Next").clicked() && current_snapshot_idx < max_snapshots - 1 {
+                        if ui.button("▶ Next").clicked() && current_snapshot_idx < max_snapshots - 1
+                        {
                             current_snapshot_idx += 1;
                             accumulated_time = 0.0;
                         }
@@ -317,9 +350,10 @@ impl TrajectoryViewer {
 
                     // Slider for frame selection
                     let mut frame_f32 = current_snapshot_idx as f32;
-                    let slider = egui::Slider::new(&mut frame_f32, 0.0..=(max_snapshots - 1) as f32)
-                        .text("Frame")
-                        .show_value(false);
+                    let slider =
+                        egui::Slider::new(&mut frame_f32, 0.0..=(max_snapshots - 1) as f32)
+                            .text("Frame")
+                            .show_value(false);
                     if ui.add(slider).changed() {
                         current_snapshot_idx = frame_f32 as usize;
                         accumulated_time = 0.0;
@@ -330,11 +364,21 @@ impl TrajectoryViewer {
                     // Speed control
                     ui.horizontal(|ui| {
                         ui.label("Speed:");
-                        if ui.button("0.25x").clicked() { speed = 0.25; }
-                        if ui.button("0.5x").clicked() { speed = 0.5; }
-                        if ui.button("1x").clicked() { speed = 1.0; }
-                        if ui.button("2x").clicked() { speed = 2.0; }
-                        if ui.button("4x").clicked() { speed = 4.0; }
+                        if ui.button("0.25x").clicked() {
+                            speed = 0.25;
+                        }
+                        if ui.button("0.5x").clicked() {
+                            speed = 0.5;
+                        }
+                        if ui.button("1x").clicked() {
+                            speed = 1.0;
+                        }
+                        if ui.button("2x").clicked() {
+                            speed = 2.0;
+                        }
+                        if ui.button("4x").clicked() {
+                            speed = 4.0;
+                        }
                     });
                     ui.add(egui::Slider::new(&mut speed, 0.1..=10.0).text("Speed"));
 
@@ -353,7 +397,10 @@ impl TrajectoryViewer {
 }
 
 /// Run the trajectory viewer for multiple trajectories simultaneously.
-pub fn view_trajectories(paths: &[&Path], config: ViewerConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub fn view_trajectories(
+    paths: &[&Path],
+    config: ViewerConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     if paths.is_empty() {
         return Err("No trajectory files provided".into());
     }

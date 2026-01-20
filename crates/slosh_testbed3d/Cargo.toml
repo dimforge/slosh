@@ -2,7 +2,7 @@
 name = "slosh_testbed3d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Testbed for the slosh GPU-based MPM physics simulation library (3D version)."
-version = "0.2.0"
+version = "0.3.0"
 license = "Apache-2.0"
 edition = "2021"
 
@@ -36,13 +36,13 @@ encase = { workspace = true }
 
 slang-hal = { workspace = true }
 stensor = { workspace = true }
-nexus3d = "0.2"
+nexus3d = "0.3"
 
 futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh3d = { version = "0.2", path = "../slosh3d" }
+slosh3d = { version = "0.3", path = "../slosh3d" }
 regex = "1"
 web-time = "1"
 
@@ -50,7 +50,7 @@ kiss3d = { version = "0.37", features = [ "vertex_index_u32", "egui" ] }
 
 
 [build-dependencies]
-minislang = "0.2"
+minislang = "0.3"
 include_dir = "0.7"
-slang-hal-build = "0.2"
-nexus3d = "0.2" # to access its shaders at compile-time
+slang-hal-build = "0.3"
+nexus3d = "0.3" # to access its shaders at compile-time

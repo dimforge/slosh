@@ -5,7 +5,7 @@ use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuTensor};
 
-#[derive(Copy, Clone, PartialEq, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, PartialEq, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 /// The GPU representation of a maximum timestep estimate.
 pub struct GpuTimestepBounds {
@@ -18,9 +18,7 @@ impl GpuTimestepBounds {
 
     /// Initializes the timestep bound (defaults to 0).
     pub fn new() -> GpuTimestepBounds {
-        Self {
-            compute_max_dt_as_uint: 0,
-        }
+        Self::default()
     }
 
     /// The time estimate, in seconds.

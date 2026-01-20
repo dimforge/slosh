@@ -1,14 +1,12 @@
-use nalgebra::Vector3;
+use crate::step::SimulationStepResult;
 use slang_hal::backend::WebGpu;
 use slosh::pipeline::{MpmData, MpmPipeline};
-use slosh::rapier::math::Vector;
 use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
 use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
 use std::any::Any;
-use crate::step::SimulationStepResult;
 
 pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,

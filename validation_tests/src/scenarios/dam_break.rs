@@ -10,12 +10,10 @@
 //!   - Front position vs time: dimensionless scaling x/a vs sqrt(2*g*t^2/a)
 //!   - Height decay over time
 
-use crate::harness::{
-    create_ground_plane, create_particle_block, MaterialParams, ScenarioConfig,
-};
+use crate::harness::{create_ground_plane, create_particle_block, MaterialParams, ScenarioConfig};
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, ColliderSet, RigidBodyBuilder, RigidBodySet};
-use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
+use slosh3d::solver::{GpuBoundaryCondition, ParticleModel};
 
 /// Parameters for the dam break test.
 #[derive(Clone, Debug)]
@@ -78,15 +76,16 @@ pub fn dam_break_scenario(params: DamBreakParams) -> ScenarioConfig {
     let model = ParticleModel::sand(params.young_modulus, params.poisson_ratio);
 
     // Create fluid column particles at left side of domain
-    let center = point![
-        params.width / 2.0,
-        params.height / 2.0,
-        0.0
-    ];
+    let center = point![params.width / 2.0, params.height / 2.0, 0.0];
     let half_extents = vector![params.width / 2.0, params.height / 2.0, params.depth / 2.0];
 
-    let particles =
-        create_particle_block(center, half_extents, params.cell_width, params.density, model);
+    let particles = create_particle_block(
+        center,
+        half_extents,
+        params.cell_width,
+        params.density,
+        model,
+    );
 
     let mut bodies = RigidBodySet::new();
     let mut colliders = ColliderSet::new();

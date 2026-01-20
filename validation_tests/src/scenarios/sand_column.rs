@@ -8,12 +8,10 @@
 //!   - Runout distance: R/R0 ~ (H0/R0)^alpha where alpha ~ 0.9 for tall columns
 //!   - Angle of repose: typically 25-35 degrees for dry sand
 
-use crate::harness::{
-    create_ground_plane, MaterialParams, ScenarioConfig,
-};
+use crate::harness::{create_ground_plane, MaterialParams, ScenarioConfig};
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
+use slosh3d::solver::{GpuBoundaryCondition, ParticleModel};
 
 /// Parameters for the sand column collapse test.
 #[derive(Clone, Debug)]

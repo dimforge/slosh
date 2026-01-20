@@ -1,11 +1,11 @@
-use slosh_testbed3d::{RapierData, slosh, PhysicsState};
+use slosh_testbed3d::{PhysicsState, RapierData, slosh};
 
-use nalgebra::{Vector3, point, vector};
+use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
     pipeline::MpmData,
-    solver::{Particle, SimulationParams, GpuBoundaryCondition},
+    solver::{GpuBoundaryCondition, Particle, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 use slosh3d::solver::ParticleModel;
@@ -34,8 +34,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     for i in 0..ni {
         for j in 0..njk {
             for k in 0..njk {
-                let position =
-                    point![i as f32, j as f32, k as f32] * diameter;
+                let position = point![i as f32, j as f32, k as f32] * diameter;
                 let density = 1000.0;
                 let radius = diameter / 2.0;
                 let model = ParticleModel::elastic_neo_hookean(young_modulus, poisson_ratio);
@@ -57,14 +56,16 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         dt: 1.0 / 60.0,
     };
 
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, height / 2.0, height / 2.0]).build();
+    let rb = RigidBodyBuilder::fixed()
+        .translation(vector![0.0, height / 2.0, height / 2.0])
+        .build();
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(fixed_part, height, height);
-    let co_handle = rapier_data
-        .colliders
-        .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
+    let co_handle =
+        rapier_data
+            .colliders
+            .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
     let co_boundary_condition = [(co_handle, GpuBoundaryCondition::stick())];
-
 
     let data = MpmData::new(
         backend,
@@ -76,8 +77,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         cell_width,
         30_000,
     )
-        .unwrap();
-
+    .unwrap();
 
     let mut all_time_max = 0.0;
     let callback = move |state: &mut PhysicsState| {
@@ -94,6 +94,6 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         data,
         rapier_data,
         callbacks: vec![Box::new(callback)],
-        hooks_state: None
+        hooks_state: None,
     }
 }

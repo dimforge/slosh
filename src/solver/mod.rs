@@ -41,14 +41,15 @@ pub use params::{GpuSimulationParams, SimulationParams};
 pub use particle::*;
 pub use particle_model::*;
 // pub use particle_update::WgParticleUpdate;
+pub use boundary_condition::{GpuBoundaryCondition, GpuMaterials};
 pub use grid_update::WgGridUpdate;
 pub use grid_update_cdf::WgGridUpdateCdf;
 pub use particle_update::WgParticleUpdate;
 pub use rigid_impulses::{GpuImpulses, RigidImpulse, WgRigidImpulses};
 pub use rigid_particle_update::WgRigidParticleUpdate;
 pub use timestep_bound::{GpuTimestepBounds, WgTimestepBounds};
-pub use boundary_condition::{GpuBoundaryCondition, GpuMaterials};
 
+mod boundary_condition;
 mod g2p;
 mod g2p_cdf;
 mod p2g;
@@ -57,7 +58,6 @@ mod params;
 mod particle_update;
 mod rigid_impulses;
 mod rigid_particle_update;
-mod boundary_condition;
 
 mod grid_update;
 mod grid_update_cdf;

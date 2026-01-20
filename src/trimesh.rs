@@ -2,7 +2,7 @@
 
 use encase::ShaderType;
 use rapier::geometry::TriMesh;
-use rapier::prelude::{Point, DIM};
+use rapier::prelude::{DIM, Point};
 
 #[derive(Default, Clone, Debug)]
 pub struct ShapeBuffers {
@@ -84,14 +84,18 @@ pub fn convert_trimesh_to_gpu(shape: &TriMesh, buffers: &mut ShapeBuffers) -> Gp
     // Append the actual mesh vertex/index buffers.
     #[cfg(feature = "dim3")]
     {
-        let pn = shape.pseudo_normals().expect("trimeshes without pseudo-normals are not supported");
+        let pn = shape
+            .pseudo_normals()
+            .expect("trimeshes without pseudo-normals are not supported");
         buffers.vertices.extend_from_slice(shape.vertices());
-        buffers.vertices.extend(
-            pn.vertices_pseudo_normal.iter().map(|n| Point::from(*n))
-        );
+        buffers
+            .vertices
+            .extend(pn.vertices_pseudo_normal.iter().map(|n| Point::from(*n)));
         assert_eq!(shape.vertices().len(), pn.vertices_pseudo_normal.len());
         buffers.vertices.extend(
-            pn.edges_pseudo_normal.iter().flat_map(|n| n.map(|n| Point::from(n)))
+            pn.edges_pseudo_normal
+                .iter()
+                .flat_map(|n| n.map(Point::from)),
         );
     }
     buffers

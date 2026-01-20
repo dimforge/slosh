@@ -12,12 +12,10 @@
 //!   E = Young's modulus
 //!   I = second moment of area (for rectangular cross-section: I = b*h^3/12)
 
-use crate::harness::{
-    create_ground_plane, create_particle_block, MaterialParams, ScenarioConfig,
-};
+use crate::harness::{create_ground_plane, create_particle_block, MaterialParams, ScenarioConfig};
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, ColliderSet, RigidBodyBuilder, RigidBodySet};
-use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
+use slosh3d::solver::{GpuBoundaryCondition, ParticleModel};
 
 /// Parameters for the elastic beam test.
 #[derive(Clone, Debug)]
@@ -60,7 +58,7 @@ impl ElasticBeamParams {
     pub fn analytical_deflection(&self) -> f32 {
         let i = self.width * self.height.powi(3) / 12.0; // Second moment of area
         let q = self.density * self.gravity * self.width * self.height; // Load per unit length
-        // delta = q * L^4 / (8 * E * I)
+                                                                        // delta = q * L^4 / (8 * E * I)
         q * self.length.powi(4) / (8.0 * self.young_modulus * i)
     }
 }
@@ -77,8 +75,13 @@ pub fn elastic_beam_scenario(params: ElasticBeamParams) -> ScenarioConfig {
     ];
     let half_extents = vector![params.length / 2.0, params.height / 2.0, params.width / 2.0];
 
-    let particles =
-        create_particle_block(center, half_extents, params.cell_width, params.density, model);
+    let particles = create_particle_block(
+        center,
+        half_extents,
+        params.cell_width,
+        params.density,
+        model,
+    );
 
     // Create fixed constraint at x=0 (left end of beam)
     // In MPM, we'll use a fixed rigid body wall to clamp the beam
@@ -115,4 +118,3 @@ pub fn elastic_beam_scenario(params: ElasticBeamParams) -> ScenarioConfig {
         },
     }
 }
-

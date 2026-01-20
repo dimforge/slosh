@@ -4,11 +4,11 @@
 //! with Taichi Elements.
 //!
 //! Usage:
-//!   cargo run -p slosh_validation_tests --features "webgpu runtime render" -- [OPTIONS]
+//!   cargo run -p slosh_validation_tests --features "webgpu runtime render" -- OPTIONS
 //!
 //! Options:
-//!   --scenario <NAME>    Run a specific scenario (or "all")
-//!   --output-dir <PATH>  Output directory for results
+//!   --scenario NAME    Run a specific scenario (or "all")
+//!   --output-dir PATH  Output directory for results
 //!   --render             Render simulation results after running (requires "render" feature)
 //!   --render-only        Render existing results without running simulation
 
@@ -20,7 +20,7 @@ use slosh_validation::scenarios::{
     elastic_beam::{elastic_beam_scenario, ElasticBeamParams},
     sand_column::{sand_column_scenario, SandColumnParams},
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -104,7 +104,7 @@ fn main() {
     }
 }
 
-fn compare_results(scenario_filter: &str, output_dir: &PathBuf) {
+fn compare_results(scenario_filter: &str, output_dir: &Path) {
     let scenarios = ["elastic_beam", "sand_column", "dam_break", "bouncing_ball"];
 
     let scenarios_to_compare: Vec<&str> = if scenario_filter == "all" {
@@ -120,12 +120,18 @@ fn compare_results(scenario_filter: &str, output_dir: &PathBuf) {
         let genesis_path = output_dir.join(format!("{}_genesis.json", scenario));
 
         if !slosh_path.exists() {
-            eprintln!("Skipping {}: Slosh results not found at {:?}", scenario, slosh_path);
+            eprintln!(
+                "Skipping {}: Slosh results not found at {:?}",
+                scenario, slosh_path
+            );
             continue;
         }
 
         if !genesis_path.exists() {
-            eprintln!("Skipping {}: Genesis results not found at {:?}", scenario, genesis_path);
+            eprintln!(
+                "Skipping {}: Genesis results not found at {:?}",
+                scenario, genesis_path
+            );
             eprintln!("  Run: python validation_tests/genesis/{}.py", scenario);
             continue;
         }
@@ -203,7 +209,10 @@ fn compare_results(scenario_filter: &str, output_dir: &PathBuf) {
         });
 
         let summary_path = comparison_dir.join("summary.json");
-        if let Err(e) = std::fs::write(&summary_path, serde_json::to_string_pretty(&summary).unwrap()) {
+        if let Err(e) = std::fs::write(
+            &summary_path,
+            serde_json::to_string_pretty(&summary).unwrap(),
+        ) {
             eprintln!("\nFailed to save summary: {}", e);
         } else {
             println!("\nSaved summary: {:?}", summary_path);
@@ -229,7 +238,14 @@ fn render_results(scenario_filter: &str, output_dir: &PathBuf, render_files: &[P
         // Determine which scenario to render
         let scenario_to_render = if scenario_filter == "all" {
             // If "all", show a menu or pick the first available
-            let scenarios = ["elastic_beam", "sand_column", "dam_break", "bouncing_ball", "twisting_cube", "rigid_coupling"];
+            let scenarios = [
+                "elastic_beam",
+                "sand_column",
+                "dam_break",
+                "bouncing_ball",
+                "twisting_cube",
+                "rigid_coupling",
+            ];
             let mut found = None;
             for name in &scenarios {
                 let json_path = output_dir.join(format!("{}.json", name));
@@ -242,7 +258,9 @@ fn render_results(scenario_filter: &str, output_dir: &PathBuf, render_files: &[P
                 Some(name) => name,
                 None => {
                     eprintln!("No simulation results found in {:?}", output_dir);
-                    eprintln!("Run a simulation first, or specify --scenario <name> or --file <path>");
+                    eprintln!(
+                        "Run a simulation first, or specify --scenario <name> or --file <path>"
+                    );
                     return;
                 }
             }
@@ -262,7 +280,10 @@ fn render_results(scenario_filter: &str, output_dir: &PathBuf, render_files: &[P
     if json_paths.len() == 1 {
         println!("\nLaunching viewer for: {:?}", json_paths[0]);
     } else {
-        println!("\nLaunching viewer to compare {} trajectories:", json_paths.len());
+        println!(
+            "\nLaunching viewer to compare {} trajectories:",
+            json_paths.len()
+        );
         for path in &json_paths {
             println!("  - {:?}", path);
         }
@@ -299,13 +320,22 @@ async fn run_slosh_simulations(scenario_filter: &str, output_dir: &PathBuf) {
         }
     };
 
-    std::fs::create_dir_all(&output_dir).expect("Failed to create slosh results directory");
+    std::fs::create_dir_all(output_dir).expect("Failed to create slosh results directory");
 
     let scenarios: Vec<(&str, ScenarioConfig)> = vec![
-        ("elastic_beam", elastic_beam_scenario(ElasticBeamParams::default())),
-        ("sand_column", sand_column_scenario(SandColumnParams::default())),
+        (
+            "elastic_beam",
+            elastic_beam_scenario(ElasticBeamParams::default()),
+        ),
+        (
+            "sand_column",
+            sand_column_scenario(SandColumnParams::default()),
+        ),
         ("dam_break", dam_break_scenario(DamBreakParams::default())),
-        ("bouncing_ball", bouncing_ball_scenario(BouncingBallParams::default())),
+        (
+            "bouncing_ball",
+            bouncing_ball_scenario(BouncingBallParams::default()),
+        ),
     ];
 
     for (name, config) in scenarios {

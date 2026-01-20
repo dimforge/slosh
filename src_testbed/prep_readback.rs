@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use nalgebra::Vector4;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs, BufferUsages};
+use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
 use slosh::solver::{
     GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
@@ -128,7 +128,11 @@ impl<B: Backend> GpuReadbackData<B> {
             .collect();
 
         Ok(Self {
-            mode: GpuTensor::scalar(backend, config, BufferUsages::STORAGE | BufferUsages::COPY_DST)?,
+            mode: GpuTensor::scalar(
+                backend,
+                config,
+                BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            )?,
             base_colors: GpuTensor::vector(backend, base_colors, BufferUsages::STORAGE)?,
             instances: GpuTensor::vector(
                 backend,

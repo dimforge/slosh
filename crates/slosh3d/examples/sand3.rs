@@ -1,4 +1,4 @@
-use slosh_testbed3d::{PhysicsState, RapierData, slosh};
+use slosh_testbed3d::{RapierData, slosh};
 
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
@@ -131,25 +131,25 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     )
     .unwrap();
 
-    let callback = move |phx: &mut PhysicsState| {
-        if phx.step_id().is_multiple_of(50) {
-            let mut particles = vec![];
-            for i in 0..nxz {
-                for k in 0..nxz {
-                    let position = point![
-                        i as f32 + 0.5 - nxz as f32 / 2.0,
-                        110.0,
-                        k as f32 + 0.5 - nxz as f32 / 2.0
-                    ] * cell_width
-                        / 2.0;
-                    let radius = cell_width / 4.0;
-                    let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
-                    particles.push(Particle::new(position, radius, DENSITY, model));
-                }
-            }
-            phx.add_particles(&particles);
-        }
-    };
+    // let callback = move |phx: &mut PhysicsState| {
+    //     if phx.step_id().is_multiple_of(50) {
+    //         let mut particles = vec![];
+    //         for i in 0..nxz {
+    //             for k in 0..nxz {
+    //                 let position = point![
+    //                     i as f32 + 0.5 - nxz as f32 / 2.0,
+    //                     110.0,
+    //                     k as f32 + 0.5 - nxz as f32 / 2.0
+    //                 ] * cell_width
+    //                     / 2.0;
+    //                 let radius = cell_width / 4.0;
+    //                 let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
+    //                 particles.push(Particle::new(position, radius, DENSITY, model));
+    //             }
+    //         }
+    //         phx.add_particles(&particles);
+    //     }
+    // };
 
     PhysicsContext {
         data,

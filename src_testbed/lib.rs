@@ -11,7 +11,6 @@ pub use data::*;
 use slang_hal::Shader;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::any::Any;
 
 mod data;
 mod prep_readback;
@@ -28,22 +27,22 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
 
 use crate::prep_readback::{GpuReadbackData, PrepReadback, RenderMode};
 use crate::step::SimulationStepResult;
+use kiss3d::egui;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
+#[cfg(feature = "dim3")]
+use nalgebra::Vector3;
 use nexus::rapier::geometry::ShapeType;
 use regex::Regex;
-use slang_hal::SlangCompiler;
 use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::re_exports::include_dir;
+use slang_hal::SlangCompiler;
 use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::prelude::ColliderHandle;
 use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
-use kiss3d::egui;
-use nalgebra::Vector3;
 use wgpu::Limits;
-use slosh::rapier::math::Vector;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
 type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
@@ -52,7 +51,6 @@ type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsCon
 type RenderNode = PlanarSceneNode;
 #[cfg(feature = "dim3")]
 type RenderNode = kiss3d::scene::SceneNode;
-
 
 struct Stage<GpuModel: GpuParticleModelData> {
     gpu: WebGpu,
@@ -100,7 +98,6 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         ";
         gpu.append_hack(reg, replace.to_string());
 
-
         #[cfg(feature = "runtime")]
         {
             crate::register_shaders(&mut compiler);
@@ -123,7 +120,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         app_state.num_substeps = 0; // Ensures it will be updated at the next step.
 
         let readback_shader = PrepReadback::from_backend(&gpu, &compiler).unwrap();
-        let readback = GpuReadbackData::new(&gpu, physics.data.particles.len(), RenderMode::Default).unwrap();
+        let readback =
+            GpuReadbackData::new(&gpu, physics.data.particles.len(), RenderMode::Default).unwrap();
         let mut step_result = SimulationStepResult::default();
         step_result
             .instances
@@ -148,7 +146,12 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
     pub fn set_demo(&mut self, demo_id: usize) {
         self.selected_demo = demo_id;
         self.physics = (self.builders[demo_id]).1(&self.gpu, &mut self.app_state);
-        self.readback = GpuReadbackData::new(&self.gpu, self.physics.data.particles.len(), self.render_mode).unwrap();
+        self.readback = GpuReadbackData::new(
+            &self.gpu,
+            self.physics.data.particles.len(),
+            self.render_mode,
+        )
+        .unwrap();
         self.app_state.num_substeps = 1; // Reset so it gets reinitialized automatically if needed.
         self.step_result
             .instances
@@ -199,10 +202,12 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     scene_builders: SceneBuilders<GpuModel>,
 ) {
-    #[cfg(feature = "dim2")]{
+    #[cfg(feature = "dim2")]
+    {
         run_with_hooks(compiler, |_, _| Box::new(()), scene_builders).await;
     }
-    #[cfg(feature = "dim3")]{
+    #[cfg(feature = "dim3")]
+    {
         run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector3::y()).await;
     }
 }
@@ -211,8 +216,7 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
-    #[cfg(feature = "dim3")]
-    up_axis: Vector3<f32>
+    #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
 ) {
     let mut colliders_gfx = HashMap::new();
     let mut stage = Stage::new(compiler, hooks, scene_builders).await;
@@ -286,22 +290,21 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
                         for i in 0..6 {
                             let mode_i = RenderMode::from_u32(i);
                             changed = ui
-                                .selectable_value(
-                                    &mut stage.render_mode,
-                                    mode_i,
-                                    mode_i.text(),
-                                )
+                                .selectable_value(&mut stage.render_mode, mode_i, mode_i.text())
                                 .changed()
                                 || changed;
                         }
                     });
 
                 if changed {
-                    stage.gpu.write_buffer(
-                        stage.readback.mode.buffer_mut(),
-                        0,
-                        bytemuck::bytes_of(&(stage.render_mode as u32))
-                    ).unwrap();
+                    stage
+                        .gpu
+                        .write_buffer(
+                            stage.readback.mode.buffer_mut(),
+                            0,
+                            bytemuck::bytes_of(&(stage.render_mode as u32)),
+                        )
+                        .unwrap();
                 }
 
                 ui.label(format!(

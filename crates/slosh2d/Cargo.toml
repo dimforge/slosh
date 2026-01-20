@@ -3,7 +3,7 @@ name = "slosh2d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 2D Material Point Method implementation."
 repository = "https://github.com/dimforge/slosh"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -39,7 +39,7 @@ static_assertions = { workspace = true }
 
 #wgcore = "0.2"
 #wgebra = "0.2"
-nexus2d = "0.2.1"
+nexus2d = "0.3"
 bvh = "0.12.0"
 
 # TODO: make rapier optional?
@@ -60,7 +60,7 @@ slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"], default-fe
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.2"
+minislang = "0.3"
 include_dir = "0.7"
-slang-hal-build = "0.2"
-nexus2d = "0.2" # to access its shaders at compile-time
+slang-hal-build = "0.3"
+nexus2d = "0.3" # to access its shaders at compile-time

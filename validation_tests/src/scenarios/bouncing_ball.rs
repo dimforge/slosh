@@ -8,12 +8,10 @@
 //!   - Energy conservation during bounce
 //!   - Contact duration
 
-use crate::harness::{
-    create_ground_plane, create_particle_sphere, MaterialParams, ScenarioConfig,
-};
+use crate::harness::{create_ground_plane, create_particle_sphere, MaterialParams, ScenarioConfig};
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
-use slosh3d::solver::{ParticleModel, GpuBoundaryCondition};
+use slosh3d::solver::{GpuBoundaryCondition, ParticleModel};
 
 /// Parameters for the bouncing ball test.
 #[derive(Clone, Debug)]
@@ -75,7 +73,10 @@ impl BouncingBallParams {
         let volume = 4.0 / 3.0 * std::f32::consts::PI * self.radius.powi(3);
         let mass = volume * self.density;
 
-        let numerator = mass * self.gravity * self.drop_height * (1.0 - self.poisson_ratio * self.poisson_ratio);
+        let numerator = mass
+            * self.gravity
+            * self.drop_height
+            * (1.0 - self.poisson_ratio * self.poisson_ratio);
         let denom = self.young_modulus * self.radius.sqrt();
         (coeff * numerator / denom).powf(2.0 / 5.0)
     }

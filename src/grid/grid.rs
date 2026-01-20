@@ -8,7 +8,7 @@ use encase::ShaderType;
 use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs, BufferUsages};
+use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use std::sync::Arc;
 use stensor::tensor::{GpuScalar, GpuVector};
 
@@ -342,7 +342,8 @@ impl<B: Backend> GpuGrid<B> {
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
         let default_entries = vec![GpuGridHashMapEntry::default(); capacity as usize];
-        let prev_hmap_entries = GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
+        let prev_hmap_entries =
+            GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
         let hmap_entries = GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
         let nodes = GpuVector::vector_uninit_encased(
             backend,

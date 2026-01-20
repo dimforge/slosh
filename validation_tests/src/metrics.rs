@@ -4,7 +4,7 @@
 
 use crate::harness::{SimulationSnapshot, SimulationTrajectory};
 use plotters::prelude::*;
-use rstar::{RTree, RTreeObject, AABB, PointDistance};
+use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -118,11 +118,9 @@ impl ComparisonMetrics {
             return Err("No particles to compare".to_string());
         }
 
-        let max_position_error = position_errors
-            .iter()
-            .cloned()
-            .fold(0.0f32, f32::max);
-        let mean_position_error = position_errors.iter().sum::<f32>() / position_errors.len() as f32;
+        let max_position_error = position_errors.iter().cloned().fold(0.0f32, f32::max);
+        let mean_position_error =
+            position_errors.iter().sum::<f32>() / position_errors.len() as f32;
         let rmse_position = (position_errors.iter().map(|e| e * e).sum::<f32>()
             / position_errors.len() as f32)
             .sqrt();
@@ -196,7 +194,10 @@ Center of Mass:
     }
 }
 
-fn find_closest_snapshot(snapshots: &[SimulationSnapshot], target_time: f32) -> &SimulationSnapshot {
+fn find_closest_snapshot(
+    snapshots: &[SimulationSnapshot],
+    target_time: f32,
+) -> &SimulationSnapshot {
     snapshots
         .iter()
         .min_by(|a, b| {
@@ -587,17 +588,17 @@ fn draw_com_trajectory_chart(
     chart
         .draw_series(LineSeries::new(slosh_data, &BLUE))?
         .label("Slosh")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
 
     chart
         .draw_series(LineSeries::new(genesis_data, &RED))?
         .label("Genesis")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
     chart
         .configure_series_labels()
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
         .draw()?;
 
     Ok(())
@@ -610,16 +611,8 @@ fn draw_particle_distribution(
     end_time: f32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Get snapshot closest to end_time for each trajectory
-    let slosh_final = slosh
-        .snapshots
-        .iter()
-        .filter(|s| s.time <= end_time)
-        .last();
-    let genesis_final = genesis
-        .snapshots
-        .iter()
-        .filter(|s| s.time <= end_time)
-        .last();
+    let slosh_final = slosh.snapshots.iter().rfind(|s| s.time <= end_time);
+    let genesis_final = genesis.snapshots.iter().rfind(|s| s.time <= end_time);
 
     if slosh_final.is_none() && genesis_final.is_none() {
         return Ok(());
@@ -713,8 +706,8 @@ fn draw_particle_distribution(
 
     chart
         .configure_series_labels()
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
         .draw()?;
 
     Ok(())
@@ -731,8 +724,8 @@ fn draw_summary_panel(
     area.fill(&WHITE)?;
 
     // Get snapshot closest to end_time for particle counts
-    let slosh_final = slosh.snapshots.iter().filter(|s| s.time <= end_time).last();
-    let genesis_final = genesis.snapshots.iter().filter(|s| s.time <= end_time).last();
+    let slosh_final = slosh.snapshots.iter().rfind(|s| s.time <= end_time);
+    let genesis_final = genesis.snapshots.iter().rfind(|s| s.time <= end_time);
 
     let slosh_particles = slosh_final.map(|s| s.particles.len()).unwrap_or(0);
     let genesis_particles = genesis_final.map(|s| s.particles.len()).unwrap_or(0);

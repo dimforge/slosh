@@ -9,7 +9,7 @@ use nexus::math::GpuSim;
 use rapier::math::{AngVector, Point, Vector};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs, BufferUsages};
+use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuVector};
 
 /// GPU kernels for computing and applying impulses to rigid bodies from MPM.

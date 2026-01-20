@@ -53,7 +53,7 @@
 
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::module_inception)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 #[cfg(feature = "dim2")]
 pub extern crate nexus2d as nexus;

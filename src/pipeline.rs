@@ -6,17 +6,21 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
-use std::any::Any;
+use crate::solver::{
+    GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
+    GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
+    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses,
+    WgRigidParticleUpdate, WgTimestepBounds,
+};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::{GpuSim, Vector};
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
-use slang_hal::{Shader, BufferUsages, SlangCompiler};
 use slang_hal::backend::{Backend, Encoder};
+use slang_hal::{BufferUsages, Shader, SlangCompiler};
+use std::any::Any;
 use std::marker::PhantomData;
-use rapier::data::Coarena;
 use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
 
 /// GPU compute pipeline for Material Point Method simulation.
@@ -68,15 +72,23 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
     }
 
     /// Custom operation run after the main Particle-To-Grid transfer.
-    fn after_p2g(&mut self, _backend: &B, _encoder: &mut B::Encoder, _data: &mut MpmData<B, GpuModel>,
-    _state: &mut dyn Any) -> Result<(), B::Error> { Ok(()) }
+    fn after_p2g(
+        &mut self,
+        _backend: &B,
+        _encoder: &mut B::Encoder,
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
+    ) -> Result<(), B::Error> {
+        Ok(())
+    }
 
     /// Custom operation run after updating the grid.
     fn after_grid_update(
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>, _state: &mut dyn Any
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -86,7 +98,8 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>,_state: &mut dyn Any
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -96,7 +109,8 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         &mut self,
         _backend: &B,
         _encoder: &mut B::Encoder,
-        _data: &mut MpmData<B, GpuModel>,_state: &mut dyn Any
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
     ) -> Result<(), B::Error> {
         Ok(())
     }
@@ -193,11 +207,16 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
                 })
             })
             .collect();
-        let materials: Vec<_> = coupling.iter().map(|c| {
-            materials.iter().find(|e| e.0 == c.collider)
-                .map(|e| e.1)
-                .unwrap_or_default()
-        }).collect();
+        let materials: Vec<_> = coupling
+            .iter()
+            .map(|c| {
+                materials
+                    .iter()
+                    .find(|e| e.0 == c.collider)
+                    .map(|e| e.1)
+                    .unwrap_or_default()
+            })
+            .collect();
         Self::with_select_coupling(
             backend,
             params,
@@ -245,7 +264,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
 
         let sampling_step = cell_width; // TODO: * 1.5 ?
         let bodies = GpuBodySet::from_rapier(backend, bodies, colliders, &coupling)?;
-        let body_materials = GpuMaterials::new(backend, &materials)?;
+        let body_materials = GpuMaterials::new(backend, materials)?;
         let sim_params = GpuSimulationParams::new(backend, params)?;
         let particles = GpuParticles::from_particles(backend, particles)?;
         let rigid_particles =
@@ -322,10 +341,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
-            particles_update: WgParticleUpdate::from_backend(
-                backend,
-                compiler,
-            )?,
+            particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
             #[cfg(feature = "runtime")]
             particles_update: WgParticleUpdate::with_specializations(
                 backend,
@@ -337,10 +353,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
-            timestep_bounds: WgTimestepBounds::from_backend(
-                backend,
-                compiler,
-            )?,
+            timestep_bounds: WgTimestepBounds::from_backend(backend, compiler)?,
             #[cfg(feature = "runtime")]
             timestep_bounds: WgTimestepBounds::with_specializations(
                 backend,

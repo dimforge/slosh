@@ -16,8 +16,8 @@ bytemuck = { version = "1", features = ["derive"] }
 async-channel = "2"
 static_assertions = "1"
 
-slang-hal = "0.2"
-stensor = "0.2"
+slang-hal = "0.3"
+stensor = "0.3"
 
 [workspace.lints]
 rust.unexpected_cfgs = { level = "warn", check-cfg = [
@@ -33,10 +33,10 @@ rust.unexpected_cfgs = { level = "warn", check-cfg = [
 #nexus2d = { path = "../nexus/crates/nexus2d" }
 #nexus3d = { path = "../nexus/crates/nexus3d" }
 
-slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-slang-hal = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-minislang = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
-stensor = { git = "https://github.com/dimforge/stensor", branch = "comptime" }
-nexus2d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }
-nexus3d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }
+#slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+#slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+#slang-hal = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+#minislang = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
+#stensor = { git = "https://github.com/dimforge/stensor", branch = "comptime" }
+#nexus2d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }
+#nexus3d = { git = "https://github.com/dimforge/nexus", branch = "comptime" }

@@ -106,6 +106,6 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         data,
         rapier_data,
         callbacks: vec![],
-        hooks_state: None
+        hooks_state: None,
     }
 }

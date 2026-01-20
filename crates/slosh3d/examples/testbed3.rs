@@ -1,7 +1,7 @@
+mod centilever_beam3;
 mod elastic_cut3;
 mod heightfield3;
 mod sand3;
-mod centilever_beam3;
 
 #[kiss3d::main]
 pub async fn main() {

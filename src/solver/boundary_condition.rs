@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
-use slang_hal::backend::Backend;
 use slang_hal::BufferUsages;
+use slang_hal::backend::Backend;
 use stensor::tensor::GpuVector;
 
 #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
@@ -20,21 +20,21 @@ impl GpuBoundaryCondition {
     pub fn stick() -> GpuBoundaryCondition {
         Self {
             ty: Self::STICK,
-            friction: 0.0
+            friction: 0.0,
         }
     }
 
     pub fn slip() -> GpuBoundaryCondition {
         Self {
             ty: Self::SLIP,
-            friction: 0.0
+            friction: 0.0,
         }
     }
 
     pub fn separate(friction: f32) -> GpuBoundaryCondition {
         Self {
             ty: Self::SEPARATE,
-            friction
+            friction,
         }
     }
 
@@ -51,7 +51,6 @@ impl Default for GpuBoundaryCondition {
     }
 }
 
-
 /// GPU buffers for storing impulses from MPM to rigid bodies.
 pub struct GpuMaterials<B: Backend> {
     pub materials: GpuVector<GpuBoundaryCondition, B>,
@@ -62,9 +61,12 @@ impl<B: Backend> GpuMaterials<B> {
     ///
     /// Allocates space for up to 16 bodies (CPIC limitation).
     pub fn new(backend: &B, materials: &[GpuBoundaryCondition]) -> Result<Self, B::Error> {
-        assert!(materials.len() <= 16, "CPIC only supports up to 16 colliders");
+        assert!(
+            materials.len() <= 16,
+            "CPIC only supports up to 16 colliders"
+        );
         Ok(Self {
-            materials: GpuVector::vector(backend, materials, BufferUsages::STORAGE)?
+            materials: GpuVector::vector(backend, materials, BufferUsages::STORAGE)?,
         })
     }
 }

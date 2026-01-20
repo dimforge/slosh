@@ -5,7 +5,7 @@ use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
-use slang_hal::{backend::Backend, BufferUsages};
+use slang_hal::{BufferUsages, backend::Backend};
 // use nexus::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};

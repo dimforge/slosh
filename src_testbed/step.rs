@@ -1,6 +1,5 @@
 use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
-use nexus::math::Vector;
 use nexus::rapier::na;
 use slang_hal::backend::Backend;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
@@ -42,7 +41,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let new_particle_count = physics.data.particles.len();
         if prev_particle_count != new_particle_count {
             // TODO: resize buffers instead of recreating.
-            self.readback = GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode).unwrap();
+            self.readback =
+                GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode).unwrap();
             self.step_result
                 .instances
                 .resize(new_particle_count, ReadbackData::default());
@@ -152,7 +152,13 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         for _ in 0..self.app_state.num_substeps {
             self.app_state
                 .pipeline
-                .launch_step(&self.gpu, &mut encoder, &mut physics.data, &mut *self.hooks, hooks_state)
+                .launch_step(
+                    &self.gpu,
+                    &mut encoder,
+                    &mut physics.data,
+                    &mut *self.hooks,
+                    hooks_state,
+                )
                 .await
                 .unwrap();
         }

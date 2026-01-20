@@ -3,19 +3,22 @@
 //! Provides utilities for running MPM simulations without rendering
 //! and extracting particle data for comparison with reference implementations.
 
-use nalgebra::{Point3, Vector3, vector};
+use nalgebra::{vector, Point3, Vector3};
+use rapier3d::geometry::ColliderHandle;
 use rapier3d::prelude::{ColliderBuilder, ColliderSet, RigidBodyBuilder, RigidBodySet};
 use serde::{Deserialize, Serialize};
 use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::{BufferUsages, SlangCompiler};
 use slosh3d::{
     pipeline::{MpmData, MpmPipeline},
-    solver::{GpuParticleModel, Particle, ParticleModel, ParticlePosition, SimulationParams, GpuBoundaryCondition},
+    solver::{
+        GpuBoundaryCondition, GpuParticleModel, Particle, ParticleModel, ParticlePosition,
+        SimulationParams,
+    },
 };
 use std::any::Any;
 use std::path::Path;
 use std::time::Instant;
-use rapier3d::geometry::ColliderHandle;
 use stensor::tensor::GpuTensor;
 use wgpu::Limits;
 
@@ -200,12 +203,11 @@ impl ValidationHarness {
 
         // Create staging buffer for readback
         let num_particles = config.particles.len();
-        let mut positions_staging: GpuTensor<ParticlePosition, WebGpu> =
-            GpuTensor::vector_uninit(
-                &self.gpu,
-                num_particles as u32,
-                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            )?;
+        let mut positions_staging: GpuTensor<ParticlePosition, WebGpu> = GpuTensor::vector_uninit(
+            &self.gpu,
+            num_particles as u32,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )?;
 
         let mut snapshots = Vec::new();
         let mut hooks: () = ();

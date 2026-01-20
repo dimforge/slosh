@@ -6,7 +6,7 @@ use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
     pipeline::MpmData,
-    solver::{Particle, ParticleModel, SimulationParams, GpuBoundaryCondition},
+    solver::{GpuBoundaryCondition, Particle, ParticleModel, SimulationParams},
 };
 use slosh_testbed3d::{AppState, PhysicsContext};
 
