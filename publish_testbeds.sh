@@ -24,7 +24,7 @@ sed 's#\.\./\.\./src_testbed#src_testbed#g' ./Cargo.toml > ./Cargo.toml.new
 mv Cargo.toml.new Cargo.toml
 sed 's#\.\./\.\./shaders_testbed#shaders_testbed#g' ./src_testbed/lib.rs > ./src_testbed/lib.rs.new
 mv src_testbed/lib.rs.new src_testbed/lib.rs
-cargo publish
+cargo publish --features runtime
 
 # Publish slosh_testbed3d
 cd ../slosh_testbed3d
@@ -32,7 +32,7 @@ sed 's#\.\./\.\./src_testbed#src_testbed#g' ./Cargo.toml > ./Cargo.toml.new
 mv Cargo.toml.new Cargo.toml
 sed 's#\.\./\.\./shaders_testbed#shaders_testbed#g' ./src_testbed/lib.rs > ./src_testbed/lib.rs.new
 mv src_testbed/lib.rs.new src_testbed/lib.rs
-cargo publish
+cargo publish --features runtime
 
 # Cleanup
 rm -rf $tmp

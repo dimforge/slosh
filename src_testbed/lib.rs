@@ -82,6 +82,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let limits = Limits {
             max_storage_buffers_per_shader_stage: 11,
             max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
+            max_storage_buffer_binding_size: 1_000_000_000,
             ..Limits::default()
         };
         let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
