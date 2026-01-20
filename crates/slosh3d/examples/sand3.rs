@@ -1,4 +1,4 @@
-use slosh_testbed3d::{PhysicsState, RapierData, slosh};
+use slosh_testbed3d::{RapierData, slosh};
 
 use nalgebra::{point, vector};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
@@ -18,6 +18,7 @@ fn main() {
 // const DENSITY: f32 = 400.0;
 const DENSITY: f32 = 2700.0;
 const YOUNG_MODULUS: f32 = 2.0e9;
+const POISSON_RATIO: f32 = 0.2;
 
 pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let mut rapier_data = RapierData::default();
@@ -35,7 +36,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
                 ] * cell_width
                     / 2.0;
                 let radius = cell_width / 4.0;
-                let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
+                let model = ParticleModel::sand(YOUNG_MODULUS, POISSON_RATIO);
                 particles.push(Particle::new(position, radius, DENSITY, model));
             }
         }
@@ -56,7 +57,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     //             let radius = cell_width / 4.0;
     //             particles.push(
     //                 ParticleBuilder::new(position, radius, DENSITY)
-    //                     .sand(YOUNG_MODULUS, 0.2)
+    //                     .sand(YOUNG_MODULUS, POISSON_RATIO)
     //                     .build()
     //             );
     //         }
@@ -64,13 +65,16 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     // }
 
     if !app_state.restarting {
-        app_state.num_substeps = 20;
+        // app_state.min_num_substeps = 10;
+        // app_state.max_num_substeps = 40;
+        app_state.min_num_substeps = 20;
+        app_state.max_num_substeps = 20;
         app_state.gravity_factor = 1.0;
     };
 
     let params = SimulationParams {
         gravity: vector![0.0, -9.81, 0.0] * app_state.gravity_factor,
-        dt: (1.0 / 60.0) / (app_state.num_substeps as f32),
+        dt: 1.0 / 60.0,
     };
 
     let rb = RigidBodyBuilder::fixed().translation(vector![0.0, -4.0, 0.0]);
@@ -121,34 +125,37 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         &particles,
         &rapier_data.bodies,
         &rapier_data.colliders,
+        &[],
         cell_width,
-        60_000,
+        30_000,
     )
     .unwrap();
 
-    let callback = move |phx: &mut PhysicsState| {
-        if phx.step_id().is_multiple_of(50) {
-            let mut particles = vec![];
-            for i in 0..nxz {
-                for k in 0..nxz {
-                    let position = point![
-                        i as f32 + 0.5 - nxz as f32 / 2.0,
-                        110.0,
-                        k as f32 + 0.5 - nxz as f32 / 2.0
-                    ] * cell_width
-                        / 2.0;
-                    let radius = cell_width / 4.0;
-                    let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
-                    particles.push(Particle::new(position, radius, DENSITY, model));
-                }
-            }
-            phx.add_particles(&particles);
-        }
-    };
+    // let callback = move |phx: &mut PhysicsState| {
+    //     if phx.step_id().is_multiple_of(50) {
+    //         let mut particles = vec![];
+    //         for i in 0..nxz {
+    //             for k in 0..nxz {
+    //                 let position = point![
+    //                     i as f32 + 0.5 - nxz as f32 / 2.0,
+    //                     110.0,
+    //                     k as f32 + 0.5 - nxz as f32 / 2.0
+    //                 ] * cell_width
+    //                     / 2.0;
+    //                 let radius = cell_width / 4.0;
+    //                 let model = ParticleModel::sand(YOUNG_MODULUS, 0.2);
+    //                 particles.push(Particle::new(position, radius, DENSITY, model));
+    //             }
+    //         }
+    //         phx.add_particles(&particles);
+    //     }
+    // };
 
     PhysicsContext {
         data,
         rapier_data,
-        callbacks: vec![Box::new(callback)],
+        callbacks: vec![],
+        hooks_state: None,
+        // callbacks: vec![Box::new(callback)],
     }
 }

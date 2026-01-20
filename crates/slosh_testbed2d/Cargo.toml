@@ -2,7 +2,7 @@
 name = "slosh_testbed2d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Testbed for the slosh GPU-based MPM physics simulation library (2D version)."
-version = "0.2.0"
+version = "0.3.0"
 license = "Apache-2.0"
 edition = "2021"
 
@@ -18,6 +18,15 @@ required-features = ["dim2"]
 dim2 = []
 default = ["dim2"]
 
+comptime = [ "slosh2d/comptime" ]
+runtime = [ "slosh2d/runtime" ]
+
+webgpu = [ "slosh2d/webgpu" ]
+vulkan = [ "slosh2d/vulkan" ]
+metal = [ "slosh2d/metal" ]
+cpu = [ "slosh2d/cpu" ]
+cuda = [ "slosh2d/cuda" ]
+
 [dependencies]
 nalgebra = { workspace = true, features = ["rand"] }
 wgpu = { workspace = true }
@@ -27,13 +36,21 @@ encase = { workspace = true }
 
 slang-hal = { workspace = true }
 stensor = { workspace = true }
-nexus2d = "0.2"
+nexus2d = "0.3"
 
 futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh2d = { version = "0.2", path = "../slosh2d" }
+slosh2d = { version = "0.3", path = "../slosh2d" }
 regex = "1"
+web-time = "1"
 
 kiss3d = { version = "0.37", features = [ "vertex_index_u32", "egui" ] }
+
+
+[build-dependencies]
+minislang = "0.3"
+include_dir = "0.7"
+slang-hal-build = "0.3"
+nexus2d = "0.3" # to access its shaders at compile-time

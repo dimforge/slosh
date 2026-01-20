@@ -5,8 +5,7 @@ use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
 // use nexus::shapes::ShapeBuffers;
-use slang_hal::backend::Backend;
-use wgpu::BufferUsages;
+use slang_hal::{BufferUsages, backend::Backend};
 // use nexus::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
@@ -31,6 +30,10 @@ pub struct ParticleDynamics {
     pub def_grad: Matrix<f32>,
     /// APIC affine velocity matrix for improved momentum conservation.
     pub affine: Matrix<f32>,
+    /// Additional force applied indirectly to the particle.
+    /// Resets automatically at the `particle_update` stage of the
+    /// MPM pipeline.
+    pub force_dt: Vector<f32>,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
     /// Collision detection field data for rigid body coupling.
@@ -41,6 +44,13 @@ pub struct ParticleDynamics {
     pub init_radius: f32,
     /// Particle mass (kg).
     pub mass: f32,
+    /// Rayleigh mass-proportional damping coefficient (1/s).
+    ///
+    /// Applies a damping force proportional to velocity: F_damp = -damping * m * v.
+    /// Typical values: 0.0 (no damping) to 10.0 (heavy damping).
+    pub damping: f32,
+    /// The particle phase (used by materials that can break).
+    pub phase: f32,
     /// Whether this particle is active (1) or disabled (0).
     pub enabled: u32,
 }
@@ -61,13 +71,21 @@ impl ParticleDynamics {
             velocity: Vector::zeros(),
             def_grad: Matrix::identity(),
             affine: Matrix::zeros(),
+            force_dt: Vector::zeros(),
             vel_grad_det: 0.0,
             init_volume,
             init_radius: radius,
             mass: init_volume * density,
+            damping: 0.0,
             cdf: Cdf::default(),
+            phase: 1.0,
             enabled: 1,
         }
+    }
+
+    /// Sets the damping coefficient for this particle.
+    pub fn set_damping(&mut self, damping: f32) {
+        self.damping = damping;
     }
 
     /// Updates the particle mass based on a new density.

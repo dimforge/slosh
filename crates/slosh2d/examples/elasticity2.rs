@@ -12,7 +12,7 @@ use slosh2d::solver::ParticleModel;
 
 #[allow(dead_code)]
 fn main() {
-    panic!("Run the `testbed3` example instead.");
+    panic!("Run the `testbed2` example instead.");
 }
 
 pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
@@ -35,13 +35,13 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
     }
 
     if !app_state.restarting {
-        app_state.num_substeps = 15;
+        app_state.max_num_substeps = 15;
         app_state.gravity_factor = 2.0;
     };
 
     let params = SimulationParams {
         gravity: vector![0.0, -9.81] * app_state.gravity_factor,
-        dt: (1.0 / 60.0) / (app_state.num_substeps as f32),
+        dt: 1.0 / 60.0,
         padding: 0.0,
     };
 
@@ -76,13 +76,15 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
         &particles,
         &rapier_data.bodies,
         &rapier_data.colliders,
+        &[],
         cell_width,
-        60_000,
+        30_000,
     )
     .unwrap();
     PhysicsContext {
         data,
         rapier_data,
         callbacks: vec![],
+        hooks_state: None,
     }
 }

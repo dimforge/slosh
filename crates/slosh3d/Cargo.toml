@@ -3,7 +3,7 @@ name = "slosh3d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 3D Material Point Method implementation."
 repository = "https://github.com/dimforge/slosh"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -19,6 +19,15 @@ required-features = ["dim3"]
 default = ["dim3"]
 dim3 = []
 
+comptime = [ "nexus3d/comptime", "slosh_testbed3d/comptime" ]
+runtime = [ "nexus3d/runtime", "slosh_testbed3d/runtime" ]
+
+webgpu = [ "nexus3d/webgpu", "slosh_testbed3d/webgpu" ]
+vulkan = [ "nexus3d/vulkan", "slosh_testbed3d/vulkan" ]
+metal = [ "nexus3d/metal", "slosh_testbed3d/metal" ]
+cpu = [ "nexus3d/cpu", "slosh_testbed3d/cpu" ]
+cuda = [ "nexus3d/cuda", "slosh_testbed3d/cuda" ]
+
 [dependencies]
 nalgebra = { workspace = true }
 wgpu = { workspace = true }
@@ -27,13 +36,14 @@ bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
 static_assertions = { workspace = true }
-nexus3d = "0.2.1"
+nexus3d = "0.3"
 regex = "1"
+bvh = "0.12.0"
 
 serde = "1"
 
 # TODO: make rapier optional?
-rapier3d = "0.30"
+rapier3d = "0.31"
 
 [dev-dependencies]
 nalgebra = { version = "0.34", features = ["rand"] }
@@ -45,5 +55,7 @@ slosh_testbed3d = { path = "../slosh_testbed3d" }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.2"
-nexus3d = "0.2" # to access its shaders at compile-time
+minislang = "0.3"
+include_dir = "0.7"
+slang-hal-build = "0.3"
+nexus3d = "0.3" # to access its shaders at compile-time

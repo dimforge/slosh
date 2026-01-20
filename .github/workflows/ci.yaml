@@ -82,7 +82,7 @@ jobs:
           components: clippy
 
       - name: Install dependencies
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends build-essential curl wget file libssl-dev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends build-essential curl wget file libssl-dev libfontconfig1-dev pkg-config
 
       - name: Retrieve Cache for Slang
         uses: actions/cache/restore@v4
@@ -96,7 +96,7 @@ jobs:
           sweep-cache: true
 
       - name: Run clippy lints
-        run: SLANG_DIR=$SLANG_DIR cargo clippy --locked --workspace --all-targets -- --deny warnings
+        run: SLANG_DIR=$SLANG_DIR cargo clippy --locked --workspace --all-targets --features runtime -- --deny warnings
 
   # Check documentation.
   doc:
@@ -114,7 +114,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends build-essential curl wget file libssl-dev
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends build-essential curl wget file libssl-dev libfontconfig1-dev pkg-config
 
       - name: Retrieve Cache for Slang
         uses: actions/cache/restore@v4
@@ -128,7 +128,7 @@ jobs:
           sweep-cache: true
 
       - name: Check documentation
-        run: SLANG_DIR=$SLANG_DIR cargo doc --locked --workspace --document-private-items --no-deps
+        run: SLANG_DIR=$SLANG_DIR cargo doc --locked --workspace --document-private-items --no-deps --features runtime
     # Testing.
   test:
     needs: setup-slang # Depends on setup-slang
@@ -149,7 +149,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             build-essential curl wget file libssl-dev \
-            libegl1-mesa-dev libgl1-mesa-dri libxcb-xfixes0-dev mesa-vulkan-drivers
+            libegl1-mesa-dev libgl1-mesa-dri libxcb-xfixes0-dev mesa-vulkan-drivers \
+            libfontconfig1-dev pkg-config
 
       - name: Retrieve Cache for Slang
         uses: actions/cache/restore@v4
@@ -163,4 +164,4 @@ jobs:
           sweep-cache: true
       - name: Run Cargo Tests
         run: |
-          SLANG_DIR=$SLANG_DIR LIBGL_ALWAYS_SOFTWARE=1 cargo test --verbose
+          SLANG_DIR=$SLANG_DIR LIBGL_ALWAYS_SOFTWARE=1 cargo test --verbose --features runtime

@@ -1,3 +1,5 @@
+#if DIM == 2
+
 module prep_readback2;
 
 import slosh.solver.particle;
@@ -20,9 +22,10 @@ struct RenderConfig {
 static const uint DEFAULT = 0;
 static const uint VOLUME = 1;
 static const uint VELOCITY = 2;
-static const uint CDF_NORMALS = 3;
-static const uint CDF_DISTANCES = 4;
-static const uint CDF_SIGNS = 5;
+static const uint PHASE = 3;
+static const uint CDF_NORMALS = 4;
+static const uint CDF_DISTANCES = 5;
+static const uint CDF_SIGNS = 6;
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -41,7 +44,7 @@ func prep_readback(
     if (particle_id < instances.getCount()) {
         let def_grad = particles_dyn[particle_id].def_grad;
         let init_deformation = diag(Vect<float>(particles_dyn[particle_id].init_radius * 2.0));
-        instances[particle_id].deformation = def_grad * init_deformation;
+        instances[particle_id].deformation = mul(init_deformation, def_grad);
         instances[particle_id].position = float2(particles_pos[particle_id].pt);
 
         let color = base_colors[particle_id];
@@ -59,6 +62,9 @@ func prep_readback(
             let svd = Svd2(def_grad);
             let color_xy = (float2(1.0) - svd.S) / 0.005 + float2(0.2);
             instances[particle_id].color = float4(color_xy, color.z, color.w);
+        } else if (mode == PHASE) {
+            let phase = particles_dyn[particle_id].phase;
+            instances[particle_id].color = float4(0.0, 0.4 * phase, 0.4 * (1.0 - phase), color.w);
         } else if (mode == CDF_NORMALS) {
             let particle_normal = particles_dyn[particle_id].cdf.normal;
             if (all(particle_normal == float2(0.0))) {
@@ -104,3 +110,5 @@ func prep_readback(
 //        instances[particle_id].color = instances[particle_id].base_color;
 //    }
 //}
+
+#endif

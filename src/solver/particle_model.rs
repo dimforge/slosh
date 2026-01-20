@@ -42,6 +42,13 @@ impl ParticleModel {
         ))
     }
 
+    pub fn elastic_neo_hookean(young_modulus: f32, poisson_ratio: f32) -> Self {
+        Self::ElasticNeoHookean(ElasticCoefficients::from_young_modulus(
+            young_modulus,
+            poisson_ratio,
+        ))
+    }
+
     /// Creates a sand/granular material model with Drucker-Prager plasticity.
     ///
     /// # Arguments
@@ -50,6 +57,21 @@ impl ParticleModel {
     /// * `poisson_ratio` - Elastic Poisson's ratio (0.0 - 0.5)
     pub fn sand(young_modulus: f32, poisson_ratio: f32) -> Self {
         ParticleModel::SandLinear(SandModel {
+            plastic_state: DruckerPragerPlasticState::default(),
+            plastic: DruckerPrager::new(young_modulus, poisson_ratio),
+            elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
+        })
+    }
+
+    /// Creates a sand/granular material model with Drucker-Prager plasticity and Neo-Hookean
+    /// elasticity.
+    ///
+    /// # Arguments
+    ///
+    /// * `young_modulus` - Elastic stiffness (Pa)
+    /// * `poisson_ratio` - Elastic Poisson's ratio (0.0 - 0.5)
+    pub fn sand_neo_hookean(young_modulus: f32, poisson_ratio: f32) -> Self {
+        ParticleModel::SandNeoHookean(SandModel {
             plastic_state: DruckerPragerPlasticState::default(),
             plastic: DruckerPrager::new(young_modulus, poisson_ratio),
             elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),

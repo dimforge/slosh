@@ -1,7 +1,6 @@
 use bytemuck::{Pod, Zeroable};
-use slang_hal::backend::Backend;
+use slang_hal::{BufferUsages, backend::Backend};
 use stensor::tensor::{GpuScalar, GpuTensor};
-use wgpu::BufferUsages;
 
 /// Global simulation parameters applied to all particles.
 ///

@@ -45,8 +45,11 @@ func grid_update(
 
     let global_id = global_node_id.id;
     let momentum_velocity_mass = nodes[global_id].momentum_velocity_mass;
+    let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
     let new_grid_velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass);
+    let new_grid_velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible);
     nodes[global_id].momentum_velocity_mass = new_grid_velocity_mass;
+    nodes[global_id].momentum_velocity_mass_incompatible = new_grid_velocity_mass_incompatible;
 }
 
 #if DIM == 2
@@ -54,7 +57,7 @@ func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_po
     let mass = momentum_velocity_mass.z;
     let inv_mass = select(mass > 0.0, 1.0 / mass, 0.0);
     var velocity = (momentum_velocity_mass.xy + mass * sim_params.gravity * sim_params.dt) * inv_mass;
-    // Clamp the velocity so it doesn’t exceed 1 grid cell in one step.
+    // Clamp the velocity so it doesn't exceed 1 grid cell in one step.
     let vel_limit = float2(cell_width / sim_params.dt);
     velocity = clamp(velocity, -vel_limit, vel_limit);
     return float3(velocity, mass);
@@ -65,7 +68,7 @@ func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_po
     let inv_mass = select(mass > 0.0, 1.0 / mass, 0.0);
     var velocity = (momentum_velocity_mass.xyz + mass * sim_params.gravity * sim_params.dt) * inv_mass;
 
-    // Clamp the velocity so it doesn’t exceed 1 grid cell in one step.
+    // Clamp the velocity so it doesn't exceed 1 grid cell in one step.
     let vel_limit = float3(cell_width / sim_params.dt);
     velocity = clamp(velocity, -vel_limit, vel_limit);
     return float4(velocity, mass);

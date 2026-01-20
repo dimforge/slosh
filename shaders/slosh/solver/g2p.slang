@@ -2,6 +2,7 @@ module g2p;
 
 import slosh.solver.params;
 import slosh.solver.particle;
+import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 import slosh.models.linear_elasticity;
@@ -15,6 +16,7 @@ static const uint WORKGROUP_SIZE_Z = 1;
 static const uint NUM_SHARED_CELLS = 10 * 10; // block-size plus 2 from adjacent blocks: (8 + 2)^2
 
 groupshared float3 shared_nodes_vel_mass[NUM_SHARED_CELLS];
+groupshared float3 shared_nodes_vel_mass_incompatible[NUM_SHARED_CELLS];
 #else
 static const uint WORKGROUP_SIZE_X = 4;
 static const uint WORKGROUP_SIZE_Y = 4;
@@ -22,6 +24,7 @@ static const uint WORKGROUP_SIZE_Z = 4;
 static const uint NUM_SHARED_CELLS = 6 * 6 * 6; // block-size plus 2 from adjacent blocks: (4 + 2)^3
 
 groupshared float4 shared_nodes_vel_mass[NUM_SHARED_CELLS];
+groupshared float4 shared_nodes_vel_mass_incompatible[NUM_SHARED_CELLS];
 #endif
 
 groupshared NodeCdf shared_nodes_cdf[NUM_SHARED_CELLS]; // PERF: we don’t need the distance field from the cdf
@@ -44,11 +47,17 @@ func g2p(
     RWStructuredBuffer<Dynamics> particles_dyn,
     StructuredBuffer<BodyVelocity> body_vels,
     StructuredBuffer<BodyMassProperties> body_mprops,
+    StructuredBuffer<BoundaryCondition> body_materials,
 ) {
     let bid = block_id.x;
 
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid_ = active_blocks[bid].virtual_id.id;
+    let vid = BlockVirtualId(vid_);
+
     // Block -> shared memory transfer.
-    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, active_blocks[bid].virtual_id);
+    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, vid);
 
     // Sync after shared memory initialization.
     GroupMemoryBarrierWithGroupSync();
@@ -62,7 +71,7 @@ func g2p(
          sorted_particle_id < max_particle_id;
          sorted_particle_id += WORKGROUP_SIZE) {
         let particle_id = sorted_particle_ids[sorted_particle_id];
-        particle_g2p(body_vels, body_mprops, particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
+        particle_g2p(body_vels, body_mprops, body_materials, particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
     }
 }
 
@@ -92,12 +101,14 @@ func global_shared_memory_transfers(
                 let global_chunk_id = block_header_id_to_physical_id(octant_hid);
                 let global_node_id = node_id(global_chunk_id, tid.xy);
                 shared_nodes_vel_mass[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass;
+                shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
                 shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
             } else {
                 // This octant doesn’t exist. Fill shared memory with zeros/NONE.
                 // NOTE: we don’t need to init global_id since it’s only read for the
                 //       current chunk that is guaranteed to exist, not the 2x2 adjacent ones.
                 shared_nodes_vel_mass[flat_shared_index] = float3(0.0);
+                shared_nodes_vel_mass_incompatible[flat_shared_index] = float3(0.0);
                 shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
             }
         }
@@ -120,12 +131,14 @@ func global_shared_memory_transfers(
                     let global_chunk_id = block_header_id_to_physical_id(octant_hid);
                     let global_node_id = node_id(global_chunk_id, tid);
                     shared_nodes_vel_mass[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass;
+                    shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
                     shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
                 } else {
                     // This octant doesn’t exist. Fill shared memory with zeros/NONE.
                     // NOTE: we don’t need to init global_id since it’s only read for the
                     //       current chunk that is guaranteed to exist, not the 2x2x2 adjacent ones.
                     shared_nodes_vel_mass[flat_shared_index] = float4(0.0);
+                    shared_nodes_vel_mass_incompatible[flat_shared_index] = float4(0.0);
                     shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
                 }
             }
@@ -137,6 +150,7 @@ func global_shared_memory_transfers(
 func particle_g2p(
     body_vels: StructuredBuffer<BodyVelocity>,
     body_mprops: StructuredBuffer<BodyMassProperties>,
+    body_materials: StructuredBuffer<BoundaryCondition>,
     particles_pos: StructuredBuffer<Position>,
     particles_dyn: RWStructuredBuffer<Dynamics>,
     particle_id: uint,
@@ -197,24 +211,21 @@ func particle_g2p(
             var cpic_cell_data = cell_data;
 
             if (!is_compatible) {
+                cpic_cell_data = shared_nodes_vel_mass_incompatible[shared_id];
+
                 if (cell_cdf.closest_id != NONE) {
                     let body_vel = body_vels[cell_cdf.closest_id]; // TODO: invalid if there is no body.
                     let body_com = body_mprops[cell_cdf.closest_id].com;
+                    let body_material = body_materials[cell_cdf.closest_id];
                     let cell_center = dpt + particle_pos.pt;
                     let body_pt_vel =  body_velocity_at_point(body_com, body_vel, cell_center);
-                    let particle_ghost_vel = body_pt_vel + project_velocity(particle_vel - body_pt_vel, particle_cdf.normal);
 
 #if DIM == 2
-                    cpic_cell_data = float3(particle_ghost_vel, cell_data.z);
+                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xy - body_pt_vel, particle_cdf.normal);
+                    cpic_cell_data = float3(particle_ghost_vel, cpic_cell_data.z);
 #else
-                    cpic_cell_data = float4(particle_ghost_vel, cell_data.w);
-#endif
-                } else {
-                    // If there is no adjacent collider, the ghost vel is the particle vel.
-#if DIM == 2
-                    cpic_cell_data = float3(particle_vel, cell_data.z);
-#else
-                    cpic_cell_data = float4(particle_vel, cell_data.w);
+                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xyz - body_pt_vel, particle_cdf.normal);
+                    cpic_cell_data = float4(particle_ghost_vel, cpic_cell_data.w);
 #endif
                 }
             }

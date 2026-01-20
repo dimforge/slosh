@@ -39,9 +39,9 @@ func grid_update(
     let cell_pos = float3(vid.id * 4 + int3(tid)) * grid[0].cell_width;
 #endif
 
-    // PERF: store the list of blocks with a collision so we can skip the ones without
-    //       collisions in teh other `_cdf` kernels.
-    //       Or maybe just use some sort of flag and skip the block at the start of the kernel?
+    // TODO PERF: store the list of blocks with a collision so we can skip the ones without
+    //            collisions in teh other `_cdf` kernels.
+    //            Or maybe just use some sort of flag and skip the block at the start of the kernel?
     let global_id = global_node_id.id;
     nodes[global_id].cdf = collide(collision_shapes, collision_shape_poses, grid[0].cell_width, cell_pos);
 }

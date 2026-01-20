@@ -28,13 +28,16 @@ public struct SandModel<ElasticModel> {
     }
 }
 
-public struct DefaultParticleModel: IParticleModel {
-    uint dummy; // naga doesn’t allow empty structs so we add an unused field.
+// TODO: hard-coding this is quite fragile as is must match the size of
+//       the host-side enum. Should it be configured by the host?
+// This **MUST** match the byte size of `GpuParticleModel` on the rust side.
+public static const uint DEFAULT_MODEL_BYTES_STRIDE = 52;
 
-    // TODO: hard-coding this is quite fragile as is must match the size of
-    //       the host-side enum. Should it be configured by the host?
-    // This **MUST** match the byte size of `GpuParticleModel` on the rust side.
-    public static const uint BYTES_STRIDE = 52;
+// NOTE: the BYTES_STRIDE parameter exists so that third-party models extending this default model
+//       can specify their own stride if it differ from the default one (i.e. if the extended union
+//       type is bigger than the default union type).
+public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_STRIDE>: IParticleModel {
+    uint dummy; // Dummy field because naga doesn’t accept empty structs.
 
     public __init() {
         this.dummy = 0;
@@ -48,8 +51,7 @@ public struct DefaultParticleModel: IParticleModel {
     public func update(
         models: RWByteAddressBuffer,
         data: ParticleUpdateData,
-        in vel_grad: Mat<float>,
-        inout def_grad: Mat<float>,
+        inout dynamics: Dynamics,
     ) -> ModelUpdateResult {
         let tag_offset = data.particle_id * BYTES_STRIDE;
         let model_offset = tag_offset + 4;
@@ -58,36 +60,71 @@ public struct DefaultParticleModel: IParticleModel {
         switch (DefaultParticleModelType(model_tag)) {
             case DefaultParticleModelType::ElasticLinear: {
                 let model = models.Load<LinearElasticModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(dynamics.def_grad);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::ElasticNeoHookean: {
                 let model = models.Load<NeoHookeanModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(dynamics.def_grad);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::SandLinear: {
                 let model = models.Load<SandModel<LinearElasticModel>>(model_offset);
-                let projection = model.plastic.project(model.plastic_state, def_grad);
+                let projection = model.plastic.project(model.plastic_state, dynamics.def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
                 let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
-                // TODO PERF: have plasticity modify def_grad in-place?
-                def_grad = projection.deformation_gradient;
+                // TODO PERF: have plasticity modify dynamics.def_grad in-place?
+                dynamics.def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::SandNeoHookean: {
                 let model = models.Load<SandModel<NeoHookeanModel>>(model_offset);
-                let projection = model.plastic.project(model.plastic_state, def_grad);
+                let projection = model.plastic.project(model.plastic_state, dynamics.def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
                 let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
-                // TODO PERF: have plasticity modify def_grad in-place?
-                def_grad = projection.deformation_gradient;
+                // TODO PERF: have plasticity modify dynamics.def_grad in-place?
+                dynamics.def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
             }
             default:
                 return ModelUpdateResult(Mat<float>(0.0));
+        }
+    }
+
+    public func timestep_bound(
+        models: ByteAddressBuffer,
+        particle_id: uint,
+        particle_density0: float,
+        def_grad: Mat<float>,
+        particle_velocity: Vect<float>,
+        cell_width: float,
+    ) -> float {
+        let tag_offset = particle_id * BYTES_STRIDE;
+        let model_offset = tag_offset + 4;
+        let model_tag = models.Load(tag_offset);
+        let def_grad_det = determinant(def_grad);
+
+        switch (DefaultParticleModelType(model_tag)) {
+            case DefaultParticleModelType::ElasticLinear: {
+                let model = models.Load<LinearElasticModel>(model_offset);
+                return model.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::ElasticNeoHookean: {
+                let model = models.Load<NeoHookeanModel>(model_offset);
+                return model.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::SandLinear: {
+                let model = models.Load<SandModel<LinearElasticModel>>(model_offset);
+                return model.elastic.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::SandNeoHookean: {
+                let model = models.Load<SandModel<NeoHookeanModel>>(model_offset);
+                return model.elastic.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            default:
+                return 0.0;
         }
     }
 }

@@ -1,24 +1,26 @@
-use minislang::{SlangCompiler, shader_slang::CompileTarget};
-use std::path::PathBuf;
-use std::str::FromStr;
+#[cfg(not(feature = "comptime"))]
+pub fn main() {}
 
+#[cfg(feature = "comptime")]
 pub fn main() {
-    println!("cargo:rerun-if-changed=../../shaders");
+    use slang_hal_build::ShaderCompiler;
+    use std::env;
 
-    let mut slang = SlangCompiler::new(vec![PathBuf::from_str("../../shaders").unwrap()]);
-    nexus3d::register_shaders(&mut slang);
+    const SLANG_SRC_DIR: include_dir::Dir<'_> =
+        include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../shaders");
 
-    let targets = [CompileTarget::Wgsl]; // , CompileTarget::CudaSource];
+    let out_dir = env::var("OUT_DIR").expect("Couldn't determine output directory.");
+    let mut compiler = ShaderCompiler::new(vec![], &out_dir);
+    compiler.add_dir(nexus3d::re_exports::stensor::SLANG_SRC_DIR);
+    compiler.add_dir(nexus3d::SLANG_SRC_DIR);
+    compiler.add_dir(SLANG_SRC_DIR);
+    compiler.set_global_macro("DIM", "3");
+    compiler.set_global_macro("COMPTIME", "1");
 
-    for target in targets {
-        slang.compile_all(
-            target,
-            "../../shaders",
-            "../../src/autogen3d",
-            &[
-                ("DIM".to_string(), "3".to_string()),
-                ("COMPILE_CHECK".to_string(), "1".to_string()),
-            ],
-        );
-    }
+    // Compile all shaders.
+    // Note: slang-hal-build will automatically detect which backends to compile for
+    // based on the cargo features enabled during the build.
+    compiler
+        .compile_shaders_dir("../../shaders", &[])
+        .expect("Failed to compile shaders");
 }

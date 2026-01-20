@@ -4,7 +4,7 @@ module neo_hookean_elasticity;
 
 import nexus.aliases;
 import slosh.models.utils;
-import slosh.solver.timestep_bound;
+import slosh.models.interfaces;
 
 public struct NeoHookeanModel {
     public float lambda;
@@ -27,6 +27,7 @@ public struct NeoHookeanModel {
     public func timestep_bound(
         particle_density0: float,
         particle_velocity: Vect<float>,
+        particle_def_grad_det: float,
         elastic_hardening: float,
         cell_width: float,
     ) -> float {
@@ -38,6 +39,6 @@ public struct NeoHookeanModel {
             bulk_modulus * elastic_hardening,
             shear_modulus * elastic_hardening,
         );
-        return bound.timestep_bound(particle_density0, particle_velocity, cell_width);
+        return bound.timestep_bound(particle_density0, particle_def_grad_det, particle_velocity, cell_width);
     }
 }

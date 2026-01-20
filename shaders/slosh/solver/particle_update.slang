@@ -2,6 +2,7 @@ module particle_update;
 
 import slosh.solver.params;
 import slosh.solver.particle;
+import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 //import slosh.models.neo_hookean_elasticity;
@@ -14,7 +15,7 @@ import stensor.utils.mat;
 import nexus.shapes.cuboid;
 import nexus.aliases;
 
-#if COMPILE_CHECK
+#if COMPTIME
     // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
     import slosh.models.default;
     extern struct ParticleModel : IParticleModel = DefaultParticleModel;
@@ -38,7 +39,6 @@ func particle_update(
     RWStructuredBuffer<Position> particles_pos,
     RWStructuredBuffer<Dynamics> particles_dyn,
     ConstantBuffer<uint> particles_len,
-//    RWStructuredBuffer<Phase> phases,
 ) {
     let particle_id = invocation_id.x;
 
@@ -50,86 +50,63 @@ func particle_update(
     let flags = model.model_flags(particles_model, particle_id);
     let dt = params.dt;
     let cell_width = grid[0].cell_width;
-    let dynamics = particles_dyn[particle_id];
+    var dynamics = particles_dyn[particle_id];
     let particle_pos = particles_pos[particle_id].pt;
-    var new_particle_vel = dynamics.velocity;
 
     /*
      * Advection.
      */
-    if (dynamics.cdf.signed_distance < -0.05 * cell_width) {
-        new_particle_vel = dynamics.cdf.rigid_vel + project_velocity((new_particle_vel - dynamics.cdf.rigid_vel), dynamics.cdf.normal);
-    }
+     // TODO: double check that we never need the reprojection below.
+     //       This reprojection isn’t part of the original MPM-MLS/CPIC paper but we added
+     //       it at some point as it appeared that we’d still get some penetrating particles.
+     //       However, that might have been caused by other bugs so it is unsure if we need to
+     //       keep it now.
+     if (dynamics.cdf.signed_distance < -0.05 * cell_width) {
+         let slip = BoundaryCondition(BoundaryConditionType::Slip, 0.0);
+         dynamics.velocity = dynamics.cdf.rigid_vel + slip.project_velocity((dynamics.velocity - dynamics.cdf.rigid_vel), dynamics.cdf.normal);
+     }
 
     // Clamp the max velocity a particle can get.
     // TODO: clamp the grid velocities instead?
-    if (length(new_particle_vel) > cell_width / dt) {
-        new_particle_vel = new_particle_vel / length(new_particle_vel) * cell_width / dt;
+    if (length(dynamics.velocity) > cell_width / dt) {
+        dynamics.velocity = dynamics.velocity / length(dynamics.velocity) * cell_width / dt;
     }
 
-    let new_particle_pos = particle_pos + new_particle_vel * dt;
+    // Apply Rayleigh mass-proportional damping (implicit integration for stability).
+    // v_new = v / (1 + damping * dt)
+    dynamics.velocity = dynamics.velocity / (1.0 + dynamics.damping * dt);
+
+    let new_particle_pos = particle_pos + dynamics.velocity * dt;
 
     /*
      * Penalty impulse.
      */
+     // TODO: apply the penalty impulse as an extra force on the grid instead of on
+     //       changing the particle velocity directly?
      static const float PENALTY_COEFF = 1.0e3;
      if (dynamics.cdf.signed_distance < -0.05 * cell_width) { // && dynamics.cdf.signed_distance > -0.3 * cell_width {
          let corrected_dist = max(dynamics.cdf.signed_distance, -0.3 * cell_width);
          let impulse = (dt * -corrected_dist * PENALTY_COEFF) * dynamics.cdf.normal;
-         new_particle_vel += impulse; // / curr_particle_vol.mass;
+         dynamics.velocity += impulse; // / curr_particle_vol.mass;
      }
 
     /*
      * Deformation gradient update.
      */
-    var new_deformation_gradient: Mat<float>;
-
     if ((flags & ModelFlags::FLUID) == 0) {
         // NOTE: the velocity gradient was stored in the affine buffer.
-        new_deformation_gradient = dynamics.def_grad +
-           mul(dynamics.def_grad, dynamics.affine * dt);
+        dynamics.def_grad += mul(dynamics.def_grad, dynamics.affine * dt);
     } else {
         let def_grad0 = dynamics.def_grad[0][0];
         var new_def_grad_diag_elt = def_grad0 + def_grad0 * dynamics.vel_grad_det * dt;
-        new_deformation_gradient = diag(Vect<float>(new_def_grad_diag_elt));
+        dynamics.def_grad = diag(Vect<float>(new_def_grad_diag_elt));
     }
 
     /*
      * Constitutive model.
      */
-    let update_data = ParticleUpdateData(dt, cell_width, particle_id, dynamics.init_volume);
-    let update_result = model.update(particles_model, update_data, dynamics.affine, new_deformation_gradient);
-
-//    var phase = phases[particle_id].phase;
-//
-//    // Update Phase.
-//    // TODO: should be stress based instead.
-//    let max_stretch = phases[particle_id].max_stretch;
-//    if (phase > 0.0 && max_stretch > 0.0) {
-//    #if DIM == 2
-//        let svd = Svd2(new_deformation_gradient);
-//        if (svd.S.x > max_stretch || svd.S.y > max_stretch) {
-//            phases[particle_id].phase = 0.0;
-//            phase = 0.0;
-//        }
-//    #else
-//        let svd = Svd3(new_deformation_gradient);
-//        if (svd.S.x > max_stretch || svd.S.y > max_stretch || svd.S.z > max_stretch) {
-//            phases[particle_id].phase = 0.0;
-//            phase = 0.0;
-//        }
-//    #endif
-//    }
-//
-//    // Plasticity.
-//    if (phase == 0.0) {
-//        let projection = plasticity[particle_id].project(plastic_state[particle_id], new_deformation_gradient);
-//        plastic_state[particle_id] = projection.state;
-//        new_deformation_gradient = projection.deformation_gradient;
-//    }
-//
-//    // Elasticity.
-//    let stress = constitutive_model[particle_id].kirchoff_stress(new_deformation_gradient);
+    let update_data = ParticleUpdateData(dt, cell_width, particle_id);
+    let update_result = model.update(particles_model, update_data, dynamics);
 
     /*
      * Affine matrix for APIC transfer.
@@ -141,16 +118,17 @@ func particle_update(
     /*
      * Write back the new particle properties.
      */
-    if (all(new_particle_pos == new_particle_pos) && determinant(new_deformation_gradient) > 0.0) { // Avoid NaNs and invalid deformation gradients
+    if (all(new_particle_pos == new_particle_pos) && determinant(dynamics.def_grad) > 0.0) { // Avoid NaNs and invalid deformation gradients
         particles_pos[particle_id].pt = new_particle_pos;
-        particles_dyn[particle_id].velocity = new_particle_vel;
-        particles_dyn[particle_id].def_grad = new_deformation_gradient;
-        particles_dyn[particle_id].affine = affine;
+        dynamics.affine = affine;
     } else {
-        particles_dyn[particle_id].enabled = 0; // This particles diverged, disable it.
-        particles_dyn[particle_id].velocity = Vect<float>(0.0);
-        particles_dyn[particle_id].def_grad = diag(Vect<float>(1.0));
-        particles_dyn[particle_id].affine = Mat<float>(0.0);
-        particles_dyn[particle_id].mass = 0.0;
+        dynamics.enabled = 0; // This particles diverged, disable it.
+        dynamics.velocity = Vect<float>(0.0);
+        dynamics.def_grad = diag(Vect<float>(1.0));
+        dynamics.affine = Mat<float>(0.0);
+        dynamics.mass = 0.0;
     }
+    dynamics.force_dt = Vect<float>(0.0);
+
+    particles_dyn[particle_id] = dynamics;
 }

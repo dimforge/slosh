@@ -1,3 +1,4 @@
+use crate::step::SimulationStepResult;
 use slang_hal::backend::WebGpu;
 use slosh::pipeline::{MpmData, MpmPipeline};
 use slosh::rapier::prelude::{
@@ -5,6 +6,7 @@ use slosh::rapier::prelude::{
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
 use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
+use std::any::Any;
 
 pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub run_state: RunState,
@@ -12,7 +14,9 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     // pub gpu_render_config: GpuRenderConfig,
     pub pipeline: MpmPipeline<WebGpu, GpuModel>,
     // pub prep_vertex_buffer: WgPrepVertexBuffer,
-    pub num_substeps: usize,
+    pub min_num_substeps: u32,
+    pub max_num_substeps: u32,
+    pub num_substeps: u32,
     pub gravity_factor: f32,
     pub restarting: bool,
     // pub hot_reload: HotReloadState,
@@ -46,8 +50,9 @@ impl<GpuModel: GpuParticleModelData, F: FnMut(&mut PhysicsState<GpuModel>)>
 }
 
 pub struct PhysicsState<'a, GpuModel: GpuParticleModelData = GpuParticleModel> {
-    pub(crate) backend: &'a WebGpu,
-    pub(crate) data: &'a mut MpmData<WebGpu, GpuModel>,
+    pub backend: &'a WebGpu,
+    pub data: &'a mut MpmData<WebGpu, GpuModel>,
+    pub results: &'a SimulationStepResult,
     pub(crate) step_id: usize,
 }
 
@@ -68,6 +73,7 @@ pub struct PhysicsContext<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub data: MpmData<WebGpu, GpuModel>,
     pub rapier_data: RapierData,
     pub callbacks: Vec<Box<dyn PhysicsCallback<GpuModel>>>,
+    pub hooks_state: Option<Box<dyn Any>>,
 }
 
 // #[derive(Default)]

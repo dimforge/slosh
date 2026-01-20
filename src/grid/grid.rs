@@ -8,10 +8,9 @@ use encase::ShaderType;
 use nexus::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs};
+use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use std::sync::Arc;
 use stensor::tensor::{GpuScalar, GpuVector};
-use wgpu::BufferUsages;
 
 /// GPU kernels for grid initialization and management.
 ///
@@ -24,7 +23,7 @@ pub struct WgGrid<B: Backend> {
     init_indirect_workgroups: GpuFunction<B>,
 }
 
-// TODO: should we have all the kernel launchs just use
+// TODO: should we have all the kernel launches just use
 //       the same ShaderArgs to avoid duplication?
 //       Or maybe implement ShaderArgs for `GpuGrid`, `GpuParticles`, etc.
 #[derive(ShaderArgs)]
@@ -207,6 +206,7 @@ pub struct GpuGridMetadata {
 #[repr(C)]
 pub struct GpuGridNode {
     momentum_velocity_mass: nalgebra::Vector4<f32>,
+    momentum_velocity_mass_incompatible: nalgebra::Vector4<f32>,
     cdf: GpuGridNodeCdf,
 }
 
@@ -241,6 +241,18 @@ pub struct GpuGridHashMapEntry {
     pad1: u32,
     #[cfg(feature = "dim3")]
     pad1: nalgebra::Vector3<u32>,
+}
+
+impl Default for GpuGridHashMapEntry {
+    fn default() -> Self {
+        Self {
+            state: u32::MAX,
+            pad0: Default::default(),
+            key: BlockVirtualId::zeroed(),
+            value: 0,
+            pad1: Default::default(),
+        }
+    }
 }
 
 /// Header for an active grid block containing particles.
@@ -278,8 +290,12 @@ pub struct GpuGrid<B: Backend> {
     pub cpu_meta: GpuGridMetadata,
     /// GPU buffer containing grid metadata.
     pub meta: GpuScalar<GpuGridMetadata, B>,
+    /// Pong buffer for grid metadata.
+    pub prev_meta: GpuScalar<GpuGridMetadata, B>,
     /// Hash map entries for virtual-to-physical block mapping.
     pub hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
+    /// Pong buffer for hmap entries
+    pub prev_hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
     /// Grid node data (momentum, mass, CDF).
     pub nodes: GpuVector<GpuGridNode, B>,
     /// Active block headers tracking particle ranges.
@@ -320,7 +336,15 @@ impl<B: Backend> GpuGrid<B> {
             cpu_meta,
             BufferUsages::STORAGE | BufferUsages::COPY_SRC,
         )?;
-        let hmap_entries = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let prev_meta = GpuScalar::scalar(
+            backend,
+            cpu_meta,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        )?;
+        let default_entries = vec![GpuGridHashMapEntry::default(); capacity as usize];
+        let prev_hmap_entries =
+            GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
+        let hmap_entries = GpuVector::vector(backend, &default_entries, BufferUsages::STORAGE)?;
         let nodes = GpuVector::vector_uninit_encased(
             backend,
             capacity * NODES_PER_BLOCK,
@@ -345,7 +369,9 @@ impl<B: Backend> GpuGrid<B> {
         Ok(Self {
             cpu_meta,
             meta,
+            prev_meta,
             hmap_entries,
+            prev_hmap_entries,
             nodes,
             active_blocks,
             scan_values,
@@ -355,6 +381,11 @@ impl<B: Backend> GpuGrid<B> {
             rigid_nodes_linked_lists,
             debug,
         })
+    }
+
+    pub fn swap_buffers(&mut self) {
+        std::mem::swap(&mut self.meta, &mut self.prev_meta);
+        std::mem::swap(&mut self.prev_hmap_entries, &mut self.hmap_entries);
     }
 }
 

@@ -45,8 +45,13 @@ func g2p_cdf(
 ) {
     let bid = block_id.x;
 
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid_ = active_blocks[bid].virtual_id.id;
+    let vid = BlockVirtualId(vid_);
+
     // Block -> shared memory transfer.
-    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, active_blocks[bid].virtual_id);
+    global_shared_memory_transfers(grid, hmap_entries, nodes, tid, vid);
 
     // Sync after shared memory initialization.
     GroupMemoryBarrierWithGroupSync();

@@ -1,98 +1,92 @@
 module timestep_bound;
 
-import slosh.models.utils;
 import nexus.aliases;
+import slosh.grid.grid;
+import slosh.models.utils;
+import slosh.models.interfaces;
+import slosh.solver.particle;
 
-public struct ElasticitySoundSpeedTimestepBound {
-    public float alpha;
-    public float bulk_modulus;
-    public float shear_modulus;
+#if COMPTIME
+    // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
+    import slosh.models.default;
+    extern struct ParticleModel : IParticleModel = DefaultParticleModel;
+#else
+    extern struct ParticleModel : IParticleModel;
+#endif
 
-    public __init(float alpha, float young_modulus, float poisson_ratio) {
-        this.alpha = alpha;
-        this.bulk_modulus = hook_to_bulk_modulus(young_modulus, poisson_ratio);
-        this.shear_modulus = hook_to_shear_modulus(young_modulus, poisson_ratio);
-    }
 
-    public static func from_elasticity(float alpha, float young_modulus, float poisson_ratio) -> ElasticitySoundSpeedTimestepBound {
-        return ElasticitySoundSpeedTimestepBound(
-            alpha,
-            hook_to_bulk_modulus(young_modulus, poisson_ratio),
-            hook_to_shear_modulus(young_modulus, poisson_ratio),
-        );
-    }
+struct GpuTimestepBounds {
+    Atomic<uint> computed_max_dt_as_uint;
 
-    public func timestep_bound(
-        density0: float,
-        velocity: Vect<float>,
-        cell_width: float,
-    ) -> float {
-        let c_dir = sqrt((this.bulk_modulus + 4.0 / 3.0 * this.shear_modulus)
-            * 1.0 // TODO: particle.deformation_gradient.determinant()
-            / density0);
-        let max_denom = max(length(velocity), c_dir);
-        return this.alpha * cell_width / max_denom;
+    static const float FLOAT_TO_INT = 1.0e12;
+    static func secs_to_int(secs: float) -> uint {
+        return uint(floor(secs * FLOAT_TO_INT));
     }
 }
 
-
-/*
 static const uint WORKGROUP_SIZE = 64;
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+func reset_timestep_bound(
+    RWStructuredBuffer<GpuTimestepBounds> result,
+) {
+    result[0].computed_max_dt_as_uint = 4294967295;
+}
 
 [shader("compute")]
 [numthreads(WORKGROUP_SIZE, 1, 1)]
 func estimate_timestep_bound(
-) {
-unsafe fn timestep_length_for_particle(
-    min_dt: Real,
-    max_dt: Real,
-    particle_id: u32,
-    particle_status: &ParticleStatus,
-    particle_volume: &ParticleVolume,
-    particle_vel: &ParticleVelocity,
-    cell_width: Real,
-    result: &mut GpuTimestepLength,
-    updater: impl ParticleUpdater,
+    uint3 invocation_id: SV_DispatchThreadID,
+    StructuredBuffer<Grid> grid,
+    ByteAddressBuffer particles_model,
+    StructuredBuffer<Dynamics> particles_dyn,
+    ConstantBuffer<uint> particles_len,
+    RWStructuredBuffer<GpuTimestepBounds> result,
 ) {
     let particle_id = invocation_id.x;
 
-    if (particle_id >= particle_len) {
+    if (particle_id >= particles_len) {
         return;
     }
 
-//    if particle_status.failed {
-//        return;
-//    }
-//
-
-    var dt = max_dt;
-    let mut dt: Real = max_dt;
-
-    let (active_timestep_bounds, candidate_dt) = updater.estimate_particle_timestep_length(
-        cell_width,
-        particle_id,
-        particle_status,
-        particle_volume,
-        particle_vel,
-    );
-    dt = dt.min(candidate_dt);
-
-    if active_timestep_bounds.contains(ActiveTimestepBounds::PARTICLE_VELOCITY_BOUND) {
-        // Velocity-based restriction.
-        // let norm_b = d * velocity_gradient.norm();
-        // let apic_v = norm_b * 6.0 * (DIM as Real).sqrt() / cell_width;
-        let v = particle_vel.vector.norm(); //  + apic_v;
-
-        dt = dt.min(cell_width / v);
+    if (particles_dyn[particle_id].enabled == 0) {
+        return;
     }
 
-    if dt < min_dt && max_dt > min_dt {
-        dt = min_dt;
-    }
+    let cell_width = grid[0].cell_width;
 
-    let candidate = GpuTimestepLength::from_sec(dt);
-    result.0.global_red_min(candidate.0);
-}
+    /*
+     * Model-specific restrictions.
+     * Will usually be based on sounds speed for the material (section 4.1).
+     */
+    let density0 = particles_dyn[particle_id].init_density();
+    let def_grad = particles_dyn[particle_id].def_grad;
+    let velocity = particles_dyn[particle_id].velocity;
+    let affine = particles_dyn[particle_id].affine;
+    let mass = particles_dyn[particle_id].mass;
 
+    let model = ParticleModel();
+    var dt = model.timestep_bound(particles_model, particle_id, density0, def_grad, velocity, cell_width);
+
+    /*
+     * Velocity-based restrictions (section 4.2)
+     */
+   var norm_affine_squared = 0.0;
+   [[ForceUnroll]]
+   for (var i = 0; i < DIM; i++) {
+      [[ForceUnroll]]
+      for (var j = 0; j < DIM; j++) {
+        norm_affine_squared += affine[i][j] * affine[i][j];
+      }
+   }
+
+   let d = (cell_width * cell_width) / 4.0;
+   let norm_b = d * sqrt(norm_affine_squared) / mass;
+   let apic_v = norm_b * 6.0 * sqrt(DIM) / cell_width;
+    let v = length(velocity) + apic_v;
+    dt = min(dt, cell_width / v);
+
+    let candidate = GpuTimestepBounds::secs_to_int(dt);
+    result[0].computed_max_dt_as_uint.min(candidate);
 }
-*/

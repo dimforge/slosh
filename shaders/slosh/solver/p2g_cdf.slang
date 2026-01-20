@@ -55,7 +55,10 @@ func p2g_cdf(
     RWStructuredBuffer<Node> nodes,
 ) {
     let bid = block_id.x;
-    let vid = active_blocks[bid].virtual_id;
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid_ = active_blocks[bid].virtual_id.id;
+    let vid = BlockVirtualId(vid_);
 
     // Figure out how many time we’ll have to iterate through
     // the particle linked-list to traverse them all.

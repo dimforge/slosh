@@ -3,9 +3,8 @@
 use nalgebra::DVector;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
-use slang_hal::{Shader, ShaderArgs};
+use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use stensor::tensor::GpuTensor;
-use wgpu::BufferUsages;
 
 /// GPU compute kernels for parallel prefix sum.
 ///

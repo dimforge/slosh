@@ -2,7 +2,7 @@ use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
 use nexus::rapier::na;
 use slang_hal::backend::Backend;
-use slosh::solver::GpuParticleModelData;
+use slosh::solver::{GpuParticleModelData, SimulationParams};
 
 #[derive(Default)]
 pub struct SimulationTimes {
@@ -31,6 +31,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             let mut phx = PhysicsState {
                 backend: &self.gpu,
                 data: &mut physics.data,
+                results: &self.step_result,
                 step_id: self.step_id,
             };
             callback.update(&mut phx);
@@ -40,15 +41,64 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let new_particle_count = physics.data.particles.len();
         if prev_particle_count != new_particle_count {
             // TODO: resize buffers instead of recreating.
-            self.readback = GpuReadbackData::new(&self.gpu, new_particle_count).unwrap();
+            self.readback =
+                GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode).unwrap();
             self.step_result
                 .instances
                 .resize(new_particle_count, ReadbackData::default());
             println!("Adjust readback buffers: {}", new_particle_count);
         }
 
-        let t_total = std::time::Instant::now();
-        let t_encoding = std::time::Instant::now();
+        let t_total = web_time::Instant::now();
+        let base_dt = physics.data.base_dt;
+        let prev_num_substeps = self.app_state.num_substeps;
+
+        if self.app_state.min_num_substeps < self.app_state.max_num_substeps {
+            // Adaptive stepping.
+            let bounds = self
+                .app_state
+                .pipeline
+                .timestep_bounds
+                .compute_bounds(
+                    &self.gpu,
+                    &physics.data.grid,
+                    &physics.data.particles,
+                    &physics.data.timestep_bounds,
+                    &mut physics.data.timestep_bounds_staging,
+                )
+                .await
+                .unwrap();
+
+            let num_substeps_estimated = (base_dt / bounds).ceil() as u32;
+            let num_substeps = num_substeps_estimated.clamp(
+                self.app_state.min_num_substeps,
+                self.app_state.max_num_substeps,
+            );
+            self.app_state.num_substeps = num_substeps;
+
+            println!(
+                "Found timestep bounds: {:?}. Estimated substeps: {}. Actual: {}",
+                bounds, num_substeps_estimated, num_substeps
+            );
+        } else if self.app_state.num_substeps != self.app_state.max_num_substeps {
+            // No adaptive stepping, but we need to update the number of substeps on the gpu.
+            self.app_state.num_substeps = self.app_state.max_num_substeps;
+        }
+
+        if prev_num_substeps != self.app_state.num_substeps {
+            let gravity = physics.data.gravity;
+            let params = SimulationParams {
+                gravity,
+                dt: base_dt / self.app_state.num_substeps as f32,
+                #[cfg(feature = "dim2")]
+                padding: 0.0,
+            };
+            println!("Updated GPU sim params to: {:?}", params);
+            let gpu_params = physics.data.sim_params.params.buffer_mut();
+            self.gpu.write_buffer(gpu_params, 0, &[params]).unwrap();
+        }
+
+        let t_encoding = web_time::Instant::now();
         let mut encoder = self.gpu.begin_encoding();
 
         // Send updated bodies information to the gpu.
@@ -97,10 +147,19 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 
         //// Step the simulation.
 
+        let mut no_state = Box::new(());
+        let hooks_state = physics.hooks_state.as_deref_mut().unwrap_or(&mut no_state);
         for _ in 0..self.app_state.num_substeps {
             self.app_state
                 .pipeline
-                .launch_step(&self.gpu, &mut encoder, &mut physics.data)
+                .launch_step(
+                    &self.gpu,
+                    &mut encoder,
+                    &mut physics.data,
+                    &mut *self.hooks,
+                    hooks_state,
+                )
+                .await
                 .unwrap();
         }
 
@@ -153,7 +212,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let t_total_step = t_total.elapsed().as_secs_f32() * 1000.0;
 
         // TODO: reuse the `physics.data.particles_pos_staging` buffer.
-        let t_readback = std::time::Instant::now();
+        let t_readback = web_time::Instant::now();
         self.gpu
             .read_buffer(
                 self.readback.instances_staging.buffer(),

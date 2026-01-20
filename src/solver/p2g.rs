@@ -7,8 +7,8 @@ use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
 use crate::solver::{
-    GpuImpulses, GpuParticleModelData, GpuParticles, ParticleDynamics, ParticlePosition,
-    RigidImpulse,
+    GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
+    ParticleDynamics, ParticlePosition, RigidImpulse,
 };
 use nexus::dynamics::{GpuBodySet, GpuVelocity};
 use slang_hal::backend::Backend;
@@ -39,6 +39,7 @@ struct P2GArgs<'a, B: Backend> {
     nodes: &'a GpuVector<GpuGridNode, B>,
     body_vels: &'a GpuVector<GpuVelocity, B>,
     body_impulses: &'a GpuVector<RigidImpulse, B>,
+    body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
 }
 
 impl<B: Backend> WgP2G<B> {
@@ -60,6 +61,7 @@ impl<B: Backend> WgP2G<B> {
         particles: &GpuParticles<B, GpuModel>,
         impulses: &GpuImpulses<B>,
         bodies: &GpuBodySet<B>,
+        body_materials: &GpuMaterials<B>,
     ) -> Result<(), B::Error> {
         let args = P2GArgs {
             grid: &grid.meta,
@@ -72,6 +74,7 @@ impl<B: Backend> WgP2G<B> {
             particle_node_linked_lists: particles.node_linked_lists(),
             body_vels: bodies.vels(),
             body_impulses: &impulses.incremental_impulses,
+            body_materials: &body_materials.materials,
         };
         self.p2g.launch_indirect(
             backend,
