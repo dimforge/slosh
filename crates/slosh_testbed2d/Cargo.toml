@@ -2,7 +2,7 @@
 name = "slosh_testbed2d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Testbed for the slosh GPU-based MPM physics simulation library (2D version)."
-version = "0.3.0"
+version = "0.3.1"
 license = "Apache-2.0"
 edition = "2021"
 
