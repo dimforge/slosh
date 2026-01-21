@@ -53,6 +53,8 @@ pub struct ParticleDynamics {
     pub phase: f32,
     /// Whether this particle is active (1) or disabled (0).
     pub enabled: u32,
+    /// Whether this particle is fixed (1) or dynamic (0).
+    pub fixed: u32,
 }
 
 impl ParticleDynamics {
@@ -80,7 +82,13 @@ impl ParticleDynamics {
             cdf: Cdf::default(),
             phase: 1.0,
             enabled: 1,
+            fixed: 0,
         }
+    }
+
+    /// Sets whether this particle is fixed (true) or dynamic (false).
+    pub fn set_fixed(&mut self, fixed: bool) {
+        self.fixed = fixed as u32;
     }
 
     /// Sets the damping coefficient for this particle.
@@ -481,6 +489,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
         &self.models
     }
 
+    /// Returns mutable reference to material model buffer.
+    pub fn models_mut(&mut self) -> &mut GpuTensor<GpuModel, B> {
+        &mut self.models
+    }
+
     /// Returns reference to position buffer.
     pub fn positions(&self) -> &GpuTensor<ParticlePosition, B> {
         &self.positions
@@ -489,6 +502,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
     /// Returns reference to dynamics buffer (velocity, deformation, mass).
     pub fn dynamics(&self) -> &GpuTensor<ParticleDynamics, B> {
         &self.dynamics
+    }
+
+    /// Returns mutable reference to dynamics buffer (velocity, deformation, mass).
+    pub fn dynamics_mut(&mut self) -> &mut GpuTensor<ParticleDynamics, B> {
+        &mut self.dynamics
     }
 
     /// Returns reference to sorted particle ID buffer.

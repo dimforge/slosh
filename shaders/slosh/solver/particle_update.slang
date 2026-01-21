@@ -53,6 +53,15 @@ func particle_update(
     var dynamics = particles_dyn[particle_id];
     let particle_pos = particles_pos[particle_id].pt;
 
+    // If the particle is fixed, clear its velocity and its affine matrix.
+    // This isn’t ideal (this should typically be handled on the grid) but we sometimes
+    // need sub-grid-sized fixed particles.
+    if (dynamics.fixed != 0) {
+        dynamics.velocity = Vect<float>(0.0);
+        dynamics.affine = Mat<float>(0.0);
+        return;
+    }
+
     /*
      * Advection.
      */

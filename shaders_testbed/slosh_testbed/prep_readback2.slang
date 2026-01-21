@@ -44,7 +44,7 @@ func prep_readback(
     if (particle_id < instances.getCount()) {
         let def_grad = particles_dyn[particle_id].def_grad;
         let init_deformation = diag(Vect<float>(particles_dyn[particle_id].init_radius * 2.0));
-        instances[particle_id].deformation = mul(init_deformation, def_grad);
+        instances[particle_id].deformation = mul(init_deformation, clamp(def_grad, Mat<float>(-4.0), Mat<float>(4.0)));
         instances[particle_id].position = float2(particles_pos[particle_id].pt);
 
         let color = base_colors[particle_id];

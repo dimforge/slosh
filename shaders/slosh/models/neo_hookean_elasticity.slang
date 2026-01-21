@@ -2,6 +2,8 @@
 
 module neo_hookean_elasticity;
 
+import stensor.geometry.svd2;
+import stensor.geometry.svd3;
 import nexus.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;
@@ -40,5 +42,25 @@ public struct NeoHookeanModel {
             shear_modulus * elastic_hardening,
         );
         return bound.timestep_bound(particle_density0, particle_def_grad_det, particle_velocity, cell_width);
+    }
+
+    public func pos_energy_density(in def_grad: Mat<float>, elastic_hardening: float) -> float {
+        let j = determinant(def_grad);
+
+        #if DIM == 2
+        let svd = Svd2(def_grad);
+        #else
+        let svd = Svd3(def_grad);
+        #endif
+
+        let sig = max(svd.S - Vect<float>(1.0), Vect<float>(0.0));
+        let pos_dev_part = this.mu * elastic_hardening * dot(sig, sig);
+        let spherical_part = this.lambda * elastic_hardening * 0.5 * (j - 1.0) * (j - 1.0);
+
+        if (j < 1.0) {
+            return pos_dev_part;
+        } else {
+            return pos_dev_part + spherical_part;
+        }
     }
 }

@@ -30,7 +30,9 @@ public struct Dynamics {
     /// Rayleigh mass-proportional damping coefficient (1/s).
     public float damping;
     public float phase;
+    // TODO: merge these two into a `flags` field?
     public uint enabled;
+    public uint fixed;
 
     public func init_density() -> float {
         return this.mass / this.init_volume;
