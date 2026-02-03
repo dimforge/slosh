@@ -499,6 +499,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
         &self.positions
     }
 
+    /// Returns reference to position buffer.
+    pub fn positions_mut(&mut self) -> &mut GpuTensor<ParticlePosition, B> {
+        &mut self.positions
+    }
+
     /// Returns reference to dynamics buffer (velocity, deformation, mass).
     pub fn dynamics(&self) -> &GpuTensor<ParticleDynamics, B> {
         &self.dynamics
