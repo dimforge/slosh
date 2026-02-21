@@ -58,8 +58,7 @@ func particle_update(
     // need sub-grid-sized fixed particles.
     if (dynamics.fixed != 0) {
         dynamics.velocity = Vect<float>(0.0);
-        dynamics.affine = Mat<float>(0.0);
-        return;
+        // dynamics.affine = Mat<float>(0.0);
     }
 
     /*

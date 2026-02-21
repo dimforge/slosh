@@ -6,12 +6,7 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{
-    GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
-    GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses,
-    WgRigidParticleUpdate, WgTimestepBounds,
-};
+use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgGridUpdateCollide, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
 use nexus::dynamics::GpuBodySet;
 use nexus::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use nexus::math::{GpuSim, Vector};
@@ -46,6 +41,7 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     p2g: WgP2G<B>,
     p2g_cdf: WgP2GCdf<B>,
     grid_update_cdf: WgGridUpdateCdf<B>,
+    grid_update_collide: WgGridUpdateCollide<B>,
     grid_update: WgGridUpdate<B>,
     particles_update: WgParticleUpdate<B>,
     g2p: WgG2P<B>,
@@ -340,6 +336,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
+            grid_update_collide: WgGridUpdateCollide::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
             particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
             #[cfg(feature = "runtime")]
@@ -428,43 +425,43 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 &self.sort,
                 &self.prefix_sum,
             )?;
-            self.sort.launch_sort_rigid_particles(
-                backend,
-                &mut pass,
-                &data.rigid_particles,
-                &data.grid,
-            )?;
+            // self.sort.launch_sort_rigid_particles(
+            //     backend,
+            //     &mut pass,
+            //     &data.rigid_particles,
+            //     &data.grid,
+            // )?;
         }
 
         hooks.after_particle_sort(backend, encoder, data, hooks_state)?;
 
-        {
-            let mut pass = encoder.begin_pass(); // ("grid_update_cdf", timestamps.as_deref_mut());
-            self.grid_update_cdf
-                .launch(backend, &mut pass, &data.grid, &data.bodies)?;
-        }
-
-        {
-            let mut pass = encoder.begin_pass(); // ("p2g_cdf", timestamps.as_deref_mut());
-            self.p2g_cdf.launch(
-                backend,
-                &mut pass,
-                &data.grid,
-                &data.rigid_particles,
-                &data.bodies,
-            )?;
-        }
-
-        {
-            let mut pass = encoder.begin_pass(); // ("g2p_cdf", timestamps.as_deref_mut());
-            self.g2p_cdf.launch(
-                backend,
-                &mut pass,
-                &data.sim_params,
-                &data.grid,
-                &data.particles,
-            )?;
-        }
+        // {
+        //     let mut pass = encoder.begin_pass(); // ("grid_update_cdf", timestamps.as_deref_mut());
+        //     self.grid_update_cdf
+        //         .launch(backend, &mut pass, &data.grid, &data.bodies)?;
+        // }
+        //
+        // {
+        //     let mut pass = encoder.begin_pass(); // ("p2g_cdf", timestamps.as_deref_mut());
+        //     self.p2g_cdf.launch(
+        //         backend,
+        //         &mut pass,
+        //         &data.grid,
+        //         &data.rigid_particles,
+        //         &data.bodies,
+        //     )?;
+        // }
+        //
+        // {
+        //     let mut pass = encoder.begin_pass(); // ("g2p_cdf", timestamps.as_deref_mut());
+        //     self.g2p_cdf.launch(
+        //         backend,
+        //         &mut pass,
+        //         &data.sim_params,
+        //         &data.grid,
+        //         &data.particles,
+        //     )?;
+        // }
 
         {
             let mut pass = encoder.begin_pass(); // ("p2g", timestamps.as_deref_mut());
@@ -485,6 +482,8 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             let mut pass = encoder.begin_pass(); // ("grid_update", timestamps.as_deref_mut());
             self.grid_update
                 .launch(backend, &mut pass, &data.sim_params, &data.grid)?;
+            self.grid_update_collide
+                .launch(backend, &mut pass, &data.grid, &data.bodies, &data.body_materials)?;
         }
 
         hooks.after_grid_update(backend, encoder, data, hooks_state)?;

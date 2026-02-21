@@ -44,52 +44,8 @@ struct SharedNode {
 struct P2GStepResult {
 #if DIM == 2
     float3 new_momentum_velocity_mass;
-    float3 new_momentum_velocity_mass_incompatible;
-    float2 impulse;
-    float ang_impulse;
-
-//    __init() {
-//        this.new_momentum_velocity_mass = float3(0.0);
-//        this.new_momentum_velocity_mass_incompatible = float3(0.0);
-//        this.impulse = float2(0.0);
-//        this.ang_impulse = 0.0;
-//    }
-//
-//    __init(
-//        float3 new_momentum_velocity_mass,
-//        float3 new_momentum_velocity_mass_incompatible,
-//        float2 impulse,
-//        float ang_impulse
-//    ) {
-//        this.new_momentum_velocity_mass = new_momentum_velocity_mass;
-//        this.new_momentum_velocity_mass_incompatible = new_momentum_velocity_mass_incompatible;
-//        this.impulse = impulse;
-//        this.ang_impulse = ang_impulse;
-//    }
 #else
     float4 new_momentum_velocity_mass;
-    float4 new_momentum_velocity_mass_incompatible;
-    float3 impulse;
-    float3 ang_impulse;
-
-//    __init() {
-//        this.new_momentum_velocity_mass = float4(0.0);
-//        this.new_momentum_velocity_mass_incompatible = float4(0.0);
-//        this.impulse = float3(0.0);
-//        this.ang_impulse = float3(0.0);
-//    }
-//
-//    __init(
-//        float4 new_momentum_velocity_mass,
-//        float4 new_momentum_velocity_mass_incompatible,
-//        float3 impulse,
-//        float3 ang_impulse
-//    ) {
-//        this.new_momentum_velocity_mass = new_momentum_velocity_mass;
-//        this.new_momentum_velocity_mass_incompatible = new_momentum_velocity_mass_incompatible;
-//        this.impulse = impulse;
-//        this.ang_impulse = ang_impulse;
-//    }
 #endif
 }
 
@@ -107,9 +63,6 @@ func p2g(
     StructuredBuffer<Position> particles_pos,
     StructuredBuffer<Dynamics> particles_dyn,
     RWStructuredBuffer<Node> nodes,
-    StructuredBuffer<BodyVelocity> body_vels,
-    RWStructuredBuffer<IntegerImpulseAtomic> body_impulses,
-    StructuredBuffer<BoundaryCondition> body_materials,
 ) {
     let bid = block_id.x;
     // HACK: force copying the virtual ID otherwise there is a naga bug when
@@ -156,11 +109,8 @@ func p2g(
         fetch_next_particle(particles_pos, particles_dyn, particle_node_linked_lists, tid);
         GroupMemoryBarrierWithGroupSync();
 
-        let partial_result = p2g_step(body_vels, body_impulses, body_materials, packed_cell_index_in_block, grid[0].cell_width, node_affinities, collider_id);
+        let partial_result = p2g_step(packed_cell_index_in_block, grid[0].cell_width, node_affinities, collider_id);
         total_result.new_momentum_velocity_mass += partial_result.new_momentum_velocity_mass;
-        total_result.new_momentum_velocity_mass_incompatible += partial_result.new_momentum_velocity_mass_incompatible;
-        total_result.impulse += partial_result.impulse;
-        total_result.ang_impulse += partial_result.ang_impulse;
     }
 
     // Grid update.
@@ -178,33 +128,9 @@ func p2g(
 
     // Write the node state to global memory.
     nodes[global_id].momentum_velocity_mass = total_result.new_momentum_velocity_mass;
-    nodes[global_id].momentum_velocity_mass_incompatible = total_result.new_momentum_velocity_mass_incompatible;
-    // Apply the impulse to the closest body.
-    // PERF: we should probably run a reduction here to get per-collider accumulated impulses
-    //       before adding to global memory. Because it is very likely that every single thread
-    //       here targets the same body.
-
-    if (collider_id != NONE) {
-#if DIM == 2
-        body_impulses[collider_id].linear_x.add(flt2int(total_result.impulse.x));
-        body_impulses[collider_id].linear_y.add(flt2int(total_result.impulse.y));
-        body_impulses[collider_id].angular.add(flt2int(total_result.ang_impulse));
-#else
-        body_impulses[collider_id].linear_x.add(flt2int(total_result.impulse.x));
-        body_impulses[collider_id].linear_y.add(flt2int(total_result.impulse.y));
-        body_impulses[collider_id].linear_z.add(flt2int(total_result.impulse.z));
-        body_impulses[collider_id].angular_x.add(flt2int(total_result.ang_impulse.x));
-        body_impulses[collider_id].angular_y.add(flt2int(total_result.ang_impulse.y));
-        body_impulses[collider_id].angular_z.add(flt2int(total_result.ang_impulse.z));
-#endif
-    }
 }
 
 func p2g_step(
-    body_vels: StructuredBuffer<BodyVelocity>,
-    // NOTE: could have been StructuredBuffer but the kernel itself needs RW.
-    body_impulses: RWStructuredBuffer<IntegerImpulseAtomic>,
-    body_materials: StructuredBuffer<BoundaryCondition>,
     packed_cell_index_in_block: uint,
     cell_width: float,
     node_affinity: uint,
@@ -219,15 +145,10 @@ func p2g_step(
 #if DIM == 2
     let bottommost_contributing_node = flatten_shared_shift(2u, 2u);
     var new_momentum_velocity_mass = float3(0.0);
-    var new_momentum_velocity_mass_incompatible = float3(0.0);
 #else
     let bottommost_contributing_node = flatten_shared_shift(2u, 2u, 2u);
     var new_momentum_velocity_mass = float4(0.0);
-    var new_momentum_velocity_mass_incompatible = float4(0.0);
 #endif
-    var impulse = Vect<float>(0.0);
-    var ang_impulse = AngVect(0.0);
-
     [[ForceUnroll]]
     for (var i = 0u; i < NBH_LEN; i += 1u) {
         let packed_shift = NBH_SHIFTS_SHARED[i];
@@ -258,38 +179,10 @@ func p2g_step(
 
         let particle_affinity = shared_affinities[nbh_shared_index];
         let contribution = vector<float, DIM + 1>(mul(dpt, particle_affine) + momentum, particle_mass) * weight;
-
-        if (!affinities_are_compatible(node_affinity, particle_affinity)) {
-            if (collider_id != NONE) {
-                let particle_normal = shared_normals[nbh_shared_index];
-                let body_vel = body_vels[collider_id];
-                let body_com = body_impulses[collider_id].com;
-                let body_material = body_materials[collider_id];
-                let cell_center = dpt + particle_pos.pt;
-                let body_pt_vel = body_velocity_at_point(body_com, body_vel, cell_center);
-                let particle_ghost_vel = body_pt_vel + body_material.project_velocity(particle_vel - body_pt_vel, particle_normal);
-                let delta_impulse = (particle_vel - particle_ghost_vel) * (weight * particle_mass);
-
-                // TODO: we could do the ang impulse calcs only once after all the `p2g_step` executions.
-                let lever_arm = body_com - cell_center;
-
-    #if DIM == 2
-                let delta_ang_impulse = dot(delta_impulse, float2(lever_arm.y, -lever_arm.x));
-    #else
-                let delta_ang_impulse = cross(delta_impulse, lever_arm);
-    #endif
-
-                ang_impulse += delta_ang_impulse;
-                impulse += delta_impulse;
-            }
-
-            new_momentum_velocity_mass_incompatible += contribution;
-        } else {
-            new_momentum_velocity_mass += contribution;
-        }
+        new_momentum_velocity_mass += contribution;
     }
 
-    return P2GStepResult(new_momentum_velocity_mass, new_momentum_velocity_mass_incompatible, impulse, ang_impulse);
+    return P2GStepResult(new_momentum_velocity_mass);
 }
 
 #if DIM == 2

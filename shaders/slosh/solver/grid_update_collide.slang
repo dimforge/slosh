@@ -1,9 +1,10 @@
-module grid_update;
+module grid_update_collide;
 
 import nexus.shapes.shape;
 import nexus.aliases;
 import slosh.grid.grid;
 import slosh.collision.collide;
+import slosh.solver.boundary_condition;
 
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;
@@ -23,6 +24,7 @@ func grid_update(
     uint tid_flat: SV_GroupIndex,
     StructuredBuffer<Grid> grid,
     StructuredBuffer<ActiveBlockHeader> active_blocks,
+    StructuredBuffer<BoundaryCondition> body_materials,
     StructuredBuffer<Shape> collision_shapes,
     StructuredBuffer<Pose> collision_shape_poses,
     RWStructuredBuffer<Node> nodes,
@@ -43,5 +45,22 @@ func grid_update(
     //            collisions in teh other `_cdf` kernels.
     //            Or maybe just use some sort of flag and skip the block at the start of the kernel?
     let global_id = global_node_id.id;
-    nodes[global_id].cdf = collide_cdf(collision_shapes, collision_shape_poses, grid[0].cell_width, cell_pos);
+    let collision = collide(collision_shapes, collision_shape_poses, grid[0].cell_width, cell_pos);
+
+    if (collision.valid) {
+        // Apply boundary condition.
+        let material = body_materials[collision.collider_id];
+        // TODO: take rigid-body velocity into account too.
+        #if DIM == 2
+            let node_velocity = nodes[global_node_id.id].momentum_velocity_mass.xy;
+            let node_mass = nodes[global_node_id.id].momentum_velocity_mass.z;
+            let projected = material.project_velocity(node_velocity, collision.normal);
+            nodes[global_node_id.id].momentum_velocity_mass = float3(projected, node_mass);
+        #else
+            let node_velocity = nodes[global_node_id.id].momentum_velocity_mass.xyz;
+            let node_mass = nodes[global_node_id.id].momentum_velocity_mass.w;
+            let projected = material.project_velocity(node_velocity, collision.normal);
+            nodes[global_node_id.id].momentum_velocity_mass = float4(projected, node_mass);
+        #endif
+    }
 }

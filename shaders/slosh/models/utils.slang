@@ -102,10 +102,10 @@ public struct ElasticitySoundSpeedTimestepBound {
     public float bulk_modulus;
     public float shear_modulus;
 
-    public __init(float alpha, float young_modulus, float poisson_ratio) {
+    public __init(float alpha, float bulk_modulus, float shear_modulus) {
         this.alpha = alpha;
-        this.bulk_modulus = hook_to_bulk_modulus(young_modulus, poisson_ratio);
-        this.shear_modulus = hook_to_shear_modulus(young_modulus, poisson_ratio);
+        this.bulk_modulus = bulk_modulus;
+        this.shear_modulus = shear_modulus;
     }
 
     public static func from_elasticity(float alpha, float young_modulus, float poisson_ratio) -> ElasticitySoundSpeedTimestepBound {

@@ -115,25 +115,25 @@ impl<B: Backend> WgGrid<B> {
                 [particles.len() as u32, 1, 1],
             )?;
 
-            // Ensure blocks exist wherever we have rigid particles that might affect
-            // other blocks. This is done in two passes:
-            // 1. Mark all rigid particles that need to ensure it’s associated block exists
-            // 2. Touch the blocks with marked rigid particles.
-            if !rigid_particles.is_empty() {
-                sort_module.mark_rigid_particles_needing_block.launch(
-                    backend,
-                    pass,
-                    &args,
-                    [rigid_particles.len() as u32, 1, 1],
-                )?;
-
-                sort_module.touch_rigid_particle_blocks.launch(
-                    backend,
-                    pass,
-                    &args,
-                    [rigid_particles.len() as u32, 1, 1],
-                )?;
-            }
+            // // Ensure blocks exist wherever we have rigid particles that might affect
+            // // other blocks. This is done in two passes:
+            // // 1. Mark all rigid particles that need to ensure it’s associated block exists
+            // // 2. Touch the blocks with marked rigid particles.
+            // if !rigid_particles.is_empty() {
+            //     sort_module.mark_rigid_particles_needing_block.launch(
+            //         backend,
+            //         pass,
+            //         &args,
+            //         [rigid_particles.len() as u32, 1, 1],
+            //     )?;
+            //
+            //     sort_module.touch_rigid_particle_blocks.launch(
+            //         backend,
+            //         pass,
+            //         &args,
+            //         [rigid_particles.len() as u32, 1, 1],
+            //     )?;
+            // }
 
             // TODO: handle grid buffer resizing
             sparse_grid_has_the_correct_size = true;

@@ -4,7 +4,7 @@ members = [
     "crates/slosh_testbed3d",
     "crates/slosh2d",
     "crates/slosh3d",
-    "validation_tests",
+#    "validation_tests",
 ]
 resolver = "2"
 
@@ -30,8 +30,8 @@ rust.unexpected_cfgs = { level = "warn", check-cfg = [
 #slang-hal = { path = "../slang-hal/crates/slang-hal" }
 #minislang = { path = "../slang-hal/crates/minislang" }
 #stensor = { path = "../stensor" }
-#nexus2d = { path = "../nexus/crates/nexus2d" }
-#nexus3d = { path = "../nexus/crates/nexus3d" }
+nexus2d = { path = "../nexus-slang/crates/nexus2d" }
+nexus3d = { path = "../nexus-slang/crates/nexus3d" }
 
 #slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
 #slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }

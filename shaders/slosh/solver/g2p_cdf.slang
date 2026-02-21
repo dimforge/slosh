@@ -184,6 +184,7 @@ func particle_g2p(
         for (var i_collider = 0u; i_collider < 16u; i_collider += 1u) {
             let compatible = float(affinity_bit(i_collider, cell_data.affinities));
             let sign = select(sign_bit(i_collider, cell_data.affinities) && !shape_has_solid_interior(i_collider), -1.0, 1.0);
+
             affinity_signs[i_collider] += compatible * weight * sign * cell_data.distance;
         }
     }
