@@ -5,8 +5,8 @@ use crate::grid::grid::{
 };
 use crate::sampling::GpuSampleIds;
 use crate::solver::GpuRigidParticles;
-use nexus::dynamics::GpuBodySet;
-use nexus::math::Point;
+use crate::rbd::dynamics::GpuBodySet;
+use crate::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

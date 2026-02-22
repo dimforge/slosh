@@ -1,7 +1,7 @@
 module collide;
 
-import nexus.shapes.shape;
-import nexus.aliases;
+import slosh.rbd.shapes.shape;
+import slosh.aliases;
 import slosh.grid.grid;
 
 public func collide_cdf(

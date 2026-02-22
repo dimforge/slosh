@@ -13,12 +13,7 @@ dim3 = []
 
 comptime = ["slosh3d/comptime"]
 runtime = ["slosh3d/runtime"]
-
 webgpu = ["slosh3d/webgpu"]
-vulkan = ["slosh3d/vulkan"]
-metal = ["slosh3d/metal"]
-cpu = ["slosh3d/cpu"]
-cuda = ["slosh3d/cuda"]
 
 render = ["kiss3d"]
 

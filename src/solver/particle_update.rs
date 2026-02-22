@@ -7,7 +7,7 @@ use crate::grid::grid::{GpuGrid, GpuGridMetadata};
 use crate::solver::params::GpuSimulationParams;
 use crate::solver::particle_model::GpuParticleModelData;
 use crate::solver::{GpuParticles, ParticleDynamics, ParticlePosition, SimulationParams};
-use nexus::dynamics::GpuBodySet;
+use crate::rbd::dynamics::GpuBodySet;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

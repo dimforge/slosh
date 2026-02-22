@@ -1,7 +1,7 @@
 module rigid_particle_update;
 
-import nexus.dynamics.body;
-import nexus.aliases;
+import slosh.rbd.dynamics.body;
+import slosh.aliases;
 import slosh.solver.particle;
 
 static const uint WORKGROUP_SIZE = 64;

@@ -19,14 +19,9 @@ required-features = ["dim3"]
 default = ["dim3"]
 dim3 = []
 
-comptime = [ "nexus3d/comptime", "slosh_testbed3d/comptime" ]
-runtime = [ "nexus3d/runtime", "slosh_testbed3d/runtime" ]
-
-webgpu = [ "nexus3d/webgpu", "slosh_testbed3d/webgpu" ]
-vulkan = [ "nexus3d/vulkan", "slosh_testbed3d/vulkan" ]
-metal = [ "nexus3d/metal", "slosh_testbed3d/metal" ]
-cpu = [ "nexus3d/cpu", "slosh_testbed3d/cpu" ]
-cuda = [ "nexus3d/cuda", "slosh_testbed3d/cuda" ]
+comptime = [ "stensor/comptime", "slosh_testbed3d/comptime" ]
+runtime = [ "stensor/runtime", "slosh_testbed3d/runtime" ]
+webgpu = [ "stensor/webgpu", "slosh_testbed3d/webgpu" ]
 
 [dependencies]
 nalgebra = { workspace = true }
@@ -36,7 +31,6 @@ bytemuck = { workspace = true }
 slang-hal = { workspace = true }
 stensor = { workspace = true }
 static_assertions = { workspace = true }
-nexus3d = "0.3"
 regex = "1"
 bvh = "0.12.0"
 
@@ -58,4 +52,3 @@ kiss3d = { version = "0.37.0" }
 minislang = "0.3"
 include_dir = "0.7"
 slang-hal-build = "0.3"
-nexus3d = "0.3" # to access its shaders at compile-time

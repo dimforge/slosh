@@ -12,8 +12,8 @@ import slosh.models.interfaces;
 import stensor.geometry.svd2;
 import stensor.geometry.svd3;
 import stensor.utils.mat;
-import nexus.shapes.cuboid;
-import nexus.aliases;
+import slosh.rbd.shapes.cuboid;
+import slosh.aliases;
 
 #if COMPTIME
     // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.

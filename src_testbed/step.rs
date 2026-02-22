@@ -1,6 +1,6 @@
 use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
-use nexus::rapier::na;
+use slosh::rapier::na;
 use slang_hal::backend::Backend;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
 

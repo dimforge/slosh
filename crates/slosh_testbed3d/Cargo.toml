@@ -22,10 +22,6 @@ comptime = [ "slosh3d/comptime" ]
 runtime = [ "slosh3d/runtime" ]
 
 webgpu = [ "slosh3d/webgpu" ]
-vulkan = [ "slosh3d/vulkan" ]
-metal = [ "slosh3d/metal" ]
-cpu = [ "slosh3d/cpu" ]
-cuda = [ "slosh3d/cuda" ]
 
 [dependencies]
 nalgebra = { workspace = true, features = ["rand"] }
@@ -36,7 +32,6 @@ encase = { workspace = true }
 
 slang-hal = { workspace = true }
 stensor = { workspace = true }
-nexus3d = "0.3"
 
 futures-test = "0.3"
 serial_test = "3"
@@ -53,4 +48,3 @@ kiss3d = { version = "0.37", features = [ "vertex_index_u32", "egui" ] }
 minislang = "0.3"
 include_dir = "0.7"
 slang-hal-build = "0.3"
-nexus3d = "0.3" # to access its shaders at compile-time

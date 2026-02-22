@@ -1,7 +1,7 @@
 module grid_update;
 
-import nexus.shapes.shape;
-import nexus.aliases;
+import slosh.rbd.shapes.shape;
+import slosh.aliases;
 import slosh.grid.grid;
 import slosh.collision.collide;
 

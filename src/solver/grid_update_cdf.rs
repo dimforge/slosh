@@ -1,9 +1,9 @@
 //! Grid CDF (Collision Detection Field) update for rigid body coupling.
 
 use crate::grid::grid::{GpuActiveBlockHeader, GpuGrid, GpuGridMetadata, GpuGridNode};
-use nexus::dynamics::GpuBodySet;
-use nexus::math::GpuSim;
-use nexus::shapes::GpuShape;
+use crate::rbd::dynamics::GpuBodySet;
+use crate::math::GpuSim;
+use crate::rbd::shapes::GpuShape;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

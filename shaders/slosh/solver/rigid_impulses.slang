@@ -2,8 +2,8 @@ module rigid_impulse;
 
 import slosh.solver.params;
 import slosh.grid.grid;
-import nexus.dynamics.body;
-import nexus.aliases;
+import slosh.rbd.dynamics.body;
+import slosh.aliases;
 
 public struct IntegerImpulse {
     // HACK: we store the center of mass here to reduce the number

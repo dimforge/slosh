@@ -5,7 +5,7 @@ import slosh.models.linear_elasticity;
 import slosh.models.neo_hookean_elasticity;
 import slosh.models.drucker_prager;
 import slosh.solver.particle;
-import nexus.aliases;
+import slosh.aliases;
 
 
 public enum class DefaultParticleModelType {

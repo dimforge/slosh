@@ -19,14 +19,10 @@ required-features = ["dim2"]
 default = ["dim2"]
 dim2 = []
 
-comptime = [ "nexus2d/comptime", "slosh_testbed2d/comptime" ]
-runtime = [ "nexus2d/runtime", "slosh_testbed2d/runtime" ]
+comptime = [ "slosh_testbed2d/comptime" ]
+runtime = [ "slosh_testbed2d/runtime" ]
 
-webgpu = [ "nexus2d/webgpu", "slosh_testbed2d/webgpu" ]
-vulkan = [ "nexus2d/vulkan", "slosh_testbed2d/vulkan" ]
-metal = [ "nexus2d/metal", "slosh_testbed2d/metal" ]
-cpu = [ "nexus2d/cpu", "slosh_testbed2d/cpu" ]
-cuda = [ "nexus2d/cuda", "slosh_testbed2d/cuda" ]
+webgpu = [ "slosh_testbed2d/webgpu" ]
 
 [dependencies]
 nalgebra = { workspace = true }
@@ -39,7 +35,6 @@ static_assertions = { workspace = true }
 
 #wgcore = "0.2"
 #wgebra = "0.2"
-nexus2d = "0.3"
 bvh = "0.12.0"
 
 # TODO: make rapier optional?
@@ -63,4 +58,3 @@ kiss3d = { version = "0.37.0" }
 minislang = "0.3"
 include_dir = "0.7"
 slang-hal-build = "0.3"
-nexus2d = "0.3" # to access its shaders at compile-time

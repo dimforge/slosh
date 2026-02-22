@@ -6,8 +6,8 @@ import slosh.solver.boundary_condition;
 import slosh.grid.kernel;
 import slosh.grid.grid;
 import slosh.solver.rigid_impulses;
-import nexus.dynamics.body;
-import nexus.aliases;
+import slosh.rbd.dynamics.body;
+import slosh.aliases;
 
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;

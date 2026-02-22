@@ -1,6 +1,6 @@
 module timestep_bound;
 
-import nexus.aliases;
+import slosh.aliases;
 import slosh.grid.grid;
 import slosh.models.utils;
 import slosh.models.interfaces;

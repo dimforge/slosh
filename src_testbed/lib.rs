@@ -1,8 +1,4 @@
 #[cfg(feature = "dim2")]
-pub extern crate nexus2d as nexus;
-#[cfg(feature = "dim3")]
-pub extern crate nexus3d as nexus;
-#[cfg(feature = "dim2")]
 pub extern crate slosh2d as slosh;
 #[cfg(feature = "dim3")]
 pub extern crate slosh3d as slosh;
@@ -32,7 +28,7 @@ use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
 #[cfg(feature = "dim3")]
 use nalgebra::Vector3;
-use nexus::rapier::geometry::ShapeType;
+use slosh::rapier::geometry::ShapeType;
 use regex::Regex;
 use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::re_exports::include_dir;
@@ -103,7 +99,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         #[cfg(feature = "runtime")]
         {
             crate::register_shaders(&mut compiler);
-            compiler.set_global_macro("DIM", nexus::math::DIM);
+            compiler.set_global_macro("DIM", slosh::math::DIM);
         }
 
         let mpm_pipeline = MpmPipeline::new(&gpu, &compiler).unwrap();

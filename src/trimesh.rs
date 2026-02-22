@@ -1,4 +1,4 @@
-// TODO: move this to nexus?
+// TODO: move this to rbd?
 
 use encase::ShaderType;
 use rapier::geometry::TriMesh;

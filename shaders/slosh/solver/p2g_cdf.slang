@@ -4,13 +4,13 @@ import slosh.solver.params;
 import slosh.solver.particle;
 import slosh.grid.kernel;
 import slosh.grid.grid;
-import nexus.dynamics.body;
-import nexus.aliases;
+import slosh.rbd.dynamics.body;
+import slosh.aliases;
 
 #if DIM == 2
-import nexus.shapes.segment;
+import slosh.rbd.shapes.segment;
 #else
-import nexus.shapes.triangle;
+import slosh.rbd.shapes.triangle;
 #endif
 
 #if DIM == 2

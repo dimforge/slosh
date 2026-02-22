@@ -7,7 +7,7 @@ import slosh.grid.grid;
 import slosh.solver.params;
 import stensor.geometry.svd3;
 import stensor.utils.mat;
-import nexus.aliases;
+import slosh.aliases;
 
 struct ReadbackData {
     float4 color;

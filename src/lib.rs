@@ -56,10 +56,6 @@
 #![allow(missing_docs)]
 
 #[cfg(feature = "dim2")]
-pub extern crate nexus2d as nexus;
-#[cfg(feature = "dim3")]
-pub extern crate nexus3d as nexus;
-#[cfg(feature = "dim2")]
 pub extern crate rapier2d as rapier;
 #[cfg(feature = "dim3")]
 pub extern crate rapier3d as rapier;
@@ -75,6 +71,7 @@ pub mod pipeline;
 pub(crate) mod sampling;
 pub mod solver;
 pub mod trimesh;
+pub mod rbd;
 
 /// Embedded directory containing Slang shader source files.
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
@@ -90,13 +87,37 @@ pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
 /// * `compiler` - The Slang compiler instance to register shaders with
 #[cfg(feature = "runtime")]
 pub fn register_shaders(compiler: &mut SlangCompiler) {
-    nexus::register_shaders(compiler);
+    stensor::register_shaders(compiler);
     compiler.add_dir(SLANG_SRC_DIR.clone());
+}
+
+
+/// Mathematical types and utilities for physics simulation.
+///
+/// Re-exports Rapier's math types and defines dimension-specific type aliases
+/// for GPU simulation and angular inertia calculations.
+pub mod math {
+    /// Re-export all mathematical types from Rapier (vectors, matrices, etc.)
+    pub use rapier::math::*;
+
+    /// GPU similarity transformation for 2D simulations (translation + rotation).
+    #[cfg(feature = "dim2")]
+    pub type GpuSim = stensor::geometry::GpuSim2;
+    /// GPU similarity transformation for 3D simulations (translation + rotation).
+    #[cfg(feature = "dim3")]
+    pub type GpuSim = stensor::geometry::GpuSim3;
+
+    /// Angular inertia type for 2D simulations (scalar).
+    #[cfg(feature = "dim2")]
+    pub type AngularInertia<N> = N;
+    /// Angular inertia type for 3D simulations (3x3 matrix).
+    #[cfg(feature = "dim3")]
+    pub type AngularInertia<N> = rapier::na::Matrix3<N>;
 }
 
 /// Re-exports of commonly used dependencies for convenience.
 pub mod re_exports {
-    pub use nexus;
+    pub use crate::rbd;
     pub use slang_hal;
     pub use slang_hal::re_exports::*;
     pub use stensor;

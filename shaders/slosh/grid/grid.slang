@@ -1,6 +1,6 @@
 module grid;
 
-import nexus.aliases;
+import slosh.aliases;
 
 // TODO: a lot if what exposed from this module should be methods of Grid (or other structs)
 //       rather than free function. (For now they have just been converted from WGSL to Slang.)

@@ -2,7 +2,7 @@
 
 module drucker_prager;
 
-import nexus.aliases;
+import slosh.aliases;
 import stensor.geometry.svd2;
 import stensor.geometry.svd3;
 

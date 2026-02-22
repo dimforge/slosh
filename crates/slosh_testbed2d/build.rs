@@ -11,8 +11,8 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").expect("Couldn't determine output directory.");
     let mut compiler = ShaderCompiler::new(vec![], &out_dir);
-    compiler.add_dir(nexus2d::re_exports::stensor::SLANG_SRC_DIR);
-    compiler.add_dir(nexus2d::SLANG_SRC_DIR);
+    compiler.add_dir(rbd2d::re_exports::stensor::SLANG_SRC_DIR);
+    compiler.add_dir(rbd2d::SLANG_SRC_DIR);
     compiler.add_dir(SLANG_SRC_DIR);
     compiler.set_global_macro("DIM", "2");
     compiler.set_global_macro("COMPTIME", "1");

@@ -2,7 +2,7 @@
 
 use crate::grid::grid::{GpuGrid, GpuGridHashMapEntry, GpuGridMetadata};
 use crate::solver::GpuRigidParticles;
-use nexus::math::Point;
+use crate::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

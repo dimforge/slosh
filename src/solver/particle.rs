@@ -1,18 +1,18 @@
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use nexus::dynamics::body::BodyCouplingEntry;
+use crate::rbd::dynamics::body::BodyCouplingEntry;
 use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
-// use nexus::shapes::ShapeBuffers;
+// use crate::rbd::shapes::ShapeBuffers;
 use slang_hal::{BufferUsages, backend::Backend};
-// use nexus::dynamics::body::BodyCouplingEntry;
+// use crate::rbd::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
 use crate::solver::particle_model::GpuParticleModelData;
-use nexus::dynamics::GpuBodySet;
-use nexus::math::{Matrix, Point, Vector};
-use nexus::shapes::ShapeBuffers;
+use crate::rbd::dynamics::GpuBodySet;
+use crate::math::{Matrix, Point, Vector};
+use crate::rbd::shapes::ShapeBuffers;
 
 /// Physical state of a single MPM particle.
 ///

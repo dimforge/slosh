@@ -1,6 +1,6 @@
 module boundary_condition;
 
-import nexus.aliases;
+import slosh.aliases;
 
 public enum BoundaryConditionType {
     // Stick condition.

@@ -5,7 +5,7 @@ use crate::grid::sort::WgSort;
 use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use nexus::math::Point;
+use crate::math::Point;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};

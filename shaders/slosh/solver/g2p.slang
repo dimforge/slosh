@@ -7,7 +7,7 @@ import slosh.grid.kernel;
 import slosh.grid.grid;
 import slosh.models.linear_elasticity;
 import slosh.models.drucker_prager;
-import nexus.dynamics.body;
+import slosh.rbd.dynamics.body;
 
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;

@@ -10,7 +10,7 @@ use crate::solver::{
     GpuBoundaryCondition, GpuMaterials, GpuParticleModelData, GpuParticles, GpuSimulationParams,
     ParticleDynamics, ParticlePosition, SimulationParams,
 };
-use nexus::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
+use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

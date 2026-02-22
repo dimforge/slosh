@@ -1,6 +1,6 @@
 module interfaces;
 
-import nexus.aliases;
+import slosh.aliases;
 import slosh.solver.particle;
 
 public struct ModelUpdateResult {

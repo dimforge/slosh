@@ -1,7 +1,7 @@
 module utils;
 
 import stensor.utils.mat;
-import nexus.aliases;
+import slosh.aliases;
 
 /// Computes the Lamé parameters (lambda, mu) from the young modulus and poisson ratio.
 public func lame_lambda_mu(young_modulus: float, poisson_ratio: float) -> float2 {

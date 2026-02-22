@@ -1,8 +1,8 @@
 module trimesh;
 
-import nexus.shapes.triangle;
-import nexus.queries.projection;
-import nexus.aliases;
+import slosh.rbd.shapes.triangle;
+import slosh.rbd.queries.projection;
+import slosh.aliases;
 
 // A triangle mesh.
 //
