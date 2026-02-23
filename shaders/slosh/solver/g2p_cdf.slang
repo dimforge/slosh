@@ -41,7 +41,7 @@ func g2p_cdf(
     StructuredBuffer<Node> nodes,
     StructuredBuffer<uint> sorted_particle_ids,
     StructuredBuffer<Position> particles_pos,
-    RWStructuredBuffer<Dynamics> particles_dyn,
+    RWStructuredBuffer<Cdf> particles_cdf,
 ) {
     let bid = block_id.x;
 
@@ -63,7 +63,7 @@ func g2p_cdf(
          sorted_particle_id < max_particle_id;
          sorted_particle_id += WORKGROUP_SIZE) {
         let particle_id = sorted_particle_ids[sorted_particle_id];
-        particle_g2p(particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
+        particle_g2p(particles_pos, particles_cdf, particle_id, grid[0].cell_width, params.dt);
     }
 }
 
@@ -133,7 +133,7 @@ func global_shared_memory_transfers(
 
 func particle_g2p(
     particles_pos: StructuredBuffer<Position>,
-    particles_dyn: RWStructuredBuffer<Dynamics>,
+    particles_cdf: RWStructuredBuffer<Cdf>,
     particle_id: uint,
     cell_width: float,
     dt: float
@@ -149,7 +149,7 @@ func particle_g2p(
         0.0, 0.0, 0.0, 0.0
     };
 
-    let prev_affinity = particles_dyn[particle_id].cdf.affinity;
+    let prev_affinity = particles_cdf[particle_id].affinity;
     let particle_pos = particles_pos[particle_id];
     let inv_d = QuadraticKernel::inv_d(cell_width);
     let ref_elt_pos_minus_particle_pos = dir_to_associated_grid_node(particle_pos, cell_width);
@@ -253,15 +253,15 @@ func particle_g2p(
         let len = length(result.xy);
         let normal = select(len > 1.0e-6, result.xy / len, float2(0.0));
         // PERF: init the rigid-velocities here instead of in g2p?
-        particles_dyn[particle_id].cdf = Cdf(normal, float2(0.0), result.z, particle_affinity);
+        particles_cdf[particle_id] = Cdf(normal, float2(0.0), result.z, particle_affinity);
 #else
         let result = mul(qtu, inv(qtq));
         let normal = result.xyz / length(result.xyz);
-        particles_dyn[particle_id].cdf = Cdf(normal, float3(0.0), result.w, particle_affinity);
+        particles_cdf[particle_id] = Cdf(normal, float3(0.0), result.w, particle_affinity);
 #endif
     } else {
         // TODO: store the affinity in this case too?
-        particles_dyn[particle_id].cdf = Cdf();
+        particles_cdf[particle_id] = Cdf();
     }
 }
 

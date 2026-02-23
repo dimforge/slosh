@@ -4,9 +4,7 @@ use crate::rbd::dynamics::body::BodyCouplingEntry;
 use rapier::geometry::ColliderSet;
 use std::ops::RangeBounds;
 use stensor::tensor::{GpuScalar, GpuTensor};
-// use crate::rbd::shapes::ShapeBuffers;
 use slang_hal::{BufferUsages, backend::Backend};
-// use crate::rbd::dynamics::body::BodyCouplingEntry;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
 use crate::solver::particle_model::GpuParticleModelData;
@@ -14,13 +12,12 @@ use crate::rbd::dynamics::GpuBodySet;
 use crate::math::{Matrix, Point, Vector};
 use crate::rbd::shapes::ShapeBuffers;
 
-/// Physical state of a single MPM particle.
+/// Physical state of a single MPM particle (CPU-side).
 ///
-/// Contains all the dynamic properties that evolve during simulation:
-/// velocity, deformation gradient, mass, volume, and collision detection
-/// information for rigid body coupling.
-///
-/// This struct is GPU-compatible and directly uploaded to compute shaders.
+/// Contains all the dynamic properties that evolve during simulation.
+/// On the GPU side, these fields are split into separate buffers
+/// ([`Kinematics`], [`Cdf`], deformation gradient, [`ParticleProperties`])
+/// for optimal memory bandwidth.
 #[derive(Copy, Clone, PartialEq, Debug, ShaderType)]
 #[repr(C)]
 pub struct ParticleDynamics {
@@ -102,6 +99,71 @@ impl ParticleDynamics {
     pub fn set_density(&mut self, density: f32) {
         self.mass = self.init_volume * density;
     }
+
+    /// Extracts the kinematic state for GPU upload.
+    fn to_kinematics(&self) -> Kinematics {
+        Kinematics {
+            affine: self.affine,
+            velocity: self.velocity,
+            force_dt: self.force_dt,
+            vel_grad_det: self.vel_grad_det,
+            mass: self.mass,
+            enabled: self.enabled,
+        }
+    }
+
+    /// Extracts the static properties for GPU upload.
+    fn to_properties(&self) -> ParticleProperties {
+        ParticleProperties {
+            init_volume: self.init_volume,
+            init_radius: self.init_radius,
+            damping: self.damping,
+            phase: self.phase,
+            fixed: self.fixed,
+        }
+    }
+}
+
+/// Kinematic state for APIC particle-grid transfers.
+///
+/// Contains the fields needed by P2G and G2P kernels: velocity, mass, affine matrix,
+/// external forces, and particle status. Separated from deformation and material
+/// properties to reduce GPU memory bandwidth in transfer kernels.
+#[derive(Copy, Clone, PartialEq, Debug, Default, ShaderType)]
+#[repr(C)]
+pub struct Kinematics {
+    /// APIC affine velocity matrix / velocity gradient.
+    pub affine: Matrix<f32>,
+    /// Current velocity (m/s).
+    pub velocity: Vector<f32>,
+    /// Additional force * dt applied to the particle.
+    pub force_dt: Vector<f32>,
+    /// Determinant of velocity gradient (for volume change tracking).
+    pub vel_grad_det: f32,
+    /// Particle mass (kg).
+    pub mass: f32,
+    /// Whether this particle is active (1) or disabled (0).
+    pub enabled: u32,
+}
+
+/// Static per-particle properties that are read-only on the GPU.
+///
+/// These fields are set once during particle creation and never modified by any
+/// GPU shader. Storing them separately allows the GPU to cache this buffer
+/// more aggressively and avoids unnecessary write-back bandwidth.
+#[derive(Copy, Clone, PartialEq, Debug, Default, ShaderType)]
+#[repr(C)]
+pub struct ParticleProperties {
+    /// Initial particle volume (m² in 2D, m³ in 3D).
+    pub init_volume: f32,
+    /// Initial particle radius (m).
+    pub init_radius: f32,
+    /// Rayleigh mass-proportional damping coefficient (1/s).
+    pub damping: f32,
+    /// The particle phase (used by materials that can break).
+    pub phase: f32,
+    /// Whether this particle is fixed (1) or dynamic (0).
+    pub fixed: u32,
 }
 
 /// Phase field data for fracture mechanics (experimental).
@@ -219,22 +281,6 @@ impl<B: Backend> GpuRigidParticles<B> {
     }
 
     /// Samples particles from Rapier collider surfaces for MPM coupling.
-    ///
-    /// Samples points on the surfaces of specified colliders at regular intervals
-    /// determined by `sampling_step`. These particles will track rigid body motion
-    /// and interact with MPM particles.
-    ///
-    /// # Arguments
-    ///
-    /// * `backend` - GPU backend for buffer allocation
-    /// * `colliders` - Rapier collider set
-    /// * `gpu_bodies` - GPU representation of rigid bodies
-    /// * `coupling` - List of colliders to sample (with coupling mode)
-    /// * `sampling_step` - Distance between sample points on surfaces
-    ///
-    /// # Returns
-    ///
-    /// GPU buffers containing sampled particles, or an error if buffer allocation fails.
     pub fn from_rapier(
         backend: &B,
         colliders: &ColliderSet,
@@ -333,7 +379,10 @@ pub type ParticlePosition = nalgebra::Point4<f32>;
 
 struct SoAParticles<GpuModel: GpuParticleModelData> {
     positions: Vec<ParticlePosition>,
-    dynamics: Vec<ParticleDynamics>,
+    kinematics: Vec<Kinematics>,
+    cdf: Vec<Cdf>,
+    def_grad: Vec<Matrix<f32>>,
+    properties: Vec<ParticleProperties>,
     models: Vec<GpuModel>,
 }
 
@@ -346,7 +395,10 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
             .iter()
             .map(|p| p.position.coords.push(0.0).into())
             .collect();
-        let dynamics: Vec<_> = particles.iter().map(|p| p.dynamics).collect();
+        let kinematics: Vec<_> = particles.iter().map(|p| p.dynamics.to_kinematics()).collect();
+        let cdf: Vec<_> = particles.iter().map(|p| p.dynamics.cdf).collect();
+        let def_grad: Vec<_> = particles.iter().map(|p| p.dynamics.def_grad).collect();
+        let properties: Vec<_> = particles.iter().map(|p| p.dynamics.to_properties()).collect();
         let models: Vec<_> = particles
             .iter()
             .map(|p| GpuModel::from_model(p.model))
@@ -354,7 +406,10 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
 
         Self {
             positions,
-            dynamics,
+            kinematics,
+            cdf,
+            def_grad,
+            properties,
             models,
         }
     }
@@ -362,13 +417,21 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
 
 /// GPU buffers storing all MPM particle data in Structure-of-Arrays layout.
 ///
-/// Separates particle data into individual buffers (positions, dynamics, models)
-/// for efficient GPU access patterns.
+/// Particle data is split into separate buffers (kinematics, cdf, deformation gradient,
+/// properties, models) for optimal GPU memory bandwidth. Each kernel only binds the
+/// buffers it needs.
 pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModelData> {
     len: usize,
     gpu_len: GpuScalar<u32, B>,
     positions: GpuTensor<ParticlePosition, B>,
-    dynamics: GpuTensor<ParticleDynamics, B>,
+    /// Kinematic state (velocity, affine, mass, etc.) for P2G/G2P.
+    pub kinematics: GpuTensor<Kinematics, B>,
+    /// Collision detection field data for rigid body coupling.
+    pub cdf: GpuTensor<Cdf, B>,
+    /// Deformation gradient matrices.
+    pub def_grad: GpuTensor<Matrix<f32>, B>,
+    /// Static per-particle properties (read-only on GPU).
+    pub properties: GpuTensor<ParticleProperties, B>,
     models: GpuTensor<GpuModel, B>,
     sorted_ids: GpuTensor<u32, B>,
     node_linked_lists: GpuTensor<u32, B>,
@@ -392,7 +455,8 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
 
     /// Uploads CPU-side particles to GPU buffers.
     ///
-    /// Converts from Array-of-Structures to Structure-of-Arrays layout.
+    /// Converts from Array-of-Structures to Structure-of-Arrays layout,
+    /// splitting dynamics into separate kinematics, cdf, def_grad, and properties buffers.
     pub fn from_particles(
         backend: &B,
         particles: &[Particle<GpuModel::Model>],
@@ -407,7 +471,10 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
                 BufferUsages::STORAGE | BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             )?,
             positions: GpuTensor::vector(backend, &data.positions, resizeable)?,
-            dynamics: GpuTensor::vector_encased(backend, &data.dynamics, resizeable)?,
+            kinematics: GpuTensor::vector_encased(backend, &data.kinematics, resizeable)?,
+            cdf: GpuTensor::vector_encased(backend, &data.cdf, resizeable)?,
+            def_grad: GpuTensor::vector_encased(backend, &data.def_grad, resizeable)?,
+            properties: GpuTensor::vector_encased(backend, &data.properties, resizeable)?,
             models: GpuTensor::vector(backend, &data.models, resizeable)?,
             sorted_ids: GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
             node_linked_lists: GpuTensor::vector_uninit(
@@ -426,20 +493,24 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
         backend: &B,
         range: impl RangeBounds<usize> + Clone,
     ) -> Result<usize, B::Error> {
-        // If new vectors are added to the struct, this code needs to be updated to adjust
-        // the buffers accordingly after range removal.
         let Self {
             len,
             gpu_len,
             positions,
-            dynamics,
+            kinematics,
+            cdf,
+            def_grad,
+            properties,
             models,
             sorted_ids: _,
             node_linked_lists: _,
         } = self;
 
         let removed = positions.shift_remove_encased(backend, range.clone())?;
-        dynamics.shift_remove_encased(backend, range.clone())?;
+        kinematics.shift_remove_encased(backend, range.clone())?;
+        cdf.shift_remove_encased(backend, range.clone())?;
+        def_grad.shift_remove_encased(backend, range.clone())?;
+        properties.shift_remove_encased(backend, range.clone())?;
         models.shift_remove(backend, range.clone())?;
 
         *len -= removed;
@@ -453,13 +524,14 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
         backend: &B,
         particles: &[Particle<GpuModel::Model>],
     ) -> Result<(), B::Error> {
-        // If new vectors are added to the struct, this code needs to be updated to adjust
-        // the buffers accordingly for appending particles.
         let Self {
             len,
             gpu_len,
             positions,
-            dynamics,
+            kinematics,
+            cdf,
+            def_grad,
+            properties,
             models,
             sorted_ids,
             node_linked_lists,
@@ -469,7 +541,10 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
 
         let zeros = vec![0; particles.len()];
 
-        dynamics.append_encased(backend, &data.dynamics)?;
+        kinematics.append_encased(backend, &data.kinematics)?;
+        cdf.append_encased(backend, &data.cdf)?;
+        def_grad.append_encased(backend, &data.def_grad)?;
+        properties.append_encased(backend, &data.properties)?;
         positions.append_encased(backend, &data.positions)?;
         models.append(backend, &data.models)?;
         sorted_ids.append(backend, &zeros)?;
@@ -497,19 +572,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
         &self.positions
     }
 
-    /// Returns reference to position buffer.
+    /// Returns mutable reference to position buffer.
     pub fn positions_mut(&mut self) -> &mut GpuTensor<ParticlePosition, B> {
         &mut self.positions
-    }
-
-    /// Returns reference to dynamics buffer (velocity, deformation, mass).
-    pub fn dynamics(&self) -> &GpuTensor<ParticleDynamics, B> {
-        &self.dynamics
-    }
-
-    /// Returns mutable reference to dynamics buffer (velocity, deformation, mass).
-    pub fn dynamics_mut(&mut self) -> &mut GpuTensor<ParticleDynamics, B> {
-        &mut self.dynamics
     }
 
     /// Returns reference to sorted particle ID buffer.

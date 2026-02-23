@@ -4,39 +4,39 @@ public struct Position {
     public vector<float, DIM> pt;
 }
 
-public struct Dynamics {
-    // NOTE: with this arrangement, we have
-    //       only a 4-bytes padding at the end
-    //       of the struct in 2D.
-    public vector<float, DIM> velocity;
-    public matrix<float, DIM, DIM> def_grad;
+/// Kinematic state for APIC particle-grid transfers.
+///
+/// Contains the fields needed by P2G and G2P kernels: velocity, mass, affine matrix,
+/// external forces, and particle status. Separated from deformation and material
+/// properties to reduce GPU memory bandwidth in transfer kernels.
+public struct Kinematics {
     // NOTE: when running the particle_update shader, this contains the
     //       particle's velocity gradient. After particle_update, this
     //       contains the affine matrix for APIC transfer.
     public matrix<float, DIM, DIM> affine;
+    public vector<float, DIM> velocity;
     // Additional user-defined force applied indirectly to the particle.
     // Reset at each particle_update invocation.
-    // TODO: unclear if we should apply the force to the particle itself
-    //       instead of going through the grid.
     // NOTE: we store the force multiplied by dt instead of just
     //       the force so we don't have to have access to dt in p2g
     //       (adding that access would exceed 10 bindings…)
     public vector<float, DIM> force_dt;
     public float vel_grad_det;
-    public Cdf cdf;
+    public float mass;
+    public uint enabled;
+}
+
+/// Static per-particle properties that are read-only on the GPU.
+///
+/// These fields are set once during particle creation and never modified by any
+/// GPU shader. Storing them separately allows the GPU to cache this buffer
+/// more aggressively and avoids unnecessary write-back bandwidth.
+public struct ParticleProperties {
     public float init_volume;
     public float init_radius;
-    public float mass;
-    /// Rayleigh mass-proportional damping coefficient (1/s).
     public float damping;
     public float phase;
-    // TODO: merge these two into a `flags` field?
-    public uint enabled;
     public uint fixed;
-
-    public func init_density() -> float {
-        return this.mass / this.init_volume;
-    }
 }
 
 public struct RigidParticleIndices {

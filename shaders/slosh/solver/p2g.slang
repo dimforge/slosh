@@ -61,7 +61,7 @@ func p2g(
     StructuredBuffer<NodeLinkedList> nodes_linked_lists,
     StructuredBuffer<uint> particle_node_linked_lists,
     StructuredBuffer<Position> particles_pos,
-    StructuredBuffer<Dynamics> particles_dyn,
+    StructuredBuffer<Kinematics> particles_kin,
     RWStructuredBuffer<Node> nodes,
 ) {
     let bid = block_id.x;
@@ -106,7 +106,7 @@ func p2g(
     let len = workgroupUniformLoad(max_linked_list_length_uniform);
     for (var i = 0u; i < len; i += 1u) {
         GroupMemoryBarrierWithGroupSync();
-        fetch_next_particle(particles_pos, particles_dyn, particle_node_linked_lists, tid);
+        fetch_next_particle(particles_pos, particles_kin, particle_node_linked_lists, tid);
         GroupMemoryBarrierWithGroupSync();
 
         let partial_result = p2g_step(packed_cell_index_in_block, grid[0].cell_width); // , node_affinities, collider_id);
@@ -302,7 +302,7 @@ func fetch_nodes(
 
 func fetch_next_particle(
     StructuredBuffer<Position> particles_pos,
-    StructuredBuffer<Dynamics> particles_dyn,
+    StructuredBuffer<Kinematics> particles_kin,
     StructuredBuffer<uint> particle_node_linked_lists,
     tid: uint3
 ) {
@@ -326,17 +326,17 @@ func fetch_next_particle(
 #endif
                 let curr_particle_id = shared_nodes[shared_flat_index].particle_id;
 
-                if (curr_particle_id != NONE && particles_dyn[curr_particle_id].enabled != 0) {
+                if (curr_particle_id != NONE && particles_kin[curr_particle_id].enabled != 0) {
 //                    shared_affinities[shared_flat_index] = particles_dyn[curr_particle_id].cdf.affinity;
 //                    shared_normals[shared_flat_index] = particles_dyn[curr_particle_id].cdf.normal;
                     shared_pos[shared_flat_index] = particles_pos[curr_particle_id];
-                    shared_affine[shared_flat_index] = particles_dyn[curr_particle_id].affine;
-                    shared_force_dt[shared_flat_index] = particles_dyn[curr_particle_id].force_dt;
+                    shared_affine[shared_flat_index] = particles_kin[curr_particle_id].affine;
+                    shared_force_dt[shared_flat_index] = particles_kin[curr_particle_id].force_dt;
 
 #if DIM == 2
-                    shared_vel_mass[shared_flat_index] = float3(particles_dyn[curr_particle_id].velocity, particles_dyn[curr_particle_id].mass);
+                    shared_vel_mass[shared_flat_index] = float3(particles_kin[curr_particle_id].velocity, particles_kin[curr_particle_id].mass);
 #else
-                    shared_vel_mass[shared_flat_index] = float4(particles_dyn[curr_particle_id].velocity, particles_dyn[curr_particle_id].mass);
+                    shared_vel_mass[shared_flat_index] = float4(particles_kin[curr_particle_id].velocity, particles_kin[curr_particle_id].mass);
 #endif
                 } else {
                     // TODO: would it be worth skipping writing zeros if we already

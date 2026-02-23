@@ -8,7 +8,7 @@ use crate::grid::grid::{
 };
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
-    ParticleDynamics, ParticlePosition, RigidImpulse,
+    Kinematics, ParticlePosition, RigidImpulse,
 };
 use crate::rbd::dynamics::{GpuBodySet, GpuVelocity};
 use slang_hal::backend::Backend;
@@ -35,7 +35,7 @@ struct P2GArgs<'a, B: Backend> {
     nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
     particle_node_linked_lists: &'a GpuVector<u32, B>,
     particles_pos: &'a GpuVector<ParticlePosition, B>,
-    particles_dyn: &'a GpuVector<ParticleDynamics, B>,
+    particles_kin: &'a GpuVector<Kinematics, B>,
     nodes: &'a GpuVector<GpuGridNode, B>,
     body_vels: &'a GpuVector<GpuVelocity, B>,
     body_impulses: &'a GpuVector<RigidImpulse, B>,
@@ -44,15 +44,6 @@ struct P2GArgs<'a, B: Backend> {
 
 impl<B: Backend> WgP2G<B> {
     /// Launches the P2G kernel to transfer particle data to grid nodes.
-    ///
-    /// # Arguments
-    ///
-    /// * `backend` - GPU backend for command recording
-    /// * `pass` - Compute pass to record commands into
-    /// * `grid` - Target grid to write momentum into
-    /// * `particles` - Source particles to read from
-    /// * `impulses` - Impulse buffers for rigid body coupling
-    /// * `bodies` - Rigid bodies for coupling
     pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
@@ -70,7 +61,7 @@ impl<B: Backend> WgP2G<B> {
             nodes: &grid.nodes,
             nodes_linked_lists: &grid.nodes_linked_lists,
             particles_pos: particles.positions(),
-            particles_dyn: particles.dynamics(),
+            particles_kin: &particles.kinematics,
             particle_node_linked_lists: particles.node_linked_lists(),
             body_vels: bodies.vels(),
             body_impulses: &impulses.incremental_impulses,

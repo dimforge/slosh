@@ -1,5 +1,6 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::solver::{GpuParticleModelData, GpuParticles, ParticleDynamics};
+use crate::math::Matrix;
+use crate::solver::{GpuParticleModelData, GpuParticles, Kinematics, ParticleProperties};
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
@@ -45,7 +46,9 @@ pub struct WgTimestepBounds<B: Backend> {
 struct TimestepBoundsArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     particles_model: &'a GpuTensor<GpuModel, B>,
-    particles_dyn: &'a GpuTensor<ParticleDynamics, B>,
+    particles_kin: &'a GpuTensor<Kinematics, B>,
+    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_props: &'a GpuTensor<ParticleProperties, B>,
     particles_len: &'a GpuScalar<u32, B>,
     result: &'a GpuScalar<GpuTimestepBounds, B>,
 }
@@ -85,7 +88,9 @@ impl<B: Backend> WgTimestepBounds<B> {
         let args = TimestepBoundsArgs {
             grid: &grid.meta,
             particles_model: particles.models(),
-            particles_dyn: particles.dynamics(),
+            particles_kin: &particles.kinematics,
+            particles_def_grad: &particles.def_grad,
+            particles_props: &particles.properties,
             particles_len: particles.gpu_len(),
             result: bounds,
         };

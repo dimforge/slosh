@@ -4,9 +4,10 @@ use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};
 use slosh::grid::grid::{GpuGrid, GpuGridMetadata};
+use slosh::math::Matrix;
 use slosh::solver::{
-    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
-    SimulationParams,
+    Cdf, GpuParticleModelData, GpuParticles, GpuSimulationParams, Kinematics, ParticlePosition,
+    ParticleProperties, SimulationParams,
 };
 use stensor::tensor::GpuTensor;
 
@@ -153,7 +154,10 @@ struct PrepReadbackArgs<'a, B: Backend> {
     instances: &'a GpuTensor<ReadbackData, B>,
     base_colors: &'a GpuTensor<Vector4<f32>, B>,
     particles_pos: &'a GpuTensor<ParticlePosition, B>,
-    particles_dyn: &'a GpuTensor<ParticleDynamics, B>,
+    particles_kin: &'a GpuTensor<Kinematics, B>,
+    particles_cdf: &'a GpuTensor<Cdf, B>,
+    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_props: &'a GpuTensor<ParticleProperties, B>,
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     params: &'a GpuTensor<SimulationParams, B>,
     config: &'a GpuTensor<RenderConfig, B>,
@@ -171,7 +175,10 @@ impl<B: Backend> PrepReadback<B> {
     ) -> Result<(), B::Error> {
         let args = PrepReadbackArgs {
             particles_pos: particles.positions(),
-            particles_dyn: particles.dynamics(),
+            particles_kin: &particles.kinematics,
+            particles_cdf: &particles.cdf,
+            particles_def_grad: &particles.def_grad,
+            particles_props: &particles.properties,
             grid: &grid.meta,
             params: &sim_params.params,
             config: &data.mode,

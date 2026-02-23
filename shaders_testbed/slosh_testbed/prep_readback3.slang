@@ -33,7 +33,10 @@ func prep_readback(
     uint3 invocation_id: SV_DispatchThreadID,
     RWStructuredBuffer<ReadbackData> instances,
     StructuredBuffer<Position> particles_pos,
-    StructuredBuffer<Dynamics> particles_dyn,
+    StructuredBuffer<Kinematics> particles_kin,
+    StructuredBuffer<Cdf> particles_cdf,
+    StructuredBuffer<Mat<float>> particles_def_grad,
+    StructuredBuffer<ParticleProperties> particles_props,
     StructuredBuffer<Grid> grid,
     StructuredBuffer<float4> base_colors,
     ConstantBuffer<SimulationParams> params,
@@ -42,9 +45,9 @@ func prep_readback(
     let particle_id = invocation_id.x;
 
     if (particle_id < instances.getCount()) {
-        let failed = particles_dyn[particle_id].enabled == 0;
-        let def_grad = particles_dyn[particle_id].def_grad;
-        let init_deformation = diag(Vect<float>(particles_dyn[particle_id].init_radius * 2.0));
+        let failed = particles_kin[particle_id].enabled == 0;
+        let def_grad = particles_def_grad[particle_id];
+        let init_deformation = diag(Vect<float>(particles_props[particle_id].init_radius * 2.0));
         instances[particle_id].deformation = mul(init_deformation, clamp(def_grad, Mat<float>(-4.0), Mat<float>(4.0)));
         instances[particle_id].position = particles_pos[particle_id].pt;
 
@@ -57,17 +60,17 @@ func prep_readback(
         if (mode == DEFAULT) {
             instances[particle_id].color = color;
         } else if (mode == VELOCITY) {
-            let vel = particles_dyn[particle_id].velocity;
+            let vel = particles_kin[particle_id].velocity;
             instances[particle_id].color = float4(abs(vel) * dt * 100.0 + float3(0.2), color.w);
         } else if (mode == VOLUME) {
             let svd = Svd3(def_grad);
             let color_xyz = (float3(1.0) - svd.S) / 0.005 + float3(0.2);
             instances[particle_id].color = float4(color_xyz, color.w);
         } else if (mode == PHASE) {
-            let phase = particles_dyn[particle_id].phase;
+            let phase = particles_props[particle_id].phase;
             instances[particle_id].color = float4(0.0, 0.4 * phase, 0.4 * (1.0 - phase), color.w);
         } else if (mode == CDF_NORMALS) {
-            let particle_normal = particles_dyn[particle_id].cdf.normal;
+            let particle_normal = particles_cdf[particle_id].normal;
             if (all(particle_normal == float3(0.0))) {
                 instances[particle_id].color = float4(0.0, 0.0, 0.0, color.w);
             } else {
@@ -75,14 +78,14 @@ func prep_readback(
                 instances[particle_id].color = float4(n.x, n.y, 0.0, color.w);
             }
         } else if (mode == CDF_DISTANCES) {
-            let d = particles_dyn[particle_id].cdf.signed_distance / (cell_width * 1.5);
+            let d = particles_cdf[particle_id].signed_distance / (cell_width * 1.5);
             if (d > 0.0) {
                 instances[particle_id].color = float4(0.0, abs(d), 0.0, color.w);
             } else {
                 instances[particle_id].color = float4(abs(d), 0.0, 0.0, color.w);
             }
         } else if (mode == CDF_SIGNS) {
-             let d = particles_dyn[particle_id].cdf.affinity;
+             let d = particles_cdf[particle_id].affinity;
              let a = (d >> 16) & (d & 0x0000ffff);
              if (d == 0) {
                  instances[particle_id].color = float4(0.0, 0.0, 0.0, color.w);
@@ -98,22 +101,5 @@ func prep_readback(
          }
     }
 }
-
-//@compute @workgroup_size(64, 1, 1)
-//fn main_rigid_particles(
-//    @builtin(global_invocation_id) tid: uint3,
-//) {
-//    let particle_id = tid.x;
-//
-//    if particle_id < arrayLength(&instances) {
-//        instances[particle_id].deformation = float3x3f(
-//            0.4, 0.0, 0.0,
-//            0.0, 0.4, 0.0,
-//            0.0, 0.0, 0.4,
-//        );
-//        instances[particle_id].position = float3(particles_pos[particle_id].pt, 0.0);
-//        instances[particle_id].color = instances[particle_id].base_color;
-//    }
-//}
 
 #endif

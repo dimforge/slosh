@@ -4,7 +4,7 @@ use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
 use crate::solver::{
-    GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticleDynamics, ParticlePosition,
+    Cdf, GpuParticleModelData, GpuParticles, GpuSimulationParams, ParticlePosition,
     SimulationParams,
 };
 use slang_hal::backend::Backend;
@@ -32,19 +32,11 @@ struct G2PCdfArgs<'a, B: Backend> {
     nodes: &'a GpuVector<GpuGridNode, B>,
     sorted_particle_ids: &'a GpuVector<u32, B>,
     particles_pos: &'a GpuVector<ParticlePosition, B>,
-    particles_dyn: &'a GpuVector<ParticleDynamics, B>,
+    particles_cdf: &'a GpuVector<Cdf, B>,
 }
 
 impl<B: Backend> WgG2PCdf<B> {
     /// Launches G2P with CDF updates for MPM particles.
-    ///
-    /// # Arguments
-    ///
-    /// * `backend` - GPU backend
-    /// * `pass` - Compute pass
-    /// * `sim_params` - Simulation parameters
-    /// * `grid` - Source grid
-    /// * `particles` - Target particles to update
     pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
@@ -61,7 +53,7 @@ impl<B: Backend> WgG2PCdf<B> {
             nodes: &grid.nodes,
             sorted_particle_ids: particles.sorted_ids(),
             particles_pos: particles.positions(),
-            particles_dyn: particles.dynamics(),
+            particles_cdf: &particles.cdf,
         };
         self.g2p_cdf.launch_indirect(
             backend,

@@ -8,7 +8,7 @@ use crate::grid::grid::{
 };
 use crate::solver::{
     GpuBoundaryCondition, GpuMaterials, GpuParticleModelData, GpuParticles, GpuSimulationParams,
-    ParticleDynamics, ParticlePosition, SimulationParams,
+    Kinematics, ParticlePosition, SimulationParams,
 };
 use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use slang_hal::backend::Backend;
@@ -36,7 +36,7 @@ struct G2PArgs<'a, B: Backend> {
     nodes: &'a GpuVector<GpuGridNode, B>,
     sorted_particle_ids: &'a GpuVector<u32, B>,
     particles_pos: &'a GpuVector<ParticlePosition, B>,
-    particles_dyn: &'a GpuVector<ParticleDynamics, B>,
+    particles_kin: &'a GpuVector<Kinematics, B>,
     body_vels: &'a GpuVector<GpuVelocity, B>,
     body_mprops: &'a GpuVector<GpuMassProperties, B>,
     body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
@@ -44,15 +44,6 @@ struct G2PArgs<'a, B: Backend> {
 
 impl<B: Backend> WgG2P<B> {
     /// Launches the G2P kernel to update particle velocities from grid.
-    ///
-    /// # Arguments
-    ///
-    /// * `backend` - GPU backend for command recording
-    /// * `pass` - Compute pass to record commands into
-    /// * `sim_params` - Simulation parameters (timestep, gravity)
-    /// * `grid` - Source grid to interpolate from
-    /// * `particles` - Target particles to update
-    /// * `bodies` - Rigid bodies for velocity blending near contacts
     pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
@@ -71,7 +62,7 @@ impl<B: Backend> WgG2P<B> {
             nodes: &grid.nodes,
             sorted_particle_ids: particles.sorted_ids(),
             particles_pos: particles.positions(),
-            particles_dyn: particles.dynamics(),
+            particles_kin: &particles.kinematics,
             body_vels: bodies.vels(),
             body_mprops: bodies.mprops(),
             body_materials: &body_materials.materials,

@@ -7,7 +7,7 @@ import slosh.models.interfaces;
 import slosh.solver.particle;
 
 #if COMPTIME
-    // Only include the default when checking compilation in build.rs which doesn’t support specialization yet.
+    // Only include the default when checking compilation in build.rs which doesn't support specialization yet.
     import slosh.models.default;
     extern struct ParticleModel : IParticleModel = DefaultParticleModel;
 #else
@@ -40,7 +40,9 @@ func estimate_timestep_bound(
     uint3 invocation_id: SV_DispatchThreadID,
     StructuredBuffer<Grid> grid,
     ByteAddressBuffer particles_model,
-    StructuredBuffer<Dynamics> particles_dyn,
+    StructuredBuffer<Kinematics> particles_kin,
+    StructuredBuffer<Mat<float>> particles_def_grad,
+    StructuredBuffer<ParticleProperties> particles_props,
     ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<GpuTimestepBounds> result,
 ) {
@@ -50,7 +52,7 @@ func estimate_timestep_bound(
         return;
     }
 
-    if (particles_dyn[particle_id].enabled == 0) {
+    if (particles_kin[particle_id].enabled == 0) {
         return;
     }
 
@@ -60,11 +62,11 @@ func estimate_timestep_bound(
      * Model-specific restrictions.
      * Will usually be based on sounds speed for the material (section 4.1).
      */
-    let density0 = particles_dyn[particle_id].init_density();
-    let def_grad = particles_dyn[particle_id].def_grad;
-    let velocity = particles_dyn[particle_id].velocity;
-    let affine = particles_dyn[particle_id].affine;
-    let mass = particles_dyn[particle_id].mass;
+    let density0 = particles_kin[particle_id].mass / particles_props[particle_id].init_volume;
+    let def_grad = particles_def_grad[particle_id];
+    let velocity = particles_kin[particle_id].velocity;
+    let affine = particles_kin[particle_id].affine;
+    let mass = particles_kin[particle_id].mass;
 
     let model = ParticleModel();
     var dt = model.timestep_bound(particles_model, particle_id, density0, def_grad, velocity, cell_width);

@@ -6,7 +6,8 @@
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
 use crate::solver::params::GpuSimulationParams;
 use crate::solver::particle_model::GpuParticleModelData;
-use crate::solver::{GpuParticles, ParticleDynamics, ParticlePosition, SimulationParams};
+use crate::solver::{Cdf, GpuParticles, Kinematics, ParticlePosition, ParticleProperties, SimulationParams};
+use crate::math::Matrix;
 use crate::rbd::dynamics::GpuBodySet;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -34,21 +35,15 @@ struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     particles_model: &'a GpuTensor<GpuModel, B>,
     particles_pos: &'a GpuTensor<ParticlePosition, B>,
-    particles_dyn: &'a GpuTensor<ParticleDynamics, B>,
+    particles_kin: &'a GpuTensor<Kinematics, B>,
+    particles_cdf: &'a GpuTensor<Cdf, B>,
+    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_props: &'a GpuTensor<ParticleProperties, B>,
     particles_len: &'a GpuScalar<u32, B>,
 }
 
 impl<B: Backend> WgParticleUpdate<B> {
     /// Launches the particle update kernel.
-    ///
-    /// # Arguments
-    ///
-    /// * `backend` - GPU backend for command recording
-    /// * `pass` - Compute pass to record commands into
-    /// * `sim_params` - Simulation parameters (timestep, gravity)
-    /// * `grid` - Grid metadata for boundary conditions
-    /// * `particles` - Particles to update (positions, deformations, material state)
-    /// * `_bodies` - Rigid bodies (unused, reserved for future coupling)
     pub fn launch<GpuModel: GpuParticleModelData>(
         &self,
         backend: &B,
@@ -63,7 +58,10 @@ impl<B: Backend> WgParticleUpdate<B> {
             grid: &grid.meta,
             particles_model: particles.models(),
             particles_pos: particles.positions(),
-            particles_dyn: particles.dynamics(),
+            particles_kin: &particles.kinematics,
+            particles_cdf: &particles.cdf,
+            particles_def_grad: &particles.def_grad,
+            particles_props: &particles.properties,
             particles_len: particles.gpu_len(),
         };
         self.particle_update

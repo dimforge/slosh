@@ -44,7 +44,7 @@ func g2p(
     StructuredBuffer<Node> nodes,
     StructuredBuffer<uint> sorted_particle_ids,
     StructuredBuffer<Position> particles_pos,
-    RWStructuredBuffer<Dynamics> particles_dyn,
+    RWStructuredBuffer<Kinematics> particles_kin,
 //    StructuredBuffer<BodyVelocity> body_vels,
 //    StructuredBuffer<BodyMassProperties> body_mprops,
 //    StructuredBuffer<BoundaryCondition> body_materials,
@@ -71,7 +71,7 @@ func g2p(
          sorted_particle_id < max_particle_id;
          sorted_particle_id += WORKGROUP_SIZE) {
         let particle_id = sorted_particle_ids[sorted_particle_id];
-        particle_g2p(particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
+        particle_g2p(particles_pos, particles_kin, particle_id, grid[0].cell_width, params.dt);
     }
 }
 
@@ -152,7 +152,7 @@ func particle_g2p(
 //    body_mprops: StructuredBuffer<BodyMassProperties>,
 //    body_materials: StructuredBuffer<BoundaryCondition>,
     particles_pos: StructuredBuffer<Position>,
-    particles_dyn: RWStructuredBuffer<Dynamics>,
+    particles_kin: RWStructuredBuffer<Kinematics>,
     particle_id: uint,
     cell_width: float,
     dt: float
@@ -174,10 +174,10 @@ func particle_g2p(
     var vel_grad_det = 0.0;
 
     // G2P
-    if (particles_dyn[particle_id].enabled != 0) {
+    if (particles_kin[particle_id].enabled != 0) {
         let particle_pos = particles_pos[particle_id];
-        let particle_vel = particles_dyn[particle_id].velocity;
-//        let particle_cdf = particles_dyn[particle_id].cdf;
+        let particle_vel = particles_kin[particle_id].velocity;
+//        let particle_cdf = particles_cdf[particle_id];
 
         let inv_d = QuadraticKernel::inv_d(cell_width);
         let ref_elt_pos_minus_particle_pos = dir_to_associated_grid_node(particle_pos, cell_width);
@@ -252,15 +252,15 @@ func particle_g2p(
 //        }
     }
 
-//    particles_dyn[particle_id].cdf.rigid_vel = rigid_vel;
+//    particles_cdf[particle_id].rigid_vel = rigid_vel;
     // Set the particle velocity, and store the velocity gradient into the affine matrix.
     // The rest will be dealt with in the particle update kernel(s).
-    particles_dyn[particle_id].affine = velocity_gradient;
-    particles_dyn[particle_id].vel_grad_det = vel_grad_det;
+    particles_kin[particle_id].affine = velocity_gradient;
+    particles_kin[particle_id].vel_grad_det = vel_grad_det;
 #if DIM == 2
-    particles_dyn[particle_id].velocity = momentum_velocity_mass.xy;
+    particles_kin[particle_id].velocity = momentum_velocity_mass.xy;
 #else
-    particles_dyn[particle_id].velocity = momentum_velocity_mass.xyz;
+    particles_kin[particle_id].velocity = momentum_velocity_mass.xyz;
 #endif
 }
 
