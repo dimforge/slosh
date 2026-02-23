@@ -59,13 +59,6 @@ func particle_update(
     let props = particles_props[particle_id];
     let particle_pos = particles_pos[particle_id].pt;
 
-    // If the particle is fixed, clear its velocity and its affine matrix.
-    // This isn't ideal (this should typically be handled on the grid) but we sometimes
-    // need sub-grid-sized fixed particles.
-    if (props.fixed != 0) {
-        kin.velocity = Vect<float>(0.0);
-        // kin.affine = Mat<float>(0.0);
-    }
 
     /*
      * Advection.
@@ -89,6 +82,14 @@ func particle_update(
     // Apply Rayleigh mass-proportional damping (implicit integration for stability).
     // v_new = v / (1 + damping * dt)
     kin.velocity = kin.velocity / (1.0 + props.damping * dt);
+
+
+    // If the particle is fixed, clear its velocity and its affine matrix.
+    // This isn't ideal (this should typically be handled on the grid) but we sometimes
+    // need sub-grid-sized fixed particles.
+    if (props.fixed != 0) {
+        kin.velocity = Vect<float>(0.0);
+    }
 
     let new_particle_pos = particle_pos + kin.velocity * dt;
 
@@ -116,9 +117,17 @@ func particle_update(
         def_grad = diag(Vect<float>(new_def_grad_diag_elt));
     }
 
+    // NOTE: we only reset the velocity gradient to zero for fixed particles **after** the deformation
+    //       gradient update so we keep its elastic response. It acts as a cube of elastic material which
+    //       center doesn’t move but can deform.
+    if (props.fixed != 0) {
+        kin.affine = Mat<float>(0.0);
+    }
+
     /*
      * Constitutive model.
      */
+
     let update_data = ParticleUpdateData(dt, cell_width, particle_id, kin.affine, props.init_volume, props.phase);
     let update_result = model.update(particles_model, update_data, def_grad);
 

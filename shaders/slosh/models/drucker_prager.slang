@@ -45,7 +45,7 @@ public struct DruckerPragerPlasticity {
     #if DIM == 2
 
     func project_deformation_gradient(singular_values: float2, log_vol_gain: float, alpha: float) -> DruckerPragerProjectionResult {
-        let d = 2.0; // NOTE: this is 3 in 2D
+        let d = 2.0; // NOTE: this is 3 in 3D
         let strain = log(singular_values) + float2(log_vol_gain / d);
         let strain_trace = strain.x + strain.y;
         let deviatoric_strain = strain - float2(strain_trace / d);
