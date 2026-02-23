@@ -84,7 +84,7 @@ func estimate_timestep_bound(
    let d = (cell_width * cell_width) / 4.0;
    let norm_b = d * sqrt(norm_affine_squared) / mass;
    let apic_v = norm_b * 6.0 * sqrt(DIM) / cell_width;
-    let v = length(velocity) + apic_v;
+    let v = length(velocity); // + apic_v;
     dt = min(dt, cell_width / v);
 
     let candidate = GpuTimestepBounds::secs_to_int(dt);
