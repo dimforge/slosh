@@ -149,7 +149,6 @@ func p2g_step(
     let bottommost_contributing_node = flatten_shared_shift(2u, 2u, 2u);
     var new_momentum_velocity_mass = float4(0.0);
 #endif
-    [[ForceUnroll]]
     for (var i = 0u; i < NBH_LEN; i += 1u) {
         let packed_shift = NBH_SHIFTS_SHARED[i];
         let nbh_shared_index = packed_cell_index_in_block - bottommost_contributing_node + packed_shift;
@@ -206,8 +205,11 @@ func fetch_max_linked_lists_length(
     let base_block_pos_int = active_block_vid.id - int3(1, 1, 1);
 #endif
 
+    [[ForceUnroll]]
     for (var i = 0u; i <= 1u; i++) {
+        [[ForceUnroll]]
         for (var j = 0u; j <= 1u; j++) {
+            [[ForceUnroll]]
             for (var k = 0u; k <= K_RANGE; k++) {
 #if DIM == 2
                 if ((i == 0 && tid.x < 6) || (j == 0 && tid.y < 6)) {
@@ -255,8 +257,11 @@ func fetch_nodes(
     let base_block_pos_int = active_block_vid.id - int3(1, 1, 1);
 #endif
 
+    [[ForceUnroll]]
     for (var i = 0u; i <= 1u; i++) {
+        [[ForceUnroll]]
         for (var j = 0u; j <= 1u; j++) {
+            [[ForceUnroll]]
             for (var k = 0u; k <= K_RANGE; k++) {
 #if DIM == 2
                 if ((i == 0 && tid.x < 6) || (j == 0 && tid.y < 6)) {
@@ -306,8 +311,11 @@ func fetch_next_particle(
     StructuredBuffer<uint> particle_node_linked_lists,
     tid: uint3
 ) {
+    [[ForceUnroll]]
     for (var i = 0u; i <= 1u; i++) {
+        [[ForceUnroll]]
         for (var j = 0u; j <= 1u; j++) {
+            [[ForceUnroll]]
             for (var k = 0u; k <= K_RANGE; k++) {
 #if DIM == 2
                 if ((i == 0 && tid.x < 6) || (j == 0 && tid.y < 6)) {
