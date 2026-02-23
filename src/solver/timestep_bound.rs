@@ -64,7 +64,7 @@ impl<B: Backend> WgTimestepBounds<B> {
         bounds_staging: &mut GpuScalar<GpuTimestepBounds, B>,
     ) -> Result<f32, B::Error> {
         let mut encoder = backend.begin_encoding();
-        let mut pass = encoder.begin_pass();
+        let mut pass = encoder.begin_pass("timestep_bounds", None);
         self.launch(backend, &mut pass, grid, particles, bounds)?;
         drop(pass);
         bounds_staging.copy_from_view(&mut encoder, bounds)?;

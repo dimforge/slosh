@@ -2,6 +2,8 @@ use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
 use slosh::rapier::na;
 use slang_hal::backend::Backend;
+#[cfg(feature = "webgpu")]
+use slang_hal::GpuTimingResult;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
 
 #[derive(Default)]
@@ -9,6 +11,8 @@ pub struct SimulationTimes {
     pub total_step_time: f32,
     pub encoding_time: f32,
     pub readback_time: f32,
+    #[cfg(feature = "webgpu")]
+    pub gpu_passes: Vec<GpuTimingResult>,
 }
 
 #[derive(Default)]
@@ -149,6 +153,14 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 
         let mut no_state = Box::new(());
         let hooks_state = physics.hooks_state.as_deref_mut().unwrap_or(&mut no_state);
+
+        #[cfg(feature = "webgpu")]
+        let mut timestamps = slang_hal::GpuTimestamps::new(
+            self.gpu.device(),
+            self.gpu.queue(),
+            self.app_state.num_substeps * 10,
+        );
+
         for _ in 0..self.app_state.num_substeps {
             self.app_state
                 .pipeline
@@ -158,10 +170,17 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                     &mut physics.data,
                     &mut *self.hooks,
                     hooks_state,
+                    #[cfg(feature = "webgpu")]
+                    Some(&mut timestamps),
+                    #[cfg(not(feature = "webgpu"))]
+                    None,
                 )
                 .await
                 .unwrap();
         }
+
+        #[cfg(feature = "webgpu")]
+        timestamps.resolve(&mut encoder);
 
         // physics
         //     .data
@@ -242,10 +261,15 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             self.app_state.run_state = RunState::Paused;
         }
 
+        #[cfg(feature = "webgpu")]
+        let gpu_passes = timestamps.read_results(self.gpu.device()).await.unwrap_or_default();
+
         self.step_result.timings = SimulationTimes {
             total_step_time: t_total_step,
             encoding_time: t_encoding,
             readback_time: t_readback,
+            #[cfg(feature = "webgpu")]
+            gpu_passes,
         };
         self.step_id += 1;
 

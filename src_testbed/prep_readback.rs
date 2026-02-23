@@ -185,7 +185,7 @@ impl<B: Backend> PrepReadback<B> {
             instances: &data.instances,
             base_colors: &data.base_colors,
         };
-        let mut pass = encoder.begin_pass();
+        let mut pass = encoder.begin_pass("prep_readback", None);
         self.prep_readback
             .launch(backend, &mut pass, &args, [particles.len() as u32, 1, 1])?;
         drop(pass);

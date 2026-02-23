@@ -82,7 +82,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             max_storage_buffer_binding_size: 1_000_000_000,
             ..Limits::default()
         };
-        let mut gpu = WebGpu::new(Default::default(), limits).await.unwrap();
+        let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, limits).await.unwrap();
         // TODO: this is a terrible, horrible, hack, to work around the fact that slang isn’t giving us access to
         //       `exch.exchanged` to properly handle the _weak_ nature of `atomicCompareExchangeWeak̀
         let reg =
@@ -315,6 +315,28 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
                     stage.step_result.timings.readback_time
                 ));
                 ui.label(format!("particles: {}", stage.physics.data.particles.len()));
+
+                #[cfg(feature = "webgpu")]
+                {
+                    ui.separator();
+                    ui.label("GPU pass timings:");
+                    // Aggregate passes with the same label across substeps.
+                    let mut aggregated: std::collections::BTreeMap<&str, (std::time::Duration, u32)> = Default::default();
+                    for r in &stage.step_result.timings.gpu_passes {
+                        let entry = aggregated.entry(&r.label).or_default();
+                        entry.0 += r.duration;
+                        entry.1 += 1;
+                    }
+                    let mut total_gpu = std::time::Duration::ZERO;
+                    for (label, (dur, count)) in &aggregated {
+                        total_gpu += *dur;
+                        ui.label(format!(
+                            "  {label}: {:.3}ms ({count}x)",
+                            dur.as_secs_f64() * 1000.0,
+                        ));
+                    }
+                    ui.label(format!("  TOTAL GPU: {:.3}ms", total_gpu.as_secs_f64() * 1000.0));
+                }
 
                 ui.horizontal(|ui| {
                     let play_pause_label = if stage.app_state.run_state == RunState::Running {
