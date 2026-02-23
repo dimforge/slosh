@@ -27,7 +27,7 @@ groupshared float4 shared_nodes_vel_mass[NUM_SHARED_CELLS];
 groupshared float4 shared_nodes_vel_mass_incompatible[NUM_SHARED_CELLS];
 #endif
 
-groupshared NodeCdf shared_nodes_cdf[NUM_SHARED_CELLS]; // PERF: we don’t need the distance field from the cdf
+//groupshared NodeCdf shared_nodes_cdf[NUM_SHARED_CELLS]; // PERF: we don’t need the distance field from the cdf
 
 static const uint WORKGROUP_SIZE = WORKGROUP_SIZE_X * WORKGROUP_SIZE_Y * WORKGROUP_SIZE_Z;
 
@@ -45,9 +45,9 @@ func g2p(
     StructuredBuffer<uint> sorted_particle_ids,
     StructuredBuffer<Position> particles_pos,
     RWStructuredBuffer<Dynamics> particles_dyn,
-    StructuredBuffer<BodyVelocity> body_vels,
-    StructuredBuffer<BodyMassProperties> body_mprops,
-    StructuredBuffer<BoundaryCondition> body_materials,
+//    StructuredBuffer<BodyVelocity> body_vels,
+//    StructuredBuffer<BodyMassProperties> body_mprops,
+//    StructuredBuffer<BoundaryCondition> body_materials,
 ) {
     let bid = block_id.x;
 
@@ -71,7 +71,7 @@ func g2p(
          sorted_particle_id < max_particle_id;
          sorted_particle_id += WORKGROUP_SIZE) {
         let particle_id = sorted_particle_ids[sorted_particle_id];
-        particle_g2p(body_vels, body_mprops, body_materials, particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
+        particle_g2p(particles_pos, particles_dyn, particle_id, grid[0].cell_width, params.dt);
     }
 }
 
@@ -101,15 +101,15 @@ func global_shared_memory_transfers(
                 let global_chunk_id = block_header_id_to_physical_id(octant_hid);
                 let global_node_id = node_id(global_chunk_id, tid.xy);
                 shared_nodes_vel_mass[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass;
-                shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
-                shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
+//                shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
+//                shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
             } else {
                 // This octant doesn’t exist. Fill shared memory with zeros/NONE.
                 // NOTE: we don’t need to init global_id since it’s only read for the
                 //       current chunk that is guaranteed to exist, not the 2x2 adjacent ones.
                 shared_nodes_vel_mass[flat_shared_index] = float3(0.0);
-                shared_nodes_vel_mass_incompatible[flat_shared_index] = float3(0.0);
-                shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
+//                shared_nodes_vel_mass_incompatible[flat_shared_index] = float3(0.0);
+//                shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
             }
         }
     }
@@ -131,15 +131,15 @@ func global_shared_memory_transfers(
                     let global_chunk_id = block_header_id_to_physical_id(octant_hid);
                     let global_node_id = node_id(global_chunk_id, tid);
                     shared_nodes_vel_mass[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass;
-                    shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
-                    shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
+//                    shared_nodes_vel_mass_incompatible[flat_shared_index] = nodes[global_node_id.id].momentum_velocity_mass_incompatible;
+//                    shared_nodes_cdf[flat_shared_index] = nodes[global_node_id.id].cdf;
                 } else {
                     // This octant doesn’t exist. Fill shared memory with zeros/NONE.
                     // NOTE: we don’t need to init global_id since it’s only read for the
                     //       current chunk that is guaranteed to exist, not the 2x2x2 adjacent ones.
                     shared_nodes_vel_mass[flat_shared_index] = float4(0.0);
-                    shared_nodes_vel_mass_incompatible[flat_shared_index] = float4(0.0);
-                    shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
+//                    shared_nodes_vel_mass_incompatible[flat_shared_index] = float4(0.0);
+//                    shared_nodes_cdf[flat_shared_index] = NodeCdf(0.0, 0, NONE);
                 }
             }
         }
@@ -148,9 +148,9 @@ func global_shared_memory_transfers(
 }
 
 func particle_g2p(
-    body_vels: StructuredBuffer<BodyVelocity>,
-    body_mprops: StructuredBuffer<BodyMassProperties>,
-    body_materials: StructuredBuffer<BoundaryCondition>,
+//    body_vels: StructuredBuffer<BodyVelocity>,
+//    body_mprops: StructuredBuffer<BodyMassProperties>,
+//    body_materials: StructuredBuffer<BoundaryCondition>,
     particles_pos: StructuredBuffer<Position>,
     particles_dyn: RWStructuredBuffer<Dynamics>,
     particle_id: uint,
@@ -177,7 +177,7 @@ func particle_g2p(
     if (particles_dyn[particle_id].enabled != 0) {
         let particle_pos = particles_pos[particle_id];
         let particle_vel = particles_dyn[particle_id].velocity;
-        let particle_cdf = particles_dyn[particle_id].cdf;
+//        let particle_cdf = particles_dyn[particle_id].cdf;
 
         let inv_d = QuadraticKernel::inv_d(cell_width);
         let ref_elt_pos_minus_particle_pos = dir_to_associated_grid_node(particle_pos, cell_width);
@@ -199,8 +199,8 @@ func particle_g2p(
             let packed_shift = NBH_SHIFTS_SHARED[i];
             let shared_id = packed_cell_index_in_block + packed_shift;
             let cell_data = shared_nodes_vel_mass[shared_id];
-            let cell_cdf = shared_nodes_cdf[shared_id];
-            let is_compatible = affinities_are_compatible(particle_cdf.affinity, cell_cdf.affinities);
+//            let cell_cdf = shared_nodes_cdf[shared_id];
+//            let is_compatible = affinities_are_compatible(particle_cdf.affinity, cell_cdf.affinities);
 
 #if DIM == 2
             let dpt = ref_elt_pos_minus_particle_pos + float2(shift) * cell_width;
@@ -210,25 +210,25 @@ func particle_g2p(
 
             var cpic_cell_data = cell_data;
 
-            if (!is_compatible) {
-                cpic_cell_data = shared_nodes_vel_mass_incompatible[shared_id];
-
-                if (cell_cdf.closest_id != NONE) {
-                    let body_vel = body_vels[cell_cdf.closest_id]; // TODO: invalid if there is no body.
-                    let body_com = body_mprops[cell_cdf.closest_id].com;
-                    let body_material = body_materials[cell_cdf.closest_id];
-                    let cell_center = dpt + particle_pos.pt;
-                    let body_pt_vel =  body_velocity_at_point(body_com, body_vel, cell_center);
-
-#if DIM == 2
-                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xy - body_pt_vel, particle_cdf.normal);
-                    cpic_cell_data = float3(particle_ghost_vel, cpic_cell_data.z);
-#else
-                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xyz - body_pt_vel, particle_cdf.normal);
-                    cpic_cell_data = float4(particle_ghost_vel, cpic_cell_data.w);
-#endif
-                }
-            }
+//            if (!is_compatible) {
+//                cpic_cell_data = shared_nodes_vel_mass_incompatible[shared_id];
+//
+//                if (cell_cdf.closest_id != NONE) {
+//                    let body_vel = body_vels[cell_cdf.closest_id]; // TODO: invalid if there is no body.
+//                    let body_com = body_mprops[cell_cdf.closest_id].com;
+//                    let body_material = body_materials[cell_cdf.closest_id];
+//                    let cell_center = dpt + particle_pos.pt;
+//                    let body_pt_vel =  body_velocity_at_point(body_com, body_vel, cell_center);
+//
+//#if DIM == 2
+//                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xy - body_pt_vel, particle_cdf.normal);
+//                    cpic_cell_data = float3(particle_ghost_vel, cpic_cell_data.z);
+//#else
+//                    let particle_ghost_vel = body_pt_vel + body_material.project_velocity(cpic_cell_data.xyz - body_pt_vel, particle_cdf.normal);
+//                    cpic_cell_data = float4(particle_ghost_vel, cpic_cell_data.w);
+//#endif
+//                }
+//            }
 
 #if DIM == 2
             let weight = w[0][shift.x] * w[1][shift.y];
@@ -243,16 +243,16 @@ func particle_g2p(
 #endif
         }
 
-        for (var i = 0u; i < 16u; i++) {
-            if (affinity_bit(i, particle_cdf.affinity)) {
-                let body_vel = body_vels[i];
-                let body_com = body_mprops[i].com;
-                rigid_vel += body_velocity_at_point(body_com, body_vel, particle_pos.pt);
-            }
-        }
+//        for (var i = 0u; i < 16u; i++) {
+//            if (affinity_bit(i, particle_cdf.affinity)) {
+//                let body_vel = body_vels[i];
+//                let body_com = body_mprops[i].com;
+//                rigid_vel += body_velocity_at_point(body_com, body_vel, particle_pos.pt);
+//            }
+//        }
     }
 
-    particles_dyn[particle_id].cdf.rigid_vel = rigid_vel;
+//    particles_dyn[particle_id].cdf.rigid_vel = rigid_vel;
     // Set the particle velocity, and store the velocity gradient into the affine matrix.
     // The rest will be dealt with in the particle update kernel(s).
     particles_dyn[particle_id].affine = velocity_gradient;

@@ -28,8 +28,8 @@ groupshared float3 shared_force_dt[NUM_SHARED_CELLS];
 #endif
 groupshared SharedNode shared_nodes[NUM_SHARED_CELLS];
 groupshared Position shared_pos[NUM_SHARED_CELLS];
-groupshared uint shared_affinities[NUM_SHARED_CELLS];
-groupshared Vect shared_normals[NUM_SHARED_CELLS];
+//groupshared uint shared_affinities[NUM_SHARED_CELLS];
+//groupshared Vect shared_normals[NUM_SHARED_CELLS];
 // TODO: is computing the max with an atomic faster than doing a reduction?
 groupshared Atomic<uint> max_linked_list_length;
 // NOTE: workgroupUniformLoad doesn’t work on atomics, so we need that additional variable
@@ -97,8 +97,8 @@ func p2g(
 
     // TODO: we store the global_id in shared memory for convenience. Should we just recompute it instead?
     let global_id = shared_nodes[packed_cell_index_in_block].global_id;
-    let node_affinities = nodes[global_id].cdf.affinities;
-    let collider_id = nodes[global_id].cdf.closest_id;
+//    let node_affinities = nodes[global_id].cdf.affinities;
+//    let collider_id = nodes[global_id].cdf.closest_id;
     var total_result = P2GStepResult();
 
     // NOTE: read the linked list with workgroupUniformLoad so that is is considered
@@ -109,7 +109,7 @@ func p2g(
         fetch_next_particle(particles_pos, particles_dyn, particle_node_linked_lists, tid);
         GroupMemoryBarrierWithGroupSync();
 
-        let partial_result = p2g_step(packed_cell_index_in_block, grid[0].cell_width, node_affinities, collider_id);
+        let partial_result = p2g_step(packed_cell_index_in_block, grid[0].cell_width); // , node_affinities, collider_id);
         total_result.new_momentum_velocity_mass += partial_result.new_momentum_velocity_mass;
     }
 
@@ -133,8 +133,8 @@ func p2g(
 func p2g_step(
     packed_cell_index_in_block: uint,
     cell_width: float,
-    node_affinity: uint,
-    collider_id: uint
+//    node_affinity: uint,
+//    collider_id: uint
 ) -> P2GStepResult {
     // NOTE: having these into a var is needed so we can index [i] them.
     //       Does this have any impact on performances?
@@ -177,7 +177,7 @@ func p2g_step(
         let weight = w[0][shift.x] * w[1][shift.y] * w[2][shift.z];
 #endif
 
-        let particle_affinity = shared_affinities[nbh_shared_index];
+//        let particle_affinity = shared_affinities[nbh_shared_index];
         let contribution = vector<float, DIM + 1>(mul(dpt, particle_affine) + momentum, particle_mass) * weight;
         new_momentum_velocity_mass += contribution;
     }
@@ -327,8 +327,8 @@ func fetch_next_particle(
                 let curr_particle_id = shared_nodes[shared_flat_index].particle_id;
 
                 if (curr_particle_id != NONE && particles_dyn[curr_particle_id].enabled != 0) {
-                    shared_affinities[shared_flat_index] = particles_dyn[curr_particle_id].cdf.affinity;
-                    shared_normals[shared_flat_index] = particles_dyn[curr_particle_id].cdf.normal;
+//                    shared_affinities[shared_flat_index] = particles_dyn[curr_particle_id].cdf.affinity;
+//                    shared_normals[shared_flat_index] = particles_dyn[curr_particle_id].cdf.normal;
                     shared_pos[shared_flat_index] = particles_pos[curr_particle_id];
                     shared_affine[shared_flat_index] = particles_dyn[curr_particle_id].affine;
                     shared_force_dt[shared_flat_index] = particles_dyn[curr_particle_id].force_dt;
@@ -342,8 +342,8 @@ func fetch_next_particle(
                     // TODO: would it be worth skipping writing zeros if we already
                     //       did it at the previous step? (if we already reached the end
                     //       of the particle linked list)
-                    shared_affinities[shared_flat_index] = 0u;
-                    shared_normals[shared_flat_index] = Vect<float>(0.0);
+//                    shared_affinities[shared_flat_index] = 0u;
+//                    shared_normals[shared_flat_index] = Vect<float>(0.0);
 #if DIM == 2
                     shared_pos[shared_flat_index].pt = float2(0.0);
                     shared_affine[shared_flat_index] = float2x2(float2(0.0), float2(0.0));
