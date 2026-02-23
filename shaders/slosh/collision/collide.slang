@@ -3,6 +3,8 @@ module collide;
 import slosh.rbd.shapes.shape;
 import slosh.aliases;
 import slosh.grid.grid;
+import slosh.collision.trimesh;
+import slosh.rbd.queries.projection;
 
 public func collide_cdf(
     StructuredBuffer<Shape> collision_shapes,
@@ -56,6 +58,8 @@ public struct GridCollision {
 public func collide(
     StructuredBuffer<Shape> collision_shapes,
     StructuredBuffer<Pose> collision_shape_poses,
+    StructuredBuffer<Vect> collision_shape_vtx,
+    StructuredBuffer<uint> collision_shape_idx,
     float cell_width,
     Vect point,
 ) -> GridCollision {
@@ -76,8 +80,29 @@ public func collide(
         let shape = collision_shapes[i];
         let shape_pose = collision_shape_poses[i];
         let shape_type = shape.shape_type();
+
+        var proj = ProjectionResult(point, false);
+        bool handled = false;
+
         if (shape_type != Shape::SHAPE_TYPE_POLYLINE && shape_type != Shape::SHAPE_TYPE_TRIMESH) {
-            let proj = shape.project_point_on_boundary(shape_pose, point);
+            proj = shape.project_point_on_boundary(shape_pose, point);
+            handled = true;
+        }
+
+    #if DIM == 3
+        if (shape_type == Shape::SHAPE_TYPE_TRIMESH) {
+            let trimesh = shape.to_trimesh();
+            let local_pt = shape_pose.inv_mul_pt(point);
+            let local_proj = trimesh.project_local_point(collision_shape_idx, collision_shape_vtx, local_pt, dist_cap.x);
+
+            if (local_proj._1) {
+                proj = ProjectionResult(shape_pose.mul_pt(local_proj._0.point), local_proj._0.is_inside);
+                handled = true;
+            }
+        }
+    #endif
+
+        if (handled) {
             let dpt = proj.point - point;
 
             if (proj.is_inside || all(abs(dpt) <= dist_cap)) {
@@ -90,10 +115,6 @@ public func collide(
                     best_dist = dist;
                 }
             }
-        }
-
-        if (shape_type == Shape::SHAPE_TYPE_TRIMESH) {
-            // TODO: project point on trimesh with pseudo-normals
         }
     }
 

@@ -9,6 +9,7 @@ import slosh.rbd.shapes.cuboid;
 import slosh.rbd.shapes.cylinder;
 import slosh.rbd.shapes.segment;
 import slosh.rbd.shapes.triangle;
+import slosh.collision.trimesh;
 
 
 // A generic shape. This is an enum that might contain any shape information.
@@ -76,6 +77,19 @@ public struct Shape {
             //     vec4(half_height, radius, _, shape_type)
             //     vec4(_, _, _, _)
             return Cylinder(this.a.x, this.a.y);
+        }
+
+        public func to_trimesh() -> TriMesh {
+            // TriMesh layout:
+            //     vec4(bvh_vtx_root_id, bvh_idx_root_id, bvh_node_len, shape_type)
+            //     vec4(num_triangles, num_vertices, _, _)
+            return TriMesh(
+                bit_cast<uint>(this.a.x),
+                bit_cast<uint>(this.a.y),
+                bit_cast<uint>(this.a.z),
+                bit_cast<uint>(this.b.x),
+                bit_cast<uint>(this.b.y),
+            );
         }
     #endif
 

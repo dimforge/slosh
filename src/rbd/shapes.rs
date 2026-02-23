@@ -44,8 +44,10 @@ pub struct ShapeBuffers {
     ///
     /// Polyline and trimesh shapes store references to ranges within this buffer.
     pub vertices: Vec<Point<f32>>,
-    // NOTE: a bit weird we don't have any index buffer here but
-    //       we don't need it yet (slosh has its own indexing method).
+    /// Vertex buffer for trimesh collision (BVH AABBs, vertices, pseudo-normals).
+    pub collision_vertices: Vec<Point<f32>>,
+    /// Index buffer for trimesh collision (BVH topology, triangle indices).
+    pub collision_indices: Vec<u32>,
 }
 
 /// GPU-compatible shape representation.
@@ -145,19 +147,28 @@ impl GpuShape {
         }
     }
 
-    /// Create a triangle mesh shape from a vertex range.
+    /// Create a triangle mesh shape from BVH metadata.
     ///
-    /// The vertices must already exist in a [`ShapeBuffers`] instance.
+    /// The collision vertex/index data must already exist in a [`ShapeBuffers`] instance.
     ///
     /// # Arguments
-    /// * `vertex_range` - `[start, end]` indices into the vertex buffer
-    pub fn trimesh(vertex_range: [u32; 2]) -> Self {
+    /// * `trimesh` - The GPU trimesh metadata (BVH offsets and counts)
+    /// * `vertex_base_id` - Start index of raw mesh vertices in the sampling vertex buffer
+    pub fn trimesh(trimesh: &crate::trimesh::GpuTriMesh, vertex_base_id: u32) -> Self {
         let tag = f32::from_bits(GpuShapeType::TriMesh as u32);
-        let rng0 = f32::from_bits(vertex_range[0]);
-        let rng1 = f32::from_bits(vertex_range[1]);
         Self {
-            a: vector![rng0, rng1, 0.0, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: vector![
+                f32::from_bits(trimesh.bvh_vtx_root_id),
+                f32::from_bits(trimesh.bvh_idx_root_id),
+                f32::from_bits(trimesh.bvh_node_len),
+                tag
+            ],
+            b: vector![
+                f32::from_bits(trimesh.num_triangles),
+                f32::from_bits(trimesh.num_vertices),
+                f32::from_bits(vertex_base_id),
+                0.0
+            ],
         }
     }
 
@@ -218,12 +229,14 @@ impl GpuShape {
                 ]))
             }
             TypedShape::TriMesh(shape) => {
-                let base_id = buffers.vertices.len();
+                let base_id = buffers.vertices.len() as u32;
                 buffers.vertices.extend_from_slice(shape.vertices());
-                Some(Self::trimesh([
-                    base_id as u32,
-                    buffers.vertices.len() as u32,
-                ]))
+                let gpu_trimesh = crate::trimesh::convert_trimesh_to_gpu(
+                    shape,
+                    &mut buffers.collision_vertices,
+                    &mut buffers.collision_indices,
+                );
+                Some(Self::trimesh(&gpu_trimesh, base_id))
             }
             // HACK: we currently emulate heightfields as trimeshes or polylines
             #[cfg(feature = "dim2")]
@@ -238,13 +251,22 @@ impl GpuShape {
             }
             #[cfg(feature = "dim3")]
             TypedShape::HeightField(shape) => {
-                let base_id = buffers.vertices.len();
-                let (vtx, _) = shape.to_trimesh();
+                let (vtx, idx) = shape.to_trimesh();
+                let base_id = buffers.vertices.len() as u32;
                 buffers.vertices.extend_from_slice(&vtx);
-                Some(Self::trimesh([
-                    base_id as u32,
-                    buffers.vertices.len() as u32,
-                ]))
+                let trimesh = rapier::geometry::TriMesh::with_flags(
+                    vtx,
+                    idx,
+                    rapier::geometry::TriMeshFlags::ORIENTED
+                        | rapier::geometry::TriMeshFlags::MERGE_DUPLICATE_VERTICES,
+                )
+                .expect("Failed to build trimesh from heightfield");
+                let gpu_trimesh = crate::trimesh::convert_trimesh_to_gpu(
+                    &trimesh,
+                    &mut buffers.collision_vertices,
+                    &mut buffers.collision_indices,
+                );
+                Some(Self::trimesh(&gpu_trimesh, base_id))
             }
             #[cfg(feature = "dim3")]
             TypedShape::Cone(shape) => Some(Self::cone(shape.half_height, shape.radius)),
@@ -292,15 +314,27 @@ impl GpuShape {
         [self.a.x.to_bits(), self.a.y.to_bits()]
     }
 
-    /// Get the vertex range for a triangle mesh shape.
-    ///
-    /// # Returns
-    /// `[start, end]` indices into the shape vertex buffer
+    /// Get the GPU trimesh metadata for a triangle mesh shape.
     ///
     /// # Panics
     /// Panics if this shape is not a triangle mesh
-    pub fn trimesh_rngs(&self) -> [u32; 2] {
+    pub fn trimesh_meta(&self) -> crate::trimesh::GpuTriMesh {
         assert!(self.shape_type() == ShapeType::TriMesh);
-        [self.a.x.to_bits(), self.a.y.to_bits()]
+        crate::trimesh::GpuTriMesh {
+            bvh_vtx_root_id: self.a.x.to_bits(),
+            bvh_idx_root_id: self.a.y.to_bits(),
+            bvh_node_len: self.a.z.to_bits(),
+            num_triangles: self.b.x.to_bits(),
+            num_vertices: self.b.y.to_bits(),
+        }
+    }
+
+    /// Get the vertex base ID for sampling of a triangle mesh shape.
+    ///
+    /// # Panics
+    /// Panics if this shape is not a triangle mesh
+    pub fn trimesh_vertex_base_id(&self) -> u32 {
+        assert!(self.shape_type() == ShapeType::TriMesh);
+        self.b.z.to_bits()
     }
 }

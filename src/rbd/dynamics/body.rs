@@ -82,12 +82,13 @@ pub struct GpuBodySet<B: Backend> {
     // TODO: support other shape types.
     // TODO: support a shape with a shift relative to the body.
     pub(crate) shapes: GpuTensor<GpuShape, B>,
-    // TODO: it’s a bit weird that we store the vertex buffer but not the
-    //       index buffer. This is because our only use-case currently
-    //       is from wgsparkl which has its own way of storing indices.
     pub(crate) shapes_local_vertex_buffers: GpuTensor<Point<f32>, B>,
     pub(crate) shapes_vertex_buffers: GpuTensor<Point<f32>, B>,
     pub(crate) shapes_vertex_collider_id: GpuTensor<u32, B>, // NOTE: this is a bit of a hack for wgsparkl
+    /// Vertex buffer for trimesh collision (BVH AABBs, vertices, pseudo-normals).
+    pub(crate) shapes_collision_vertices: GpuTensor<Point<f32>, B>,
+    /// Index buffer for trimesh collision (BVH topology, triangle indices).
+    pub(crate) shapes_collision_indices: GpuTensor<u32, B>,
 }
 
 #[derive(Copy, Clone)]
@@ -283,6 +284,16 @@ impl<B: Backend> GpuBodySet<B> {
                 pt_collider_ids,
                 BufferUsages::STORAGE,
             )?,
+            shapes_collision_vertices: GpuTensor::vector_encased(
+                backend,
+                &shape_buffers.collision_vertices,
+                BufferUsages::STORAGE,
+            )?,
+            shapes_collision_indices: GpuTensor::vector(
+                backend,
+                &shape_buffers.collision_indices,
+                BufferUsages::STORAGE,
+            )?,
             shapes_data,
         })
     }
@@ -334,6 +345,20 @@ impl<B: Backend> GpuBodySet<B> {
     /// Used for collision detection and response.
     pub fn shapes_vertex_collider_id(&self) -> &GpuTensor<u32, B> {
         &self.shapes_vertex_collider_id
+    }
+
+    /// GPU storage buffer containing collision vertices for trimesh shapes.
+    ///
+    /// Contains BVH AABBs, mesh vertices, and pseudo-normals in body-local coordinates.
+    pub fn shapes_collision_vertices(&self) -> &GpuTensor<Point<f32>, B> {
+        &self.shapes_collision_vertices
+    }
+
+    /// GPU storage buffer containing collision indices for trimesh shapes.
+    ///
+    /// Contains BVH topology and triangle indices.
+    pub fn shapes_collision_indices(&self) -> &GpuTensor<u32, B> {
+        &self.shapes_collision_indices
     }
 
     /// CPU copy of shape data for all bodies.

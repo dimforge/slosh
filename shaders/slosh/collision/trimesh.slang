@@ -22,13 +22,14 @@ public struct TriMesh {
     uint num_triangles;
     // The total number of vertices in the mesh.
     uint num_vertices;
-//    // The mesh’s AABB.
-//    Aabb root_aabb;
 
-//    /// Simply return the root aabb.
-//    public func aabb() -> Aabb {
-//        return this.root_aabb;
-//    }
+    public __init(uint bvh_vtx_root_id, uint bvh_idx_root_id, uint bvh_node_len, uint num_triangles, uint num_vertices) {
+        this.bvh_vtx_root_id = bvh_vtx_root_id;
+        this.bvh_idx_root_id = bvh_idx_root_id;
+        this.bvh_node_len = bvh_node_len;
+        this.num_triangles = num_triangles;
+        this.num_vertices = num_vertices;
+    }
 
     public func bvh_node_aabb(
         vtx: StructuredBuffer<Vect>,
@@ -113,11 +114,13 @@ public struct TriMesh {
         // Contains AABBs, vertices, and pseudo-normals.
         StructuredBuffer<Vect> vtx,
         Vect pt,
-    ) -> ProjectionResult {
+        max_dist: float
+    ) -> Tuple<ProjectionResult, bool> {
         var curr = 0u;
-        var best = 1.0e10;
+        var best = max_dist;
         var best_proj = ProjectionWithLocation.solid(pt);
         var best_tri_id = 0;
+        var found = false;
 
         while (curr < this.bvh_node_len) {
             let node_idx = this.bvh_node_idx(idx, curr);
@@ -126,10 +129,11 @@ public struct TriMesh {
                 let tri = this.triangle(idx, vtx, node_idx.shape_index);
                 let proj = triangle_project_local_point_and_get_location(tri, pt);
                 let dist = length(proj.point - pt);
-                if (dist < best) {
+                if (dist <= best) {
                     best = dist;
                     best_proj = proj;
                     best_tri_id = node_idx.shape_index;
+                    found = true;
                 }
 
                 // Continue traversal.
@@ -147,7 +151,7 @@ public struct TriMesh {
 
         let pn = this.pseudo_normal(idx, vtx, best_tri_id, best_proj.feature_type, best_proj.id);
         let is_inside = dot(pn, pt - best_proj.point) <= 0.0;
-        return ProjectionResult(best_proj.point, is_inside);
+        return Tuple<ProjectionResult, bool>(ProjectionResult(best_proj.point, is_inside), found);
     }
 }
 

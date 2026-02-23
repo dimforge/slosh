@@ -1,7 +1,7 @@
 use slosh_testbed3d::{RapierData, slosh};
 
 use nalgebra::{DMatrix, point, vector};
-use rapier3d::geometry::HeightField;
+use rapier3d::geometry::{HeightField, TriMeshFlags};
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -40,7 +40,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
 
     if !app_state.restarting {
         app_state.min_num_substeps = 10;
-        app_state.max_num_substeps = 40;
+        app_state.max_num_substeps = 10;
         app_state.gravity_factor = 1.0;
     };
 
@@ -56,7 +56,7 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     let (vtx, idx) = heightfield.to_trimesh();
     let rb = RigidBodyBuilder::fixed();
     let rb_handle = rapier_data.bodies.insert(rb);
-    let co = ColliderBuilder::trimesh(vtx, idx).unwrap();
+    let co = ColliderBuilder::trimesh_with_flags(vtx, idx, TriMeshFlags::ORIENTED).unwrap();
     let floor = rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);

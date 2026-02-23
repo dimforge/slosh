@@ -264,20 +264,18 @@ impl<B: Backend> GpuRigidParticles<B> {
 
             #[cfg(feature = "dim3")]
             if let Some(trimesh) = collider.shape().as_trimesh() {
-                let rngs = gpu_data.trimesh_rngs();
                 let sampling_params = SamplingParams {
                     collider_id: collider_id as u32,
-                    base_vid: rngs[0],
+                    base_vid: gpu_data.trimesh_vertex_base_id(),
                     sampling_step,
                 };
                 sampling::sample_trimesh(trimesh, &sampling_params, &mut sampling_buffers)
             } else if let Some(heightfield) = collider.shape().as_heightfield() {
                 let (vtx, idx) = heightfield.to_trimesh();
                 let trimesh = rapier::geometry::TriMesh::new(vtx, idx).unwrap();
-                let rngs = gpu_data.trimesh_rngs();
                 let sampling_params = SamplingParams {
                     collider_id: collider_id as u32,
-                    base_vid: rngs[0],
+                    base_vid: gpu_data.trimesh_vertex_base_id(),
                     sampling_step,
                 };
                 sampling::sample_trimesh(&trimesh, &sampling_params, &mut sampling_buffers)

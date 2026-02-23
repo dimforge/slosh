@@ -1,8 +1,8 @@
 //! Grid CDF (Collision Detection Field) update for rigid body coupling.
 
 use crate::grid::grid::{GpuActiveBlockHeader, GpuGrid, GpuGridMetadata, GpuGridNode};
+use crate::math::{GpuSim, Point};
 use crate::rbd::dynamics::GpuBodySet;
-use crate::math::GpuSim;
 use crate::rbd::shapes::GpuShape;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -28,6 +28,8 @@ struct GridUpdateCollideArgs<'a, B: Backend> {
     body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
     collision_shapes: &'a GpuTensor<GpuShape, B>,
     collision_shape_poses: &'a GpuTensor<GpuSim, B>,
+    collision_shape_vtx: &'a GpuTensor<Point<f32>, B>,
+    collision_shape_idx: &'a GpuTensor<u32, B>,
     nodes: &'a GpuVector<GpuGridNode, B>,
 }
 
@@ -55,9 +57,11 @@ impl<B: Backend> WgGridUpdateCollide<B> {
         let args = GridUpdateCollideArgs {
             grid: &grid.meta,
             active_blocks: &grid.active_blocks,
+            body_materials: &body_materials.materials,
             collision_shapes: bodies.shapes(),
             collision_shape_poses: bodies.poses(),
-            body_materials: &body_materials.materials,
+            collision_shape_vtx: bodies.shapes_collision_vertices(),
+            collision_shape_idx: bodies.shapes_collision_indices(),
             nodes: &grid.nodes,
         };
         self.grid_update.launch_indirect(
