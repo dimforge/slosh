@@ -28,6 +28,23 @@ public struct LinearElasticModel {
 
         return result;
     }
+
+    // Response to only the compressive part of the deformation.
+    public func neg_kirchoff_stress(deformation_gradient: float2x2) -> float2x2 {
+        var svd = Svd2(deformation_gradient);
+        let j = svd.S.x * svd.S.y;
+        svd.S = min(svd.S - float2(1.0), float2(0.0)); // Only keep the negative part.
+
+        let deviatoric_stress = this.lambda * (j - 1.0) * j;
+        var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
+
+        if (j < 1.0) {
+            result[0].x += deviatoric_stress;
+            result[1].y += deviatoric_stress;
+        }
+
+        return result;
+    }
     #else
     public func kirchoff_stress(deformation_gradient: float3x3) -> float3x3 {
         var svd = Svd3(deformation_gradient);
@@ -40,6 +57,24 @@ public struct LinearElasticModel {
         result[0].x += diag;
         result[1].y += diag;
         result[2].z += diag;
+
+        return result;
+    }
+
+    // Response to only the compressive part of the deformation.
+    public func neg_kirchoff_stress(deformation_gradient: float3x3) -> float3x3 {
+        var svd = Svd3(deformation_gradient);
+        let j = svd.S.x * svd.S.y * svd.S.z;
+        svd.S = min(svd.S - float3(1.0), float3(0.0)); // Only keep the negative part.
+
+        let deviatoric_stress = this.lambda * (j - 1.0) * j;
+        var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
+
+        if (j < 1.0) {
+            result[0].x += deviatoric_stress;
+            result[1].y += deviatoric_stress;
+            result[2].z += deviatoric_stress;
+        }
 
         return result;
     }
