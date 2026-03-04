@@ -3,7 +3,7 @@ name = "slosh2d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 2D Material Point Method implementation."
 repository = "https://github.com/dimforge/slosh"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 
@@ -19,10 +19,9 @@ required-features = ["dim2"]
 default = ["dim2"]
 dim2 = []
 
-comptime = [ "slosh_testbed2d/comptime" ]
-runtime = [ "slosh_testbed2d/runtime" ]
-
-webgpu = [ "slosh_testbed2d/webgpu" ]
+comptime = [ "slosh_testbed2d/comptime", "stensor/comptime" ]
+runtime = [ "slosh_testbed2d/runtime", "stensor/runtime" ]
+webgpu = [ "slosh_testbed2d/webgpu", "stensor/webgpu" ]
 
 [dependencies]
 nalgebra = { workspace = true }
@@ -55,6 +54,6 @@ slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"], default-fe
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]
-minislang = "0.3"
+minislang = "0.4"
 include_dir = "0.7"
-slang-hal-build = "0.3"
+slang-hal-build = "0.4"

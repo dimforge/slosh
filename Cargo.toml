@@ -16,8 +16,8 @@ bytemuck = { version = "1", features = ["derive"] }
 async-channel = "2"
 static_assertions = "1"
 
-slang-hal = "0.3"
-stensor = "0.3"
+slang-hal = "0.4"
+stensor = "0.4.0"
 
 [workspace.lints]
 rust.unexpected_cfgs = { level = "warn", check-cfg = [
@@ -25,11 +25,11 @@ rust.unexpected_cfgs = { level = "warn", check-cfg = [
 ] }
 
 [patch.crates-io]
-slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
-slang-hal-build = { path = "../slang-hal/crates/slang-hal-build" }
-slang-hal = { path = "../slang-hal/crates/slang-hal" }
-minislang = { path = "../slang-hal/crates/minislang" }
-stensor = { path = "../stensor" }
+#slang-hal-derive = { path = "../slang-hal/crates/slang-hal-derive" }
+#slang-hal-build = { path = "../slang-hal/crates/slang-hal-build" }
+#slang-hal = { path = "../slang-hal/crates/slang-hal" }
+#minislang = { path = "../slang-hal/crates/minislang" }
+#stensor = { path = "../stensor" }
 
 #slang-hal-derive = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
 #slang-hal-build = { git = "https://github.com/dimforge/slang-hal", branch = "comptime" }
