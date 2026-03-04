@@ -14,8 +14,9 @@ impl GpuBoundaryCondition {
     pub const STICK: u32 = 0u32;
     pub const SLIP: u32 = 1u32;
     pub const SEPARATE: u32 = 2u32;
-    pub const NON_REFLECTING: u32 = 3u32;
-    pub const DISABLED: u32 = 4u32;
+    pub const FRICTION_Z_UP: u32 = 3u32;
+    pub const NON_REFLECTING: u32 = 4u32;
+    pub const DISABLED: u32 = 5u32;
 
     pub fn stick() -> GpuBoundaryCondition {
         Self {
@@ -38,6 +39,20 @@ impl GpuBoundaryCondition {
         }
     }
 
+    pub fn friction_z_up(friction: f32) -> GpuBoundaryCondition {
+        Self {
+            ty: Self::FRICTION_Z_UP,
+            friction,
+        }
+    }
+
+    pub fn disabled() -> GpuBoundaryCondition {
+        Self {
+            ty: Self::DISABLED,
+            friction: 0.0
+        }
+    }
+
     pub fn non_reflecting() -> GpuBoundaryCondition {
         todo!();
     }
@@ -45,8 +60,6 @@ impl GpuBoundaryCondition {
 
 impl Default for GpuBoundaryCondition {
     fn default() -> Self {
-        // TODO: figure out why the friction needs to be so
-        //       high with CPIC.
         Self::separate(1.0)
     }
 }

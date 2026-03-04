@@ -3,6 +3,7 @@ module grid_update_collide;
 import slosh.rbd.shapes.shape;
 import slosh.aliases;
 import slosh.grid.grid;
+import slosh.solver.params;
 import slosh.collision.collide;
 import slosh.solver.boundary_condition;
 
@@ -22,6 +23,7 @@ func grid_update(
     uint3 block_id: SV_GroupID,
     uint3 tid: SV_GroupThreadID,
     uint tid_flat: SV_GroupIndex,
+    ConstantBuffer<SimulationParams> params,
     StructuredBuffer<Grid> grid,
     StructuredBuffer<ActiveBlockHeader> active_blocks,
     StructuredBuffer<BoundaryCondition> body_materials,
@@ -52,16 +54,17 @@ func grid_update(
     if (collision.valid) {
         // Apply boundary condition.
         let material = body_materials[collision.collider_id];
+        let dist_with_margin = dot(cell_pos - collision.point, collision.normal) - grid[0].cell_width;
         // TODO: take rigid-body velocity into account too.
         #if DIM == 2
             let node_velocity = nodes[global_node_id.id].momentum_velocity_mass.xy;
             let node_mass = nodes[global_node_id.id].momentum_velocity_mass.z;
-            let projected = material.project_velocity(node_velocity, collision.normal);
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, params.dt);
             nodes[global_node_id.id].momentum_velocity_mass = float3(projected, node_mass);
         #else
             let node_velocity = nodes[global_node_id.id].momentum_velocity_mass.xyz;
             let node_mass = nodes[global_node_id.id].momentum_velocity_mass.w;
-            let projected = material.project_velocity(node_velocity, collision.normal);
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, params.dt);
             nodes[global_node_id.id].momentum_velocity_mass = float4(projected, node_mass);
         #endif
     }

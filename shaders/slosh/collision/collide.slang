@@ -44,11 +44,13 @@ public func collide_cdf(
 
 public struct GridCollision {
     public Vect normal;
+    public Vect point;
     public uint collider_id;
     public bool valid;
 
-    public __init(Vect normal, uint collider_id, bool valid) {
+    public __init(Vect normal, Vect point, uint collider_id, bool valid) {
         this.normal = normal;
+        this.point = point;
         this.collider_id = collider_id;
         this.valid = valid;
     }
@@ -64,7 +66,7 @@ public func collide(
     Vect point,
 ) -> GridCollision {
     static const float MAX_FLT = 1.0e10; // Is the f32::MAX constant defined somewhere in WGSL?
-    var collision = GridCollision(Vect<float>(0.0), 0, false);
+    var collision = GridCollision(Vect<float>(0.0), Vect<float>(0.0), 0, false);
 
     let dist_cap = Vect<float>(cell_width * 1.5);
     var best_dist = MAX_FLT;
@@ -110,6 +112,7 @@ public func collide(
                 let dist = length(dpt);
                 if (sign * dist < best_dist && dist != 0.0) {
                     collision.normal = dpt / (dist * -sign);
+                    collision.point = proj.point;
                     collision.collider_id = i;
                     collision.valid = true;
                     best_dist = dist;

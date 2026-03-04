@@ -8,7 +8,7 @@ use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
 use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
-use crate::solver::{GpuBoundaryCondition, GpuMaterials};
+use crate::solver::{GpuBoundaryCondition, GpuMaterials, GpuSimulationParams, SimulationParams};
 
 /// GPU kernel for updating grid node CDF data from rigid bodies.
 ///
@@ -23,6 +23,7 @@ pub struct WgGridUpdateCollide<B: Backend> {
 
 #[derive(ShaderArgs)]
 struct GridUpdateCollideArgs<'a, B: Backend> {
+    params: &'a GpuScalar<SimulationParams, B>,
     grid: &'a GpuScalar<GpuGridMetadata, B>,
     active_blocks: &'a GpuVector<GpuActiveBlockHeader, B>,
     body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
@@ -46,6 +47,7 @@ impl<B: Backend> WgGridUpdateCollide<B> {
         &self,
         backend: &B,
         pass: &mut B::Pass,
+        sim_params: &GpuSimulationParams<B>,
         grid: &GpuGrid<B>,
         bodies: &GpuBodySet<B>,
         body_materials: &GpuMaterials<B>,
@@ -55,6 +57,7 @@ impl<B: Backend> WgGridUpdateCollide<B> {
         }
 
         let args = GridUpdateCollideArgs {
+            params: &sim_params.params,
             grid: &grid.meta,
             active_blocks: &grid.active_blocks,
             body_materials: &body_materials.materials,

@@ -38,7 +38,7 @@ func particle_update(
     RWByteAddressBuffer particles_model,
     RWStructuredBuffer<Position> particles_pos,
     RWStructuredBuffer<Kinematics> particles_kin,
-    StructuredBuffer<Cdf> particles_cdf,
+//    StructuredBuffer<Cdf> particles_cdf,
     RWStructuredBuffer<Mat<float>> particles_def_grad,
     RWStructuredBuffer<ParticleProperties> particles_props,
     ConstantBuffer<uint> particles_len,
@@ -54,7 +54,7 @@ func particle_update(
     let dt = params.dt;
     let cell_width = grid[0].cell_width;
     var kin = particles_kin[particle_id];
-    let cdf = particles_cdf[particle_id];
+//    let cdf = particles_cdf[particle_id];
     var def_grad = particles_def_grad[particle_id];
     let props = particles_props[particle_id];
     let particle_pos = particles_pos[particle_id].pt;
@@ -68,10 +68,10 @@ func particle_update(
      //       it at some point as it appeared that we'd still get some penetrating particles.
      //       However, that might have been caused by other bugs so it is unsure if we need to
      //       keep it now.
-     if (cdf.signed_distance < -0.05 * cell_width) {
-         let slip = BoundaryCondition(BoundaryConditionType::Slip, 0.0);
-         kin.velocity = cdf.rigid_vel + slip.project_velocity((kin.velocity - cdf.rigid_vel), cdf.normal);
-     }
+//     if (cdf.signed_distance < -0.05 * cell_width) {
+//         let slip = BoundaryCondition(BoundaryConditionType::Slip, 0.0);
+//         kin.velocity = cdf.rigid_vel + slip.project_velocity((kin.velocity - cdf.rigid_vel), cdf.normal);
+//     }
 
     // Clamp the max velocity a particle can get.
     // TODO: clamp the grid velocities instead?
@@ -93,17 +93,17 @@ func particle_update(
 
     let new_particle_pos = particle_pos + kin.velocity * dt;
 
-    /*
-     * Penalty impulse.
-     */
-     // TODO: apply the penalty impulse as an extra force on the grid instead of on
-     //       changing the particle velocity directly?
-     static const float PENALTY_COEFF = 1.0e3;
-     if (cdf.signed_distance < -0.05 * cell_width) { // && cdf.signed_distance > -0.3 * cell_width {
-         let corrected_dist = max(cdf.signed_distance, -0.3 * cell_width);
-         let impulse = (dt * -corrected_dist * PENALTY_COEFF) * cdf.normal;
-         kin.velocity += impulse; // / curr_particle_vol.mass;
-     }
+//    /*
+//     * Penalty impulse.
+//     */
+//     // TODO: apply the penalty impulse as an extra force on the grid instead of on
+//     //       changing the particle velocity directly?
+//     static const float PENALTY_COEFF = 1.0e3;
+//     if (cdf.signed_distance < -0.05 * cell_width) { // && cdf.signed_distance > -0.3 * cell_width {
+//         let corrected_dist = max(cdf.signed_distance, -0.3 * cell_width);
+//         let impulse = (dt * -corrected_dist * PENALTY_COEFF) * cdf.normal;
+//         kin.velocity += impulse; // / curr_particle_vol.mass;
+//     }
 
     /*
      * Deformation gradient update.
