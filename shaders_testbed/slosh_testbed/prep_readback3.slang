@@ -5,7 +5,7 @@ module prep_readback3;
 import slosh.solver.particle;
 import slosh.grid.grid;
 import slosh.solver.params;
-import stensor.geometry.svd3;
+import stensor.geometry.svd_stable.svd3;
 import stensor.utils.mat;
 import slosh.aliases;
 

@@ -3,7 +3,7 @@
 module neo_hookean_elasticity;
 
 import stensor.geometry.svd2;
-import stensor.geometry.svd3;
+import stensor.geometry.svd_stable.svd3;
 import slosh.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;

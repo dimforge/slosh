@@ -4,7 +4,7 @@ module drucker_prager;
 
 import slosh.aliases;
 import stensor.geometry.svd2;
-import stensor.geometry.svd3;
+import stensor.geometry.svd_stable.svd3;
 
 // TODO: should be this in the same buffer as the plasticity parameters themselves?
 public struct DruckerPragerPlasticState {
@@ -16,6 +16,14 @@ public struct DruckerPragerPlasticState {
 public struct DruckerPragerResult {
     public DruckerPragerPlasticState state;
     public Mat deformation_gradient;
+}
+
+public struct DruckerPragerSvdResult {
+    public DruckerPragerPlasticState state;
+    public Mat deformation_gradient;
+    public Mat svd_u;
+    public Vect svd_s;
+    public Mat svd_vt;
 }
 
 public struct DruckerPragerProjectionResult {
@@ -101,6 +109,36 @@ public struct DruckerPragerPlasticity {
             return DruckerPragerResult(state, deformation_gradient);
         }
     }
+
+    public func project_with_svd(state: DruckerPragerPlasticState, deformation_gradient: float2x2) -> DruckerPragerSvdResult {
+        let svd = Svd2(deformation_gradient);
+
+        if (this.lambda == 0) {
+            return DruckerPragerSvdResult(state, deformation_gradient, svd.U, svd.S, svd.Vt);
+        }
+
+        let alpha = this.alpha(state.plastic_hardening);
+        let projection = this.project_deformation_gradient(svd.S, state.log_vol_gain, alpha);
+
+        if (projection.valid) {
+            let prev_det = svd.S.x * svd.S.y;
+            let new_det = projection.singular_values.x * projection.singular_values.y;
+
+            let new_plastic_deformation_gradient_det = state.plastic_deformation_gradient_det * prev_det / new_det;
+            let new_log_vol_gain = state.log_vol_gain + log(prev_det) - log(new_det);
+            let new_plastic_hardening = state.plastic_hardening + projection.plastic_hardening;
+            let new_deformation_gradient = Svd2(svd.U, projection.singular_values, svd.Vt).recompose();
+            return DruckerPragerSvdResult(
+                DruckerPragerPlasticState(new_plastic_deformation_gradient_det, new_plastic_hardening, new_log_vol_gain),
+                new_deformation_gradient,
+                svd.U,
+                projection.singular_values,
+                svd.Vt,
+            );
+        } else {
+            return DruckerPragerSvdResult(state, deformation_gradient, svd.U, svd.S, svd.Vt);
+        }
+    }
     #else
 
     func project_deformation_gradient(singular_values: float3, log_vol_gain: float, alpha: float) -> DruckerPragerProjectionResult {
@@ -158,6 +196,36 @@ public struct DruckerPragerPlasticity {
             );
         } else {
             return DruckerPragerResult(state, deformation_gradient);
+        }
+    }
+
+    public func project_with_svd(state: DruckerPragerPlasticState, deformation_gradient: float3x3) -> DruckerPragerSvdResult {
+        let svd = Svd3(deformation_gradient);
+
+        if (this.lambda == 0) {
+            return DruckerPragerSvdResult(state, deformation_gradient, svd.U, svd.S, svd.Vt);
+        }
+
+        let alpha = this.alpha(state.plastic_hardening);
+        let projection = this.project_deformation_gradient(svd.S, state.log_vol_gain, alpha);
+
+        if (projection.valid) {
+            let prev_det = svd.S.x * svd.S.y * svd.S.z;
+            let new_det = projection.singular_values.x * projection.singular_values.y * projection.singular_values.z;
+
+            let new_plastic_deformation_gradient_det = state.plastic_deformation_gradient_det * prev_det / new_det;
+            let new_log_vol_gain = state.log_vol_gain + log(prev_det) - log(new_det);
+            let new_plastic_hardening = state.plastic_hardening + projection.plastic_hardening;
+            let new_deformation_gradient = Svd3(svd.U, projection.singular_values, svd.Vt).recompose();
+            return DruckerPragerSvdResult(
+                DruckerPragerPlasticState(new_plastic_deformation_gradient_det, new_plastic_hardening, new_log_vol_gain),
+                new_deformation_gradient,
+                svd.U,
+                projection.singular_values,
+                svd.Vt,
+            );
+        } else {
+            return DruckerPragerSvdResult(state, deformation_gradient, svd.U, svd.S, svd.Vt);
         }
     }
     #endif

@@ -3,7 +3,7 @@
 module linear_elasticity;
 
 import stensor.geometry.svd2;
-import stensor.geometry.svd3;
+import stensor.geometry.svd_stable.svd3;
 import slosh.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;
@@ -20,6 +20,20 @@ public struct LinearElasticModel {
         let j = svd.S.x * svd.S.y;
 
         svd.S -= float2(1.0);
+
+        let diag = this.lambda * (j - 1.0) * j;
+        var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
+        result[0].x += diag;
+        result[1].y += diag;
+
+        return result;
+    }
+
+    // Same as kirchoff_stress but using a pre-computed SVD instead of computing a new one.
+    public func kirchoff_stress_from_svd(deformation_gradient: float2x2, svd_u: float2x2, svd_s: float2, svd_vt: float2x2) -> float2x2 {
+        let j = svd_s.x * svd_s.y;
+        let s_minus_1 = svd_s - float2(1.0);
+        let svd = Svd3(svd_u, s_minus_1, svd_vt);
 
         let diag = this.lambda * (j - 1.0) * j;
         var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
@@ -52,6 +66,20 @@ public struct LinearElasticModel {
 
         svd.S -= float3(1.0);
 
+        let diag = this.lambda * (j - 1.0) * j;
+        var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
+        result[0].x += diag;
+        result[1].y += diag;
+        result[2].z += diag;
+
+        return result;
+    }
+
+    // Same as kirchoff_stress but using a pre-computed SVD instead of computing a new one.
+    public func kirchoff_stress_from_svd(deformation_gradient: float3x3, svd_u: float3x3, svd_s: float3, svd_vt: float3x3) -> float3x3 {
+        let j = svd_s.x * svd_s.y * svd_s.z;
+        let s_minus_1 = svd_s - float3(1.0);
+        let svd = Svd3(svd_u, s_minus_1, svd_vt);
         let diag = this.lambda * (j - 1.0) * j;
         var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);
         result[0].x += diag;

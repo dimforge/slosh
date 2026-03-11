@@ -10,7 +10,7 @@ import slosh.models.linear_elasticity;
 import slosh.models.drucker_prager;
 import slosh.models.interfaces;
 import stensor.geometry.svd2;
-import stensor.geometry.svd3;
+import stensor.geometry.svd_stable.svd3;
 import stensor.utils.mat;
 import slosh.rbd.shapes.cuboid;
 import slosh.aliases;
