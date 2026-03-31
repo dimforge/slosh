@@ -161,7 +161,7 @@ impl ValidationHarness {
     /// Create a new validation harness with GPU backend.
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 11,
+            max_storage_buffers_per_shader_stage: 13,
             max_compute_workgroup_storage_size: 32768,
             ..Limits::default()
         };

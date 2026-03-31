@@ -60,8 +60,10 @@ public struct GridCollision {
 public func collide(
     StructuredBuffer<Shape> collision_shapes,
     StructuredBuffer<Pose> collision_shape_poses,
+    #if DIM == 3
     StructuredBuffer<Vect> collision_shape_vtx,
     StructuredBuffer<uint> collision_shape_idx,
+    #endif
     float cell_width,
     Vect point,
 ) -> GridCollision {

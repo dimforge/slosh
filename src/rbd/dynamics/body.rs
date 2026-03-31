@@ -252,6 +252,33 @@ impl<B: Backend> GpuBodySet<B> {
             // NOTE: Looks silly, but we can’t just collect into (Vec, Vec, Vec).
             .map(|b| (b.local_mprops, (b.mprops, (b.vel, (b.pose, b.shape)))))
             .collect();
+
+        // Ensure vertex/collision buffers are never empty — WebGPU does not allow
+        // zero-sized buffer bindings. A single dummy element is harmless because
+        // the shader only accesses these buffers through index ranges stored in
+        // the per-shape data, so the dummy element is never read.
+        let dummy_pt = Point::origin();
+        let vertices = if shape_buffers.vertices.is_empty() {
+            vec![dummy_pt]
+        } else {
+            shape_buffers.vertices.clone()
+        };
+        let collision_vertices = if shape_buffers.collision_vertices.is_empty() {
+            vec![dummy_pt]
+        } else {
+            shape_buffers.collision_vertices.clone()
+        };
+        let collision_indices = if shape_buffers.collision_indices.is_empty() {
+            vec![0u32]
+        } else {
+            shape_buffers.collision_indices.clone()
+        };
+        let pt_collider_ids = if pt_collider_ids.is_empty() {
+            &[0u32][..]
+        } else {
+            pt_collider_ids
+        };
+
         // TODO: (api design) how can we let the user pick the buffer usages?
         Ok(Self {
             len: bodies.len() as u32,
@@ -270,13 +297,13 @@ impl<B: Backend> GpuBodySet<B> {
             shapes: GpuTensor::vector(backend, &shapes_data, BufferUsages::STORAGE)?,
             shapes_local_vertex_buffers: GpuTensor::vector_encased(
                 backend,
-                &shape_buffers.vertices,
+                &vertices,
                 BufferUsages::STORAGE,
             )?,
             shapes_vertex_buffers: GpuTensor::vector_encased(
                 backend,
                 // TODO: init in world-space directly?
-                &shape_buffers.vertices,
+                &vertices,
                 BufferUsages::STORAGE,
             )?,
             shapes_vertex_collider_id: GpuTensor::vector(
@@ -286,12 +313,12 @@ impl<B: Backend> GpuBodySet<B> {
             )?,
             shapes_collision_vertices: GpuTensor::vector_encased(
                 backend,
-                &shape_buffers.collision_vertices,
+                &collision_vertices,
                 BufferUsages::STORAGE,
             )?,
             shapes_collision_indices: GpuTensor::vector(
                 backend,
-                &shape_buffers.collision_indices,
+                &collision_indices,
                 BufferUsages::STORAGE,
             )?,
             shapes_data,

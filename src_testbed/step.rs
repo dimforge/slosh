@@ -1,10 +1,12 @@
 use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
 use slosh::rapier::na;
-use slang_hal::backend::Backend;
+use slang_hal::backend::{Backend, WebGpu};
+use slang_hal::BufferUsages;
 #[cfg(feature = "webgpu")]
 use slang_hal::GpuTimingResult;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
+use stensor::tensor::GpuTensor;
 
 #[derive(Default)]
 pub struct SimulationTimes {
@@ -19,6 +21,12 @@ pub struct SimulationTimes {
 pub struct SimulationStepResult {
     pub instances: Vec<ReadbackData>,
     pub timings: SimulationTimes,
+    /// Raw model data read back from GPU, stored as u32 words.
+    /// Can be cast to the concrete model type using `bytemuck::cast_slice`.
+    pub model_data_raw: Vec<u32>,
+    /// Raw deformation gradient data read back from GPU, stored as f32 values.
+    /// In 2D each particle has 4 f32s (Matrix2), in 3D each has 9 (Matrix3).
+    pub def_grad_raw: Vec<f32>,
 }
 
 impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
@@ -47,9 +55,29 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             // TODO: resize buffers instead of recreating.
             self.readback =
                 GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode).unwrap();
+            let model_u32_count = new_particle_count * std::mem::size_of::<GpuModel>() / 4;
+            self.model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
+                &self.gpu,
+                model_u32_count as u32,
+                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            )
+            .unwrap();
             self.step_result
                 .instances
                 .resize(new_particle_count, ReadbackData::default());
+            let def_grad_f32_count = new_particle_count * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+            self.def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
+                &self.gpu,
+                def_grad_f32_count as u32,
+                BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            )
+            .unwrap();
+            self.step_result
+                .model_data_raw
+                .resize(model_u32_count, 0);
+            self.step_result
+                .def_grad_raw
+                .resize(def_grad_f32_count, 0.0);
             println!("Adjust readback buffers: {}", new_particle_count);
         }
 
@@ -224,6 +252,36 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             )
             .unwrap();
 
+        // Copy model buffer to staging for readback.
+        {
+            let model_buf = physics.data.particles.models().buffer();
+            let staging_buf = self.model_staging.buffer();
+            let bytes = physics.data.particles.len() as u64 * std::mem::size_of::<GpuModel>() as u64;
+            wgpu::CommandEncoder::copy_buffer_to_buffer(
+                &mut encoder,
+                model_buf,
+                0,
+                staging_buf,
+                0,
+                bytes,
+            );
+        }
+
+        // Copy deformation gradient buffer to staging for readback.
+        {
+            let def_grad_buf = physics.data.particles.def_grad.buffer();
+            let staging_buf = self.def_grad_staging.buffer();
+            let bytes = physics.data.particles.len() as u64 * std::mem::size_of::<slosh::math::Matrix<f32>>() as u64;
+            wgpu::CommandEncoder::copy_buffer_to_buffer(
+                &mut encoder,
+                def_grad_buf,
+                0,
+                staging_buf,
+                0,
+                bytes,
+            );
+        }
+
         self.gpu.submit(encoder).unwrap();
         let t_encoding = t_encoding.elapsed().as_secs_f32() * 1000.0;
 
@@ -236,6 +294,20 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             .read_buffer(
                 self.readback.instances_staging.buffer(),
                 self.step_result.instances.as_mut_slice(),
+            )
+            .await
+            .unwrap();
+        self.gpu
+            .read_buffer(
+                self.model_staging.buffer(),
+                self.step_result.model_data_raw.as_mut_slice(),
+            )
+            .await
+            .unwrap();
+        self.gpu
+            .read_buffer(
+                self.def_grad_staging.buffer(),
+                self.step_result.def_grad_raw.as_mut_slice(),
             )
             .await
             .unwrap();

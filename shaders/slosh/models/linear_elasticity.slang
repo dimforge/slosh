@@ -33,7 +33,7 @@ public struct LinearElasticModel {
     public func kirchoff_stress_from_svd(deformation_gradient: float2x2, svd_u: float2x2, svd_s: float2, svd_vt: float2x2) -> float2x2 {
         let j = svd_s.x * svd_s.y;
         let s_minus_1 = svd_s - float2(1.0);
-        let svd = Svd3(svd_u, s_minus_1, svd_vt);
+        let svd = Svd2(svd_u, s_minus_1, svd_vt);
 
         let diag = this.lambda * (j - 1.0) * j;
         var result = mul(transpose(deformation_gradient), svd.recompose()) * (2.0 * this.mu);

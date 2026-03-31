@@ -29,8 +29,10 @@ func grid_update(
     StructuredBuffer<BoundaryCondition> body_materials,
     StructuredBuffer<Shape> collision_shapes,
     StructuredBuffer<Pose> collision_shape_poses,
+    #if DIM == 3
     StructuredBuffer<Vect> collision_shape_vtx,
     StructuredBuffer<uint> collision_shape_idx,
+    #endif
     RWStructuredBuffer<Node> nodes,
 ) {
     let bid = block_id.x;
@@ -49,7 +51,16 @@ func grid_update(
     //            collisions in teh other `_cdf` kernels.
     //            Or maybe just use some sort of flag and skip the block at the start of the kernel?
     let global_id = global_node_id.id;
-    let collision = collide(collision_shapes, collision_shape_poses, collision_shape_vtx, collision_shape_idx, grid[0].cell_width, cell_pos);
+    let collision = collide(
+        collision_shapes,
+        collision_shape_poses,
+        #if DIM == 3
+        collision_shape_vtx,
+        collision_shape_idx,
+        #endif
+        grid[0].cell_width,
+        cell_pos
+    );
 
     if (collision.valid) {
         // Apply boundary condition.

@@ -12,6 +12,9 @@ mod data;
 mod prep_readback;
 mod step;
 
+pub use prep_readback::ReadbackData;
+pub use step::SimulationStepResult;
+
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
     include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../shaders_testbed");
 
@@ -22,7 +25,6 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
 }
 
 use crate::prep_readback::{GpuReadbackData, PrepReadback, RenderMode};
-use crate::step::SimulationStepResult;
 use kiss3d::egui;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
@@ -31,6 +33,8 @@ use nalgebra::Vector3;
 use slosh::rapier::geometry::ShapeType;
 use regex::Regex;
 use slang_hal::backend::{Backend, WebGpu};
+use slang_hal::BufferUsages;
+use stensor::tensor::GpuTensor;
 use slang_hal::re_exports::include_dir;
 use slang_hal::SlangCompiler;
 use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
@@ -62,6 +66,8 @@ struct Stage<GpuModel: GpuParticleModelData> {
     step_result: SimulationStepResult,
     readback_shader: PrepReadback<WebGpu>,
     readback: GpuReadbackData<WebGpu>,
+    model_staging: GpuTensor<u32, WebGpu>,
+    def_grad_staging: GpuTensor<f32, WebGpu>,
     #[cfg(feature = "dim2")]
     instances: Vec<PlanarInstanceData>,
     #[cfg(feature = "dim3")]
@@ -76,10 +82,10 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         builders: SceneBuilders<GpuModel>,
     ) -> Stage<GpuModel> {
         let limits = Limits {
-            max_storage_buffers_per_shader_stage: 11,
+            max_storage_buffers_per_shader_stage: 13,
             max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
-            max_buffer_size: 1_000_000_000,
-            max_storage_buffer_binding_size: 1_000_000_000,
+            max_buffer_size: 4_000_000_000,
+            max_storage_buffer_binding_size: 4_000_000_000,
             ..Limits::default()
         };
         let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, limits).await.unwrap();
@@ -120,10 +126,30 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let readback_shader = PrepReadback::from_backend(&gpu, &compiler).unwrap();
         let readback =
             GpuReadbackData::new(&gpu, physics.data.particles.len(), RenderMode::Default).unwrap();
+        let model_u32_count = physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
+        let model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
+            &gpu,
+            model_u32_count as u32,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )
+        .unwrap();
+        let def_grad_f32_count = physics.data.particles.len() * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+        let def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
+            &gpu,
+            def_grad_f32_count as u32,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )
+        .unwrap();
         let mut step_result = SimulationStepResult::default();
         step_result
             .instances
             .resize(physics.data.particles.len(), Default::default());
+        step_result
+            .model_data_raw
+            .resize(model_u32_count, 0);
+        step_result
+            .def_grad_raw
+            .resize(def_grad_f32_count, 0.0);
 
         Stage {
             builders,
@@ -131,6 +157,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             render_mode: RenderMode::Default,
             readback,
             readback_shader,
+            model_staging,
+            def_grad_staging,
             gpu,
             physics,
             hooks,
@@ -150,15 +178,35 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             self.render_mode,
         )
         .unwrap();
+        let model_u32_count = self.physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
+        self.model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
+            &self.gpu,
+            model_u32_count as u32,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )
+        .unwrap();
+        let def_grad_f32_count = self.physics.data.particles.len() * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+        self.def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
+            &self.gpu,
+            def_grad_f32_count as u32,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )
+        .unwrap();
         self.app_state.num_substeps = 1; // Reset so it gets reinitialized automatically if needed.
         self.step_result
             .instances
             .resize(self.physics.data.particles.len(), Default::default());
+        self.step_result
+            .model_data_raw
+            .resize(model_u32_count, 0);
+        self.step_result
+            .def_grad_raw
+            .resize(def_grad_f32_count, 0.0);
     }
 
-    async fn update(&mut self) {
+    async fn update(&mut self) -> bool {
         if !self.step_simulation().await {
-            return;
+            return false;
         }
 
         self.instances.clear();
@@ -189,6 +237,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                         d.deformation.m31, d.deformation.m32, d.deformation.m33,
                     ),
             }));
+
+        true
     }
 }
 
@@ -214,6 +264,24 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
+    #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
+) {
+    run_with_hooks_and_ui(
+        compiler,
+        hooks,
+        scene_builders,
+        |_, _, _, _| {},
+        #[cfg(feature = "dim3")]
+        up_axis,
+    )
+    .await
+}
+
+pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    scene_builders: SceneBuilders<GpuModel>,
+    mut extra_ui: impl FnMut(&egui::Context, &PhysicsContext<GpuModel>, &SimulationStepResult, bool),
     #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
 ) {
     let mut colliders_gfx = HashMap::new();
@@ -250,7 +318,7 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
         /*
          * Step simulation.
          */
-        stage.update().await;
+        let stepped = stage.update().await;
 
         /*
          * Update rendering.
@@ -359,6 +427,8 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
                     }
                 });
             });
+
+            extra_ui(ctx, &stage.physics, &stage.step_result, stepped);
         });
 
         if let Some(demo) = new_selected_demo {

@@ -53,8 +53,13 @@ public struct BoundaryCondition {
 
                 if (normal_vel < 0.0) {
                     if (dist <= 0.0) {
+                        #if DIM == 3
                         let apply_friction = this.type == BoundaryConditionType::Separate ||
                             (this.type == BoundaryConditionType::FrictionZUp && n.z >= 0.0);
+                        #else
+                        let apply_friction = this.type == BoundaryConditionType::Separate ||
+                            (this.type == BoundaryConditionType::FrictionZUp && n.y >= 0.0);
+                        #endif
                         var friction = this.friction;
                         if (!apply_friction) {
                             friction = 0.0;

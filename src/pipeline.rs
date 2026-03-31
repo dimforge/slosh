@@ -438,6 +438,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             // )?;
         }
 
+
         hooks.after_particle_sort(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
 
         // {

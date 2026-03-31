@@ -328,32 +328,47 @@ impl<B: Backend> GpuRigidParticles<B> {
             }
         }
 
-        Ok(Self {
-            local_sample_points: GpuTensor::vector_encased(
-                backend,
-                &sampling_buffers.samples,
-                BufferUsages::STORAGE,
-            )?,
-            sample_points: GpuTensor::vector_encased(
-                backend,
-                &sampling_buffers.samples,
-                BufferUsages::STORAGE,
-            )?,
-            node_linked_lists: GpuTensor::vector_uninit(
-                backend,
-                sampling_buffers.samples.len() as u32,
-                BufferUsages::STORAGE,
-            )?,
-            sample_ids: GpuTensor::vector_encased(
+        // Ensure buffers are never empty — WebGPU does not allow zero-sized buffer bindings.
+        // Use max(1, len) for uninit buffers, and pad data buffers with a dummy element.
+        // The dummy elements are never read because the simulation tracks actual particle
+        // counts separately.
+        let num_samples = sampling_buffers.samples.len();
+        let buf_len = num_samples.max(1) as u32;
+
+        let local_sample_points = if num_samples > 0 {
+            GpuTensor::vector_encased(backend, &sampling_buffers.samples, BufferUsages::STORAGE)?
+        } else {
+            GpuTensor::vector_uninit_encased(backend, 1, BufferUsages::STORAGE)?
+        };
+        let sample_points = if num_samples > 0 {
+            GpuTensor::vector_encased(backend, &sampling_buffers.samples, BufferUsages::STORAGE)?
+        } else {
+            GpuTensor::vector_uninit_encased(backend, 1, BufferUsages::STORAGE)?
+        };
+        let sample_ids = if num_samples > 0 {
+            GpuTensor::vector_encased(
                 backend,
                 &sampling_buffers.samples_ids,
                 BufferUsages::STORAGE,
+            )?
+        } else {
+            GpuTensor::vector_uninit_encased(backend, 1, BufferUsages::STORAGE)?
+        };
+
+        Ok(Self {
+            local_sample_points,
+            sample_points,
+            node_linked_lists: GpuTensor::vector_uninit(
+                backend,
+                buf_len,
+                BufferUsages::STORAGE,
             )?,
+            sample_ids,
             // NOTE: this is a packed bitmask so each u32 contains
             //       the flag for 32 particles.
             rigid_particle_needs_block: GpuTensor::vector_uninit(
                 backend,
-                sampling_buffers.samples.len().div_ceil(32) as u32,
+                (num_samples.div_ceil(32).max(1)) as u32,
                 BufferUsages::STORAGE,
             )?,
         })
