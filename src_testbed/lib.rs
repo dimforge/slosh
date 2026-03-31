@@ -118,6 +118,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             gravity_factor: 1.0,
             restarting: false,
             show_rigid_particles: false,
+            cell_width: 0.01,
         };
         let hooks = hooks(&gpu, &compiler);
         let physics = (builders[0].1)(&gpu, &mut app_state);
@@ -426,6 +427,17 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                         new_selected_demo = Some(stage.selected_demo);
                     }
                 });
+
+                if ui
+                    .add(
+                        egui::Slider::new(&mut stage.app_state.cell_width, 0.001..=2.0)
+                            .logarithmic(true)
+                            .text("Cell width"),
+                    )
+                    .changed()
+                {
+                    new_selected_demo = Some(stage.selected_demo);
+                }
             });
 
             extra_ui(ctx, &stage.physics, &stage.step_result, stepped);

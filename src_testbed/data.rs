@@ -21,6 +21,7 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub restarting: bool,
     // pub hot_reload: HotReloadState,
     pub show_rigid_particles: bool,
+    pub cell_width: f32,
 }
 
 #[derive(Default)]
