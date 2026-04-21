@@ -8,6 +8,19 @@ use slang_hal::GpuTimingResult;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
 use stensor::tensor::GpuTensor;
 
+/// Byte stride of one `Mat<f32>` element in the GPU def-grad buffer, matching
+/// the slang/WGSL structured-buffer layout. In 3D, `mat3x3<f32>` has three
+/// `vec4`-aligned columns for a total of 48 bytes (not the tightly-packed 36
+/// bytes of a CPU `nalgebra::Matrix3`). In 2D, `mat2x2<f32>` is already
+/// tightly packed at 16 bytes, so there is no mismatch.
+#[cfg(feature = "dim2")]
+pub const GPU_DEF_GRAD_STRIDE_BYTES: usize = 16;
+#[cfg(feature = "dim3")]
+pub const GPU_DEF_GRAD_STRIDE_BYTES: usize = 48;
+
+/// Same stride, expressed in number of `f32` elements. 4 in 2D, 12 in 3D.
+pub const GPU_DEF_GRAD_STRIDE_F32: usize = GPU_DEF_GRAD_STRIDE_BYTES / 4;
+
 #[derive(Default)]
 pub struct SimulationTimes {
     pub total_step_time: f32,
@@ -25,7 +38,10 @@ pub struct SimulationStepResult {
     /// Can be cast to the concrete model type using `bytemuck::cast_slice`.
     pub model_data_raw: Vec<u32>,
     /// Raw deformation gradient data read back from GPU, stored as f32 values.
-    /// In 2D each particle has 4 f32s (Matrix2), in 3D each has 9 (Matrix3).
+    /// Stride per particle is [`GPU_DEF_GRAD_STRIDE_F32`]: 4 in 2D (a
+    /// `mat2x2<f32>`), 12 in 3D (a `mat3x3<f32>` with `vec4`-aligned columns).
+    /// In 3D only the first three entries of each column are meaningful; the
+    /// fourth entry of each column is slang padding.
     pub def_grad_raw: Vec<f32>,
 }
 
@@ -53,8 +69,11 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         let new_particle_count = physics.data.particles.len();
         if prev_particle_count != new_particle_count {
             // TODO: resize buffers instead of recreating.
+            // Custom colors from init() don't apply after dynamic particle
+            // count changes, so fall back to the default palette here.
             self.readback =
-                GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode).unwrap();
+                GpuReadbackData::new(&self.gpu, new_particle_count, self.render_mode, None)
+                    .unwrap();
             let model_u32_count = new_particle_count * std::mem::size_of::<GpuModel>() / 4;
             self.model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
                 &self.gpu,
@@ -65,7 +84,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             self.step_result
                 .instances
                 .resize(new_particle_count, ReadbackData::default());
-            let def_grad_f32_count = new_particle_count * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+            let def_grad_f32_count = new_particle_count * GPU_DEF_GRAD_STRIDE_F32;
             self.def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
                 &self.gpu,
                 def_grad_f32_count as u32,
@@ -108,10 +127,10 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             );
             self.app_state.num_substeps = num_substeps;
 
-            println!(
-                "Found timestep bounds: {:?}. Estimated substeps: {}. Actual: {}",
-                bounds, num_substeps_estimated, num_substeps
-            );
+            // println!(
+            //     "Found timestep bounds: {:?}. Estimated substeps: {}. Actual: {}",
+            //     bounds, num_substeps_estimated, num_substeps
+            // );
         } else if self.app_state.num_substeps != self.app_state.max_num_substeps {
             // No adaptive stepping, but we need to update the number of substeps on the gpu.
             self.app_state.num_substeps = self.app_state.max_num_substeps;
@@ -267,11 +286,16 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             );
         }
 
-        // Copy deformation gradient buffer to staging for readback.
+        // Copy deformation gradient buffer to staging for readback. We use the
+        // GPU-side stride (see `GPU_DEF_GRAD_STRIDE_BYTES`) rather than
+        // `size_of::<Matrix<f32>>()`, which is only correct in 2D. In 3D the
+        // GPU mat3x3 has vec4-aligned columns (48 bytes), not the tightly
+        // packed 36 bytes of a CPU nalgebra Matrix3.
         {
             let def_grad_buf = physics.data.particles.def_grad.buffer();
             let staging_buf = self.def_grad_staging.buffer();
-            let bytes = physics.data.particles.len() as u64 * std::mem::size_of::<slosh::math::Matrix<f32>>() as u64;
+            let bytes =
+                physics.data.particles.len() as u64 * GPU_DEF_GRAD_STRIDE_BYTES as u64;
             wgpu::CommandEncoder::copy_buffer_to_buffer(
                 &mut encoder,
                 def_grad_buf,

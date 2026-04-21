@@ -110,7 +110,12 @@ pub struct GpuReadbackData<B: Backend> {
 }
 
 impl<B: Backend> GpuReadbackData<B> {
-    pub fn new(backend: &B, num_particles: usize, mode: RenderMode) -> Result<Self, B::Error> {
+    pub fn new(
+        backend: &B,
+        num_particles: usize,
+        mode: RenderMode,
+        custom_colors: Option<&[Vector4<f32>]>,
+    ) -> Result<Self, B::Error> {
         let config = mode.config();
         let palette = [
             [124.0 / 255.0, 144.0 / 255.0, 1.0, 1.0],
@@ -124,9 +129,12 @@ impl<B: Backend> GpuReadbackData<B> {
         let instances: Vec<_> = (0..num_particles)
             .map(|_| ReadbackData::default())
             .collect();
-        let base_colors: Vec<_> = (0..num_particles)
-            .map(|i| palette[i % palette.len()].into())
-            .collect();
+        let base_colors: Vec<Vector4<f32>> = match custom_colors {
+            Some(c) if c.len() == num_particles => c.to_vec(),
+            _ => (0..num_particles)
+                .map(|i| palette[i % palette.len()].into())
+                .collect(),
+        };
 
         Ok(Self {
             mode: GpuTensor::scalar(

@@ -119,14 +119,38 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             restarting: false,
             show_rigid_particles: false,
             cell_width: 0.01,
+            particle_colors: None,
+            #[cfg(feature = "dim3")]
+            render_aabb_enabled: false,
+            #[cfg(feature = "dim3")]
+            render_aabb_min: nalgebra::Vector3::repeat(-100.0),
+            #[cfg(feature = "dim3")]
+            render_aabb_max: nalgebra::Vector3::repeat(100.0),
+            #[cfg(feature = "dim3")]
+            render_aabb_slider_min: nalgebra::Vector3::repeat(-100.0),
+            #[cfg(feature = "dim3")]
+            render_aabb_slider_max: nalgebra::Vector3::repeat(100.0),
+            #[cfg(feature = "dim3")]
+            initial_camera_eye: None,
+            #[cfg(feature = "dim3")]
+            initial_camera_target: None,
+            #[cfg(feature = "dim2")]
+            initial_camera2d_at: None,
+            #[cfg(feature = "dim2")]
+            initial_camera2d_zoom: None,
         };
         let hooks = hooks(&gpu, &compiler);
         let physics = (builders[0].1)(&gpu, &mut app_state);
         app_state.num_substeps = 0; // Ensures it will be updated at the next step.
 
         let readback_shader = PrepReadback::from_backend(&gpu, &compiler).unwrap();
-        let readback =
-            GpuReadbackData::new(&gpu, physics.data.particles.len(), RenderMode::Default).unwrap();
+        let readback = GpuReadbackData::new(
+            &gpu,
+            physics.data.particles.len(),
+            RenderMode::Default,
+            app_state.particle_colors.as_deref(),
+        )
+        .unwrap();
         let model_u32_count = physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
         let model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
             &gpu,
@@ -134,7 +158,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         )
         .unwrap();
-        let def_grad_f32_count = physics.data.particles.len() * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+        let def_grad_f32_count = physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
         let def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
             &gpu,
             def_grad_f32_count as u32,
@@ -177,6 +201,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             &self.gpu,
             self.physics.data.particles.len(),
             self.render_mode,
+            self.app_state.particle_colors.as_deref(),
         )
         .unwrap();
         let model_u32_count = self.physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
@@ -186,7 +211,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         )
         .unwrap();
-        let def_grad_f32_count = self.physics.data.particles.len() * std::mem::size_of::<slosh::math::Matrix<f32>>() / 4;
+        let def_grad_f32_count = self.physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
         self.def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
             &self.gpu,
             def_grad_f32_count as u32,
@@ -206,8 +231,47 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
     }
 
     async fn update(&mut self) -> bool {
-        if !self.step_simulation().await {
-            return false;
+        let stepped = self.step_simulation().await;
+
+        // Always rebuild render instances (even when paused) so that
+        // changes to render settings like the cutting box take effect
+        // immediately without requiring a simulation step. We skip this
+        // until at least one step has run, so the initial paused state
+        // doesn't render default-zero positions.
+        if self.step_id == 0 {
+            return stepped;
+        }
+
+        // Auto-adjust cutting-box slider bounds to the current particle
+        // extent. Slider values that are still pinned at the previous
+        // extreme follow the new extreme; values the user has dragged
+        // inward stay where they are.
+        #[cfg(feature = "dim3")]
+        if !self.step_result.instances.is_empty() {
+            let mut new_min = nalgebra::Vector3::repeat(f32::INFINITY);
+            let mut new_max = nalgebra::Vector3::repeat(f32::NEG_INFINITY);
+            for d in &self.step_result.instances {
+                new_min.x = new_min.x.min(d.position.x);
+                new_min.y = new_min.y.min(d.position.y);
+                new_min.z = new_min.z.min(d.position.z);
+                new_max.x = new_max.x.max(d.position.x);
+                new_max.y = new_max.y.max(d.position.y);
+                new_max.z = new_max.z.max(d.position.z);
+            }
+            if new_min.x.is_finite() {
+                let old_slider_min = self.app_state.render_aabb_slider_min;
+                let old_slider_max = self.app_state.render_aabb_slider_max;
+                for axis in 0..3 {
+                    if self.app_state.render_aabb_min[axis] <= old_slider_min[axis] {
+                        self.app_state.render_aabb_min[axis] = new_min[axis];
+                    }
+                    if self.app_state.render_aabb_max[axis] >= old_slider_max[axis] {
+                        self.app_state.render_aabb_max[axis] = new_max[axis];
+                    }
+                }
+                self.app_state.render_aabb_slider_min = new_min;
+                self.app_state.render_aabb_slider_max = new_max;
+            }
         }
 
         self.instances.clear();
@@ -227,19 +291,41 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                 }),
         );
         #[cfg(feature = "dim3")]
-        self.instances
-            .extend(self.step_result.instances.iter().map(|d| InstanceData {
-                position: kiss3d::nalgebra::Point3::new(d.position.x, d.position.y, d.position.z),
-                color: d.color.into(),
-                #[rustfmt::skip]
-                    deformation: kiss3d::nalgebra::Matrix3::new(
-                        d.deformation.m11, d.deformation.m12, d.deformation.m13,
-                        d.deformation.m21, d.deformation.m22, d.deformation.m23,
-                        d.deformation.m31, d.deformation.m32, d.deformation.m33,
-                    ),
-            }));
+        {
+            let aabb_enabled = self.app_state.render_aabb_enabled;
+            let aabb_min = self.app_state.render_aabb_min;
+            let aabb_max = self.app_state.render_aabb_max;
+            self.instances.extend(
+                self.step_result
+                    .instances
+                    .iter()
+                    .filter(|d| {
+                        !aabb_enabled
+                            || (d.position.x >= aabb_min.x
+                                && d.position.x <= aabb_max.x
+                                && d.position.y >= aabb_min.y
+                                && d.position.y <= aabb_max.y
+                                && d.position.z >= aabb_min.z
+                                && d.position.z <= aabb_max.z)
+                    })
+                    .map(|d| InstanceData {
+                        position: kiss3d::nalgebra::Point3::new(
+                            d.position.x,
+                            d.position.y,
+                            d.position.z,
+                        ),
+                        color: d.color.into(),
+                        #[rustfmt::skip]
+                        deformation: kiss3d::nalgebra::Matrix3::new(
+                            d.deformation.m11, d.deformation.m12, d.deformation.m13,
+                            d.deformation.m21, d.deformation.m22, d.deformation.m23,
+                            d.deformation.m31, d.deformation.m32, d.deformation.m33,
+                        ),
+                    }),
+            );
+        }
 
-        true
+        stepped
     }
 }
 
@@ -271,7 +357,7 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
         compiler,
         hooks,
         scene_builders,
-        |_, _, _, _| {},
+        |_, _, _, _| None,
         #[cfg(feature = "dim3")]
         up_axis,
     )
@@ -282,7 +368,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
-    mut extra_ui: impl FnMut(&egui::Context, &PhysicsContext<GpuModel>, &SimulationStepResult, bool),
+    mut extra_ui: impl FnMut(&egui::Context, &PhysicsContext<GpuModel>, &SimulationStepResult, bool) -> Option<RunState>,
     #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
 ) {
     let mut colliders_gfx = HashMap::new();
@@ -300,18 +386,32 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     #[cfg(feature = "dim2")]
     let mut camera3d = FixedView::new();
     #[cfg(feature = "dim3")]
-    let mut camera3d = ArcBall::new_with_frustum(
-        std::f32::consts::PI / 4.0,
-        0.1,
-        1000.0,
-        [40.0, 40.0, 40.0].into(),
-        [0.0; 3].into(),
-    );
+    let mut camera3d = {
+        let eye = stage.app_state.initial_camera_eye.unwrap_or([40.0, 40.0, 40.0]);
+        let target = stage.app_state.initial_camera_target.unwrap_or([0.0, 0.0, 0.0]);
+        ArcBall::new_with_frustum(
+            std::f32::consts::PI / 4.0,
+            0.1,
+            1000.0,
+            eye.into(),
+            target.into(),
+        )
+    };
     #[cfg(feature = "dim3")]
     {
         camera3d.set_up_axis(up_axis);
     }
     let mut camera2d = Sidescroll::new();
+    #[cfg(feature = "dim2")]
+    {
+        let at = stage
+            .app_state
+            .initial_camera2d_at
+            .map(|[x, y]| nalgebra::Point2::new(x, y))
+            .unwrap_or(nalgebra::Point2::origin());
+        let zoom = stage.app_state.initial_camera2d_zoom.unwrap_or(1.0);
+        camera2d.look_at(at, zoom);
+    }
 
     while !window.should_close() {
         let mut new_selected_demo = None;
@@ -333,6 +433,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
          * UI
          */
         // TODO: refactor in a different file
+        let mut ui_run_state = None;
         window.draw_ui(|ctx| {
             kiss3d::egui::Window::new("Settings").show(ctx, |ui| {
                 let mut changed = false;
@@ -438,10 +539,44 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                 {
                     new_selected_demo = Some(stage.selected_demo);
                 }
+
+                #[cfg(feature = "dim3")]
+                {
+                    ui.separator();
+                    ui.checkbox(
+                        &mut stage.app_state.render_aabb_enabled,
+                        "Cutting box",
+                    );
+                    if stage.app_state.render_aabb_enabled {
+                        let slider_min = stage.app_state.render_aabb_slider_min;
+                        let slider_max = stage.app_state.render_aabb_slider_max;
+                        let aabb_min = &mut stage.app_state.render_aabb_min;
+                        let aabb_max = &mut stage.app_state.render_aabb_max;
+                        for (axis, label) in [(0, "X"), (1, "Y"), (2, "Z")] {
+                            let lo = slider_min[axis];
+                            let hi = slider_max[axis];
+                            ui.horizontal(|ui| {
+                                ui.label(label);
+                                ui.add(
+                                    egui::Slider::new(&mut aabb_min[axis], lo..=hi)
+                                        .text("min"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut aabb_max[axis], lo..=hi)
+                                        .text("max"),
+                                );
+                            });
+                        }
+                    }
+                }
             });
 
-            extra_ui(ctx, &stage.physics, &stage.step_result, stepped);
+            ui_run_state = extra_ui(ctx, &stage.physics, &stage.step_result, stepped);
         });
+
+        if let Some(run_state) = ui_run_state {
+            stage.app_state.run_state = run_state;
+        }
 
         if let Some(demo) = new_selected_demo {
             stage.set_demo(demo);
@@ -454,6 +589,26 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
         window
             .render_with_cameras(&mut camera3d, &mut camera2d)
             .await;
+    }
+}
+
+pub async fn run_headless_with_hooks<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    scene_builders: SceneBuilders<GpuModel>,
+    mut step_callback: impl FnMut(&PhysicsContext<GpuModel>, &SimulationStepResult) -> bool,
+) {
+    let mut stage = Stage::new(compiler, hooks, scene_builders).await;
+    stage.app_state.run_state = RunState::Running;
+
+    loop {
+        if !stage.step_simulation().await {
+            break;
+        }
+
+        if !step_callback(&stage.physics, &stage.step_result) {
+            break;
+        }
     }
 }
 
