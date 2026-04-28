@@ -164,7 +164,7 @@ func p2g_step(
         let particle_vel = particle_vel_mass.xy;
         let particle_mass = particle_vel_mass.z;
         let shift = uint2(2u, 2) - NBH_SHIFTS[i];
-        let momentum = particle_vel * particle_mass;
+        let momentum = particle_vel * particle_mass + particle_force_dt;
         let dpt = ref_elt_pos_minus_particle_pos + float2(shift) * cell_width; // cell_pos - particle_pos
         let weight = w[0][shift.x] * w[1][shift.y];
 #else
