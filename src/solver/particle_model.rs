@@ -88,9 +88,9 @@ impl ParticleModel {
 #[repr(u32)]
 pub enum GpuParticleModel {
     /// Linear elastic model with padding for GPU alignment.
-    ElasticLinear(ElasticCoefficients, [u32; 9]) = 0,
+    ElasticLinear(ElasticCoefficients, [u32; 10]) = 0,
     /// Neo-Hookean elastic model with padding for GPU alignment.
-    ElasticNeoHookean(ElasticCoefficients, [u32; 9]) = 1,
+    ElasticNeoHookean(ElasticCoefficients, [u32; 10]) = 1,
     /// Sand with linear elasticity and Drucker-Prager plasticity.
     SandLinear(SandModel) = 2,
     /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
@@ -99,7 +99,7 @@ pub enum GpuParticleModel {
 
 // IMPORTANT: this assertions is here to reduce risks of `GpuParticleModel` from mismatching
 //            `SloshParticleModel` in
-static_assertions::assert_eq_size!(GpuParticleModel, [u8; 52]);
+static_assertions::assert_eq_size!(GpuParticleModel, [u8; 56]);
 
 impl From<ParticleModel> for GpuParticleModel {
     fn from(val: ParticleModel) -> Self {

@@ -41,6 +41,11 @@ public struct DruckerPragerPlasticity {
     public float hd;
     public float lambda;
     public float mu;
+    // Tensile strain trace cutoff: shifts the friction-cone apex into the tensile
+    // region (in log-strain trace space). With 0.0 the material has no tensile
+    // strength (classic Drucker-Prager). With > 0.0 the cone allows some friction
+    // during stretching up to this trace before yielding plastically.
+    public float tension_cutoff;
 
 
     public func alpha(q: float) -> float {
@@ -58,13 +63,20 @@ public struct DruckerPragerPlasticity {
         let strain_trace = strain.x + strain.y;
         let deviatoric_strain = strain - float2(strain_trace / d);
 
-        if (strain_trace > 0.0 || all(deviatoric_strain == float2(0.0))) {
-            return DruckerPragerProjectionResult(float2(1.0), length(strain), true);
+        if (strain_trace > this.tension_cutoff) {
+            // Above the (shifted) apex: project to apex (dev_strain = 0, strain_trace = tension_cutoff).
+            let apex_strain = float2(this.tension_cutoff / d);
+            return DruckerPragerProjectionResult(exp(apex_strain), length(strain - apex_strain), true);
         }
 
         let deviatoric_strain_norm = length(deviatoric_strain);
+        if (deviatoric_strain_norm == 0.0) {
+            // Pure volumetric trial below the apex: inside the cone, fully elastic.
+            return DruckerPragerProjectionResult(float2(0.0), 0.0, false);
+        }
+
         let gamma = deviatoric_strain_norm
-            + (d * this.lambda + 2.0 * this.mu) / (2.0 * this.mu) * strain_trace * alpha;
+            + (d * this.lambda + 2.0 * this.mu) / (2.0 * this.mu) * (strain_trace - this.tension_cutoff) * alpha;
         if (gamma <= 0.0) {
             return DruckerPragerProjectionResult(float2(0.0), 0.0, false);
         }
@@ -147,13 +159,20 @@ public struct DruckerPragerPlasticity {
         let strain_trace = strain.x + strain.y + strain.z;
         let deviatoric_strain = strain - float3(strain_trace / d);
 
-        if (strain_trace > 0.0 || all(deviatoric_strain == float3(0.0))) {
-            return DruckerPragerProjectionResult(float3(1.0), length(strain), true);
+        if (strain_trace > this.tension_cutoff) {
+            // Above the (shifted) apex: project to apex (dev_strain = 0, strain_trace = tension_cutoff).
+            let apex_strain = float3(this.tension_cutoff / d);
+            return DruckerPragerProjectionResult(exp(apex_strain), length(strain - apex_strain), true);
         }
 
         let deviatoric_strain_norm = length(deviatoric_strain);
+        if (deviatoric_strain_norm == 0.0) {
+            // Pure volumetric trial below the apex: inside the cone, fully elastic.
+            return DruckerPragerProjectionResult(float3(0.0), 0.0, false);
+        }
+
         let gamma = deviatoric_strain_norm
-            + (d * this.lambda + 2.0 * this.mu) / (2.0 * this.mu) * strain_trace * alpha;
+            + (d * this.lambda + 2.0 * this.mu) / (2.0 * this.mu) * (strain_trace - this.tension_cutoff) * alpha;
         if (gamma <= 0.0) {
             return DruckerPragerProjectionResult(float3(0.0), 0.0, false);
         }

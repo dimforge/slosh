@@ -43,6 +43,22 @@ public struct LinearElasticModel {
         return result;
     }
 
+    // Different responses for the compressive and tensile parts.
+    public func mixed_kirchoff_stress(deformation_gradient: float2x2, tensile_factor: float) -> float2x2 {
+        var svd = Svd2(deformation_gradient);
+        let j = svd.S.x * svd.S.y;
+        svd.S = min(svd.S - float2(1.0), float2(0.0)) * (2.0 * this.mu)
+            + max(svd.S - float2(1.0), float2(0.0)) * (2.0 * this.mu) * tensile_factor;
+
+        let deviatoric_stress = this.lambda * min(j - 1.0, 0.0) * j
+            + this.lambda * max(j - 1.0, 0.0) * j * tensile_factor;
+        var result = mul(transpose(deformation_gradient), svd.recompose());
+        result[0].x += deviatoric_stress;
+        result[1].y += deviatoric_stress;
+
+        return result;
+    }
+
     // Response to only the compressive part of the deformation.
     public func neg_kirchoff_stress(deformation_gradient: float2x2) -> float2x2 {
         var svd = Svd2(deformation_gradient);

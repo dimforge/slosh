@@ -23,6 +23,14 @@ pub struct DruckerPrager {
     pub lambda: f32,
     /// Elastic shear modulus μ.
     pub mu: f32,
+
+    /// Tensile cutoff in log-strain trace space.
+    ///
+    /// Shifts the friction-cone apex into the tensile region, allowing the material
+    /// to resist some amount of stretching with friction before yielding plastically.
+    /// `0.0` recovers the classic Drucker-Prager behavior (zero tensile strength);
+    /// values `> 0.0` add tensile capacity (e.g. weakly cohesive granular media).
+    pub tension_cutoff: f32,
 }
 
 impl DruckerPrager {
@@ -51,6 +59,7 @@ impl DruckerPrager {
             h3: 10.0f32.to_radians(),
             lambda,
             mu,
+            tension_cutoff: 0.0,
         }
     }
 

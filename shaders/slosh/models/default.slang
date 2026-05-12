@@ -31,7 +31,7 @@ public struct SandModel<ElasticModel> {
 // TODO: hard-coding this is quite fragile as is must match the size of
 //       the host-side enum. Should it be configured by the host?
 // This **MUST** match the byte size of `GpuParticleModel` on the rust side.
-public static const uint DEFAULT_MODEL_BYTES_STRIDE = 52;
+public static const uint DEFAULT_MODEL_BYTES_STRIDE = 56;
 
 // NOTE: the BYTES_STRIDE parameter exists so that third-party models extending this default model
 //       can specify their own stride if it differ from the default one (i.e. if the extended union
