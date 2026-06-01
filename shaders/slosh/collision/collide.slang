@@ -42,6 +42,28 @@ public func collide_cdf(
     return cdf;
 }
 
+// Cached collision information for a single grid node.
+//
+// This is the persistent form of a `GridCollision` stored in a buffer parallel
+// to the grid nodes. Because collision objects are assumed to never move, a
+// node’s collision only depends on its (fixed) world-space position and can be
+// reused from one step to the next instead of being recomputed.
+public struct NodeCollision {
+    public Vect normal;
+    public Vect point;
+    public uint collider_id;
+    // Stored as a uint (rather than a bool) so the layout matches the Rust-side
+    // `GpuNodeCollision` mirror used by `encase`.
+    public uint valid;
+
+    public __init(Vect normal, Vect point, uint collider_id, uint valid) {
+        this.normal = normal;
+        this.point = point;
+        this.collider_id = collider_id;
+        this.valid = valid;
+    }
+}
+
 public struct GridCollision {
     public Vect normal;
     public Vect point;
@@ -53,6 +75,11 @@ public struct GridCollision {
         this.point = point;
         this.collider_id = collider_id;
         this.valid = valid;
+    }
+
+    // Converts this collision into its cacheable `NodeCollision` form.
+    public func to_node() -> NodeCollision {
+        return NodeCollision(this.normal, this.point, this.collider_id, this.valid ? 1u : 0u);
     }
 }
 

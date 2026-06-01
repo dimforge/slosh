@@ -488,8 +488,11 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             let mut pass = encoder.begin_pass("grid_update", timestamps.as_deref_mut());
             self.grid_update
                 .launch(backend, &mut pass, &data.sim_params, &data.grid)?;
+        }
+        {
+            let mut pass = encoder.begin_pass("grid_update_collide", timestamps.as_deref_mut());
             self.grid_update_collide
-                .launch(backend, &mut pass, &data.sim_params, &data.grid, &data.bodies, &data.body_materials)?;
+                .launch(backend, &mut pass, &data.sim_params, &mut data.grid, &data.bodies, &data.body_materials)?;
         }
 
         hooks.after_grid_update(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;

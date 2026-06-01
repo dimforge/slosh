@@ -5,7 +5,7 @@ use crate::grid::sort::WgSort;
 use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use crate::math::Point;
+use crate::math::{Point, Vector};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};
@@ -266,6 +266,23 @@ pub struct GpuActiveBlockHeader {
     num_particles: u32,
 }
 
+/// Cached collision information for a grid node.
+///
+/// Mirror of the `NodeCollision` struct used by the `grid_update_collide` shader.
+/// Collision objects are assumed to never move, so this is cached per grid node
+/// and reused across steps for blocks that already existed in the previous step.
+#[derive(Copy, Clone, Default, ShaderType)]
+pub struct GpuNodeCollision {
+    /// Outward collision normal at the node.
+    normal: Vector<f32>,
+    /// Closest point on the collider surface.
+    point: Vector<f32>,
+    /// ID of the colliding shape.
+    collider_id: u32,
+    /// Whether a collision was detected (stored as a uint for layout reasons).
+    valid: u32,
+}
+
 /// Collision detection field data for a grid node.
 ///
 /// Stores signed distance and affinity information for MPM-rigid body coupling.
@@ -298,6 +315,13 @@ pub struct GpuGrid<B: Backend> {
     pub prev_hmap_entries: GpuVector<GpuGridHashMapEntry, B>,
     /// Grid node data (momentum, mass, CDF).
     pub nodes: GpuVector<GpuGridNode, B>,
+    /// Cached per-node collision information (assumes static colliders).
+    ///
+    /// Lazily allocated (and sized to match `nodes`) the first time the
+    /// collision kernel runs; stays empty for simulations without colliders.
+    pub node_collisions: GpuVector<GpuNodeCollision, B>,
+    /// Pong buffer for `node_collisions`, holding the previous step’s cache.
+    pub prev_node_collisions: GpuVector<GpuNodeCollision, B>,
     /// Active block headers tracking particle ranges.
     pub active_blocks: GpuVector<GpuActiveBlockHeader, B>,
     /// Workspace for prefix sum operations.
@@ -350,6 +374,11 @@ impl<B: Backend> GpuGrid<B> {
             capacity * NODES_PER_BLOCK,
             BufferUsages::STORAGE,
         )?;
+        // Collision caches are lazily allocated by the collision kernel (only
+        // needed when there are colliders), so they start empty here.
+        let node_collisions = GpuVector::vector_uninit_encased(backend, 0, BufferUsages::STORAGE)?;
+        let prev_node_collisions =
+            GpuVector::vector_uninit_encased(backend, 0, BufferUsages::STORAGE)?;
         let nodes_linked_lists =
             GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
         let rigid_nodes_linked_lists =
@@ -373,6 +402,8 @@ impl<B: Backend> GpuGrid<B> {
             hmap_entries,
             prev_hmap_entries,
             nodes,
+            node_collisions,
+            prev_node_collisions,
             active_blocks,
             scan_values,
             indirect_n_blocks_groups,
@@ -386,6 +417,7 @@ impl<B: Backend> GpuGrid<B> {
     pub fn swap_buffers(&mut self) {
         std::mem::swap(&mut self.meta, &mut self.prev_meta);
         std::mem::swap(&mut self.prev_hmap_entries, &mut self.hmap_entries);
+        std::mem::swap(&mut self.prev_node_collisions, &mut self.node_collisions);
     }
 }
 

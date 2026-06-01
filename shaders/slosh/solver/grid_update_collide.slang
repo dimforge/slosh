@@ -24,7 +24,9 @@ func grid_update(
     uint3 tid: SV_GroupThreadID,
     uint tid_flat: SV_GroupIndex,
     ConstantBuffer<SimulationParams> params,
+    StructuredBuffer<Grid> prev_grid,
     StructuredBuffer<Grid> grid,
+    StructuredBuffer<GridHashMapEntry> prev_hmap_entries,
     StructuredBuffer<ActiveBlockHeader> active_blocks,
     StructuredBuffer<BoundaryCondition> body_materials,
     StructuredBuffer<Shape> collision_shapes,
@@ -33,10 +35,14 @@ func grid_update(
     StructuredBuffer<Vect> collision_shape_vtx,
     StructuredBuffer<uint> collision_shape_idx,
     #endif
+    StructuredBuffer<NodeCollision> prev_node_collisions,
+    RWStructuredBuffer<NodeCollision> node_collisions,
     RWStructuredBuffer<Node> nodes,
 ) {
     let bid = block_id.x;
-    let vid = active_blocks[bid].virtual_id;
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid = BlockVirtualId(active_blocks[bid].virtual_id.id);
 
     let global_chunk_id = block_header_id_to_physical_id(BlockHeaderId(bid));
 #if DIM == 2
@@ -47,22 +53,42 @@ func grid_update(
     let cell_pos = float3(vid.id * 4 + int3(tid)) * grid[0].cell_width;
 #endif
 
-    // TODO PERF: store the list of blocks with a collision so we can skip the ones without
-    //            collisions in teh other `_cdf` kernels.
-    //            Or maybe just use some sort of flag and skip the block at the start of the kernel?
     let global_id = global_node_id.id;
-    let collision = collide(
-        collision_shapes,
-        collision_shape_poses,
-        #if DIM == 3
-        collision_shape_vtx,
-        collision_shape_idx,
-        #endif
-        grid[0].cell_width,
-        cell_pos
-    );
 
-    if (collision.valid) {
+    /*
+     * Retrieve or compute the collision for this node.
+     *
+     * Collision objects are assumed to never move, so a node’s collision only
+     * depends on its (fixed) world-space position. If this block already existed
+     * in the previous step we reuse the cached result instead of running the
+     * expensive collision-detection again.
+     */
+    var collision = NodeCollision(Vect<float>(0.0), Vect<float>(0.0), 0u, 0u);
+    let prev_hid = find_block_header_id(prev_grid, prev_hmap_entries, vid);
+    if (prev_hid.id != NONE) {
+        let prev_pid = block_header_id_to_physical_id(prev_hid);
+    #if DIM == 2
+        let prev_global_id = node_id(prev_pid, tid.xy).id;
+    #else
+        let prev_global_id = node_id(prev_pid, tid).id;
+    #endif
+        collision = prev_node_collisions[prev_global_id];
+    } else {
+        collision = collide(
+            collision_shapes,
+            collision_shape_poses,
+            #if DIM == 3
+            collision_shape_vtx,
+            collision_shape_idx,
+            #endif
+            grid[0].cell_width,
+            cell_pos
+        ).to_node();
+    }
+
+    node_collisions[global_id] = collision;
+
+    if (collision.valid != 0u) {
         // Apply boundary condition.
         let material = body_materials[collision.collider_id];
         let dist_with_margin = dot(cell_pos - collision.point, collision.normal) - grid[0].cell_width;
