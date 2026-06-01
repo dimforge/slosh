@@ -4,7 +4,7 @@ module drucker_prager;
 
 import slosh.aliases;
 import stensor.geometry.svd2;
-import stensor.geometry.svd_stable.svd3;
+import stensor.geometry.svd_glam.svd3;
 
 // TODO: should be this in the same buffer as the plasticity parameters themselves?
 public struct DruckerPragerPlasticState {

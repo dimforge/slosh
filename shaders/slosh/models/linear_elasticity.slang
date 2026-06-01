@@ -3,10 +3,16 @@
 module linear_elasticity;
 
 import stensor.geometry.svd2;
-import stensor.geometry.svd_stable.svd3;
+import stensor.geometry.svd_glam.svd3;
 import slosh.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;
+
+// Positive elastic energy density and Kirchhoff stress computed from a single shared SVD.
+public struct ElasticEnergyStress {
+    public float pos_energy;
+    public Mat<float> kirchoff_stress;
+}
 
 public struct LinearElasticModel {
     public float lambda;
@@ -135,7 +141,12 @@ public struct LinearElasticModel {
         let svd = Svd3(def_grad);
         #endif
 
-        let sig = max(svd.S - Vect<float>(1.0), Vect<float>(0.0));
+        return this.pos_energy_density_from_svd(svd.S, j, elastic_hardening);
+    }
+
+    // Same as pos_energy_density but using a pre-computed SVD (singular values) and Jacobian.
+    public func pos_energy_density_from_svd(svd_s: Vect<float>, j: float, elastic_hardening: float) -> float {
+        let sig = max(svd_s - Vect<float>(1.0), Vect<float>(0.0));
         let pos_dev_part = this.mu * elastic_hardening * dot(sig, sig);
         let spherical_part = this.lambda * elastic_hardening * 0.5 * (j - 1.0) * (j - 1.0);
 
@@ -144,5 +155,21 @@ public struct LinearElasticModel {
         } else {
             return pos_dev_part + spherical_part;
         }
+    }
+
+    // Computes both the positive elastic energy density and the Kirchhoff stress while sharing a
+    // single SVD, instead of computing one SVD per quantity.
+    public func pos_energy_and_kirchoff_stress(in def_grad: Mat<float>, elastic_hardening: float) -> ElasticEnergyStress {
+        let j = determinant(def_grad);
+
+        #if DIM == 2
+        let svd = Svd2(def_grad);
+        #else
+        let svd = Svd3(def_grad);
+        #endif
+
+        let energy = this.pos_energy_density_from_svd(svd.S, j, elastic_hardening);
+        let stress = this.kirchoff_stress_from_svd(def_grad, svd.U, svd.S, svd.Vt);
+        return ElasticEnergyStress(energy, stress);
     }
 }
