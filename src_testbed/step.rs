@@ -1,10 +1,10 @@
 use crate::prep_readback::{GpuReadbackData, ReadbackData};
 use crate::{PhysicsState, RunState, Stage};
-use slosh::rapier::na;
 use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::BufferUsages;
 #[cfg(feature = "webgpu")]
 use slang_hal::GpuTimingResult;
+use slosh::rapier::na;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
 use stensor::tensor::GpuTensor;
 
@@ -91,9 +91,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                 BufferUsages::COPY_DST | BufferUsages::MAP_READ,
             )
             .unwrap();
-            self.step_result
-                .model_data_raw
-                .resize(model_u32_count, 0);
+            self.step_result.model_data_raw.resize(model_u32_count, 0);
             self.step_result
                 .def_grad_raw
                 .resize(def_grad_f32_count, 0.0);
@@ -275,7 +273,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         {
             let model_buf = physics.data.particles.models().buffer();
             let staging_buf = self.model_staging.buffer();
-            let bytes = physics.data.particles.len() as u64 * std::mem::size_of::<GpuModel>() as u64;
+            let bytes =
+                physics.data.particles.len() as u64 * std::mem::size_of::<GpuModel>() as u64;
             wgpu::CommandEncoder::copy_buffer_to_buffer(
                 &mut encoder,
                 model_buf,
@@ -294,8 +293,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         {
             let def_grad_buf = physics.data.particles.def_grad.buffer();
             let staging_buf = self.def_grad_staging.buffer();
-            let bytes =
-                physics.data.particles.len() as u64 * GPU_DEF_GRAD_STRIDE_BYTES as u64;
+            let bytes = physics.data.particles.len() as u64 * GPU_DEF_GRAD_STRIDE_BYTES as u64;
             wgpu::CommandEncoder::copy_buffer_to_buffer(
                 &mut encoder,
                 def_grad_buf,
@@ -358,7 +356,10 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         }
 
         #[cfg(feature = "webgpu")]
-        let gpu_passes = timestamps.read_results(self.gpu.device()).await.unwrap_or_default();
+        let gpu_passes = timestamps
+            .read_results(self.gpu.device())
+            .await
+            .unwrap_or_default();
 
         self.step_result.timings = SimulationTimes {
             total_step_time: t_total_step,

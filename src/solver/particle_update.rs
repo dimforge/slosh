@@ -4,11 +4,13 @@
 //! grid velocities have been transferred back to particles.
 
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::solver::params::GpuSimulationParams;
-use crate::solver::particle_model::GpuParticleModelData;
-use crate::solver::{Cdf, GpuParticles, Kinematics, ParticlePosition, ParticleProperties, SimulationParams};
 use crate::math::Matrix;
 use crate::rbd::dynamics::GpuBodySet;
+use crate::solver::params::GpuSimulationParams;
+use crate::solver::particle_model::GpuParticleModelData;
+use crate::solver::{
+    Cdf, GpuParticles, Kinematics, ParticlePosition, ParticleProperties, SimulationParams,
+};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

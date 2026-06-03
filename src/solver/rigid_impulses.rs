@@ -1,11 +1,11 @@
 //! Impulse accumulation and application for MPM-rigid body coupling.
 
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
+use crate::math::GpuSim;
+use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use crate::solver::SimulationParams;
 use crate::solver::params::GpuSimulationParams;
 use encase::ShaderType;
-use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
-use crate::math::GpuSim;
 use rapier::math::{AngVector, Point, Vector};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;

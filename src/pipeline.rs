@@ -6,10 +6,15 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
+use crate::math::{GpuSim, Vector};
 use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
-use crate::math::{GpuSim, Vector};
+use crate::solver::{
+    GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
+    GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
+    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses,
+    WgRigidParticleUpdate, WgTimestepBounds,
+};
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
 use slang_hal::backend::{Backend, Encoder, GpuTimestamps};
@@ -436,8 +441,13 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             // )?;
         }
 
-
-        hooks.after_particle_sort(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
+        hooks.after_particle_sort(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )?;
 
         // {
         //     let mut pass = encoder.begin_pass("grid_update_cdf", timestamps.as_deref_mut());
@@ -480,7 +490,13 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_p2g(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
+        hooks.after_p2g(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )?;
 
         {
             let mut pass = encoder.begin_pass("grid_update", timestamps.as_deref_mut());
@@ -494,7 +510,13 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_grid_update(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
+        hooks.after_grid_update(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )?;
 
         {
             let mut pass = encoder.begin_pass("g2p", timestamps.as_deref_mut());
@@ -509,7 +531,13 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_g2p(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
+        hooks.after_g2p(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )?;
 
         {
             let mut pass = encoder.begin_pass("particles_update", timestamps.as_deref_mut());
@@ -523,7 +551,13 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?;
         }
 
-        hooks.after_particles_update(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
+        hooks.after_particles_update(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )?;
 
         {
             let mut pass = encoder.begin_pass("integrate_bodies", timestamps.as_deref_mut());

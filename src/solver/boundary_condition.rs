@@ -49,7 +49,7 @@ impl GpuBoundaryCondition {
     pub fn disabled() -> GpuBoundaryCondition {
         Self {
             ty: Self::DISABLED,
-            friction: 0.0
+            friction: 0.0,
         }
     }
 

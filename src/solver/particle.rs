@@ -1,16 +1,16 @@
-use bytemuck::{Pod, Zeroable};
-use encase::ShaderType;
+use crate::math::{Matrix, Point, Vector};
+use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::dynamics::body::BodyCouplingEntry;
-use rapier::geometry::ColliderSet;
-use std::ops::RangeBounds;
-use stensor::tensor::{GpuScalar, GpuTensor};
-use slang_hal::{BufferUsages, backend::Backend};
+use crate::rbd::shapes::ShapeBuffers;
 use crate::sampling;
 use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
 use crate::solver::particle_model::GpuParticleModelData;
-use crate::rbd::dynamics::GpuBodySet;
-use crate::math::{Matrix, Point, Vector};
-use crate::rbd::shapes::ShapeBuffers;
+use bytemuck::{Pod, Zeroable};
+use encase::ShaderType;
+use rapier::geometry::ColliderSet;
+use slang_hal::{BufferUsages, backend::Backend};
+use std::ops::RangeBounds;
+use stensor::tensor::{GpuScalar, GpuTensor};
 
 /// Physical state of a single MPM particle (CPU-side).
 ///
@@ -358,11 +358,7 @@ impl<B: Backend> GpuRigidParticles<B> {
         Ok(Self {
             local_sample_points,
             sample_points,
-            node_linked_lists: GpuTensor::vector_uninit(
-                backend,
-                buf_len,
-                BufferUsages::STORAGE,
-            )?,
+            node_linked_lists: GpuTensor::vector_uninit(backend, buf_len, BufferUsages::STORAGE)?,
             sample_ids,
             // NOTE: this is a packed bitmask so each u32 contains
             //       the flag for 32 particles.
@@ -410,10 +406,16 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
             .iter()
             .map(|p| p.position.coords.push(0.0).into())
             .collect();
-        let kinematics: Vec<_> = particles.iter().map(|p| p.dynamics.to_kinematics()).collect();
+        let kinematics: Vec<_> = particles
+            .iter()
+            .map(|p| p.dynamics.to_kinematics())
+            .collect();
         let cdf: Vec<_> = particles.iter().map(|p| p.dynamics.cdf).collect();
         let def_grad: Vec<_> = particles.iter().map(|p| p.dynamics.def_grad).collect();
-        let properties: Vec<_> = particles.iter().map(|p| p.dynamics.to_properties()).collect();
+        let properties: Vec<_> = particles
+            .iter()
+            .map(|p| p.dynamics.to_properties())
+            .collect();
         let models: Vec<_> = particles
             .iter()
             .map(|p| GpuModel::from_model(p.model))

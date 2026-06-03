@@ -30,18 +30,18 @@ use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
 #[cfg(feature = "dim3")]
 use nalgebra::Vector3;
-use slosh::rapier::geometry::ShapeType;
 use regex::Regex;
 use slang_hal::backend::{Backend, WebGpu};
-use slang_hal::BufferUsages;
-use stensor::tensor::GpuTensor;
 use slang_hal::re_exports::include_dir;
+use slang_hal::BufferUsages;
 use slang_hal::SlangCompiler;
 use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
 use slosh::rapier::geometry::Shape;
+use slosh::rapier::geometry::ShapeType;
 use slosh::rapier::prelude::ColliderHandle;
 use slosh::solver::GpuParticleModelData;
 use std::rc::Rc;
+use stensor::tensor::GpuTensor;
 use wgpu::Limits;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
@@ -88,7 +88,9 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             max_storage_buffer_binding_size: 4_000_000_000,
             ..Limits::default()
         };
-        let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, limits).await.unwrap();
+        let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, limits)
+            .await
+            .unwrap();
         // TODO: this is a terrible, horrible, hack, to work around the fact that slang isn’t giving us access to
         //       `exch.exchanged` to properly handle the _weak_ nature of `atomicCompareExchangeWeak̀
         let reg =
@@ -158,7 +160,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         )
         .unwrap();
-        let def_grad_f32_count = physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
+        let def_grad_f32_count =
+            physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
         let def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
             &gpu,
             def_grad_f32_count as u32,
@@ -169,12 +172,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         step_result
             .instances
             .resize(physics.data.particles.len(), Default::default());
-        step_result
-            .model_data_raw
-            .resize(model_u32_count, 0);
-        step_result
-            .def_grad_raw
-            .resize(def_grad_f32_count, 0.0);
+        step_result.model_data_raw.resize(model_u32_count, 0);
+        step_result.def_grad_raw.resize(def_grad_f32_count, 0.0);
 
         Stage {
             builders,
@@ -204,14 +203,16 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             self.app_state.particle_colors.as_deref(),
         )
         .unwrap();
-        let model_u32_count = self.physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
+        let model_u32_count =
+            self.physics.data.particles.len() * std::mem::size_of::<GpuModel>() / 4;
         self.model_staging = GpuTensor::<u32, WebGpu>::vector_uninit(
             &self.gpu,
             model_u32_count as u32,
             BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         )
         .unwrap();
-        let def_grad_f32_count = self.physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
+        let def_grad_f32_count =
+            self.physics.data.particles.len() * crate::step::GPU_DEF_GRAD_STRIDE_F32;
         self.def_grad_staging = GpuTensor::<f32, WebGpu>::vector_uninit(
             &self.gpu,
             def_grad_f32_count as u32,
@@ -222,9 +223,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         self.step_result
             .instances
             .resize(self.physics.data.particles.len(), Default::default());
-        self.step_result
-            .model_data_raw
-            .resize(model_u32_count, 0);
+        self.step_result.model_data_raw.resize(model_u32_count, 0);
         self.step_result
             .def_grad_raw
             .resize(def_grad_f32_count, 0.0);
@@ -368,7 +367,12 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
-    mut extra_ui: impl FnMut(&egui::Context, &PhysicsContext<GpuModel>, &SimulationStepResult, bool) -> Option<RunState>,
+    mut extra_ui: impl FnMut(
+        &egui::Context,
+        &PhysicsContext<GpuModel>,
+        &SimulationStepResult,
+        bool,
+    ) -> Option<RunState>,
     #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
 ) {
     let mut colliders_gfx = HashMap::new();
@@ -387,8 +391,14 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     let mut camera3d = FixedView::new();
     #[cfg(feature = "dim3")]
     let mut camera3d = {
-        let eye = stage.app_state.initial_camera_eye.unwrap_or([40.0, 40.0, 40.0]);
-        let target = stage.app_state.initial_camera_target.unwrap_or([0.0, 0.0, 0.0]);
+        let eye = stage
+            .app_state
+            .initial_camera_eye
+            .unwrap_or([40.0, 40.0, 40.0]);
+        let target = stage
+            .app_state
+            .initial_camera_target
+            .unwrap_or([0.0, 0.0, 0.0]);
         ArcBall::new_with_frustum(
             std::f32::consts::PI / 4.0,
             0.1,
@@ -491,7 +501,10 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                     ui.separator();
                     ui.label("GPU pass timings:");
                     // Aggregate passes with the same label across substeps.
-                    let mut aggregated: std::collections::BTreeMap<&str, (std::time::Duration, u32)> = Default::default();
+                    let mut aggregated: std::collections::BTreeMap<
+                        &str,
+                        (std::time::Duration, u32),
+                    > = Default::default();
                     for r in &stage.step_result.timings.gpu_passes {
                         let entry = aggregated.entry(&r.label).or_default();
                         entry.0 += r.duration;
@@ -505,7 +518,10 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                             dur.as_secs_f64() * 1000.0,
                         ));
                     }
-                    ui.label(format!("  TOTAL GPU: {:.3}ms", total_gpu.as_secs_f64() * 1000.0));
+                    ui.label(format!(
+                        "  TOTAL GPU: {:.3}ms",
+                        total_gpu.as_secs_f64() * 1000.0
+                    ));
                 }
 
                 ui.horizontal(|ui| {
@@ -543,10 +559,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                 #[cfg(feature = "dim3")]
                 {
                     ui.separator();
-                    ui.checkbox(
-                        &mut stage.app_state.render_aabb_enabled,
-                        "Cutting box",
-                    );
+                    ui.checkbox(&mut stage.app_state.render_aabb_enabled, "Cutting box");
                     if stage.app_state.render_aabb_enabled {
                         let slider_min = stage.app_state.render_aabb_slider_min;
                         let slider_max = stage.app_state.render_aabb_slider_max;
@@ -557,14 +570,8 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                             let hi = slider_max[axis];
                             ui.horizontal(|ui| {
                                 ui.label(label);
-                                ui.add(
-                                    egui::Slider::new(&mut aabb_min[axis], lo..=hi)
-                                        .text("min"),
-                                );
-                                ui.add(
-                                    egui::Slider::new(&mut aabb_max[axis], lo..=hi)
-                                        .text("max"),
-                                );
+                                ui.add(egui::Slider::new(&mut aabb_min[axis], lo..=hi).text("min"));
+                                ui.add(egui::Slider::new(&mut aabb_max[axis], lo..=hi).text("max"));
                             });
                         }
                     }

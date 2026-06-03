@@ -4,7 +4,7 @@
 //! optimized for GPU computation. It includes conversion utilities from Rapier/Parry
 //! shapes to GPU-friendly formats with vertex buffers.
 
-use crate::rapier::na::{vector, Vector4};
+use crate::rapier::na::{Vector4, vector};
 use rapier::geometry::{Shape, ShapeType, TypedShape};
 
 use crate::math::{Point, Vector};

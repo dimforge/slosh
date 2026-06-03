@@ -6,11 +6,11 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
+use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use crate::solver::{
     GpuBoundaryCondition, GpuMaterials, GpuParticleModelData, GpuParticles, GpuSimulationParams,
     Kinematics, ParticlePosition, SimulationParams,
 };
-use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

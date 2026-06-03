@@ -68,10 +68,10 @@ use slang_hal::re_exports::minislang::SlangCompiler;
 pub mod grid;
 pub mod models;
 pub mod pipeline;
+pub mod rbd;
 pub(crate) mod sampling;
 pub mod solver;
 pub mod trimesh;
-pub mod rbd;
 
 /// Embedded directory containing Slang shader source files.
 pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
@@ -90,7 +90,6 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
     stensor::register_shaders(compiler);
     compiler.add_dir(SLANG_SRC_DIR.clone());
 }
-
 
 /// Mathematical types and utilities for physics simulation.
 ///

@@ -2,10 +2,10 @@
 
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
+use crate::math::{Point, Vector};
 use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
-use crate::math::{Point, Vector};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};

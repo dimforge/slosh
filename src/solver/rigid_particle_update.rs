@@ -1,9 +1,9 @@
 //! Rigid body particle transformation kernels.
 
+use crate::math::{GpuSim, Point};
+use crate::rbd::dynamics::GpuBodySet;
 use crate::sampling::GpuSampleIds;
 use crate::solver::GpuRigidParticles;
-use crate::rbd::dynamics::GpuBodySet;
-use crate::math::{GpuSim, Point};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};

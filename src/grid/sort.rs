@@ -1,8 +1,8 @@
 //! Particle sorting kernels for spatial acceleration.
 
 use crate::grid::grid::{GpuGrid, GpuGridHashMapEntry, GpuGridMetadata};
-use crate::solver::GpuRigidParticles;
 use crate::math::Point;
+use crate::solver::GpuRigidParticles;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{Shader, ShaderArgs};
