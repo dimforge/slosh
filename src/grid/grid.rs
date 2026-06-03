@@ -268,7 +268,7 @@ pub struct GpuActiveBlockHeader {
 
 /// Cached collision information for a grid node.
 ///
-/// Mirror of the `NodeCollision` struct used by the `grid_update_collide` shader.
+/// Mirror of the `NodeCollision` struct used by the `grid_update` shader.
 /// Collision objects are assumed to never move, so this is cached per grid node
 /// and reused across steps for blocks that already existed in the previous step.
 #[derive(Copy, Clone, Default, ShaderType)]
@@ -374,11 +374,19 @@ impl<B: Backend> GpuGrid<B> {
             capacity * NODES_PER_BLOCK,
             BufferUsages::STORAGE,
         )?;
-        // Collision caches are lazily allocated by the collision kernel (only
-        // needed when there are colliders), so they start empty here.
-        let node_collisions = GpuVector::vector_uninit_encased(backend, 0, BufferUsages::STORAGE)?;
-        let prev_node_collisions =
-            GpuVector::vector_uninit_encased(backend, 0, BufferUsages::STORAGE)?;
+        // Per-node collision caches, sized like `nodes`. The grid update kernel
+        // always reads/writes these (colliders are assumed static, so results
+        // are cached and reused across steps), hence eager allocation.
+        let node_collisions = GpuVector::vector_uninit_encased(
+            backend,
+            capacity * NODES_PER_BLOCK,
+            BufferUsages::STORAGE,
+        )?;
+        let prev_node_collisions = GpuVector::vector_uninit_encased(
+            backend,
+            capacity * NODES_PER_BLOCK,
+            BufferUsages::STORAGE,
+        )?;
         let nodes_linked_lists =
             GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
         let rigid_nodes_linked_lists =

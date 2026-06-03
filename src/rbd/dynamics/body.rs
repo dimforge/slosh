@@ -279,6 +279,23 @@ impl<B: Backend> GpuBodySet<B> {
             pt_collider_ids
         };
 
+        // The grid update kernel always binds the shape/pose buffers (it applies
+        // gravity to every node regardless of whether there are colliders), and
+        // WebGPU/wgpu does not allow zero-sized buffer bindings. When there are
+        // no bodies we therefore keep a single dummy shape/pose. A `Polyline`
+        // shape is used because `collide()` ignores it entirely, so this dummy
+        // never produces a spurious collision.
+        let shapes_buffer = if shapes_data.is_empty() {
+            vec![GpuShape::polyline([0, 0])]
+        } else {
+            shapes_data.clone()
+        };
+        let poses_buffer = if poses.is_empty() {
+            vec![GpuSim::default()]
+        } else {
+            poses.clone()
+        };
+
         // TODO: (api design) how can we let the user pick the buffer usages?
         Ok(Self {
             len: bodies.len() as u32,
@@ -291,10 +308,10 @@ impl<B: Backend> GpuBodySet<B> {
             )?,
             poses: GpuTensor::vector(
                 backend,
-                &poses,
+                &poses_buffer,
                 BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             )?,
-            shapes: GpuTensor::vector(backend, &shapes_data, BufferUsages::STORAGE)?,
+            shapes: GpuTensor::vector(backend, &shapes_buffer, BufferUsages::STORAGE)?,
             shapes_local_vertex_buffers: GpuTensor::vector_encased(
                 backend,
                 &vertices,

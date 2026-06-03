@@ -1,7 +1,11 @@
 module grid_update;
 
+import slosh.rbd.shapes.shape;
+import slosh.aliases;
 import slosh.grid.grid;
 import slosh.solver.params;
+import slosh.collision.collide;
+import slosh.solver.boundary_condition;
 
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;
@@ -13,11 +17,18 @@ static const uint WORKGROUP_SIZE_Y = 4;
 static const uint WORKGROUP_SIZE_Z = 4;
 #endif
 
-// NOTE: the only reason why this is its own kernel is because this makes us
-//       exceed the 10 storage bindings on web platforms (because of the
-//       collision-detection buffers).
-//       If we ever end up moving the collision-detection to particles only,
-//       we should consider doing the cell update in the p2g kernel.
+// Combined grid-node update kernel.
+//
+// This performs, in a single pass over the active grid nodes:
+//   1. the momentum -> velocity update (gravity integration + velocity clamping), and
+//   2. the rigid-body collision boundary condition.
+//
+// These used to be two separate kernels (`grid_update` and `grid_update_collide`).
+// They iterate over the exact same nodes with the same indirect dispatch, so
+// merging them avoids a redundant pass (and a redundant read/write of the node
+// data). The collision-detection results are cached per node and reused across
+// steps for blocks that already existed in the previous step (colliders are
+// assumed to never move).
 [shader("compute")]
 [numthreads(WORKGROUP_SIZE_X, WORKGROUP_SIZE_Y, WORKGROUP_SIZE_Z)]
 func grid_update(
@@ -25,12 +36,25 @@ func grid_update(
     uint3 tid: SV_GroupThreadID,
     uint tid_flat: SV_GroupIndex,
     ConstantBuffer<SimulationParams> sim_params,
+    StructuredBuffer<Grid> prev_grid,
     StructuredBuffer<Grid> grid,
+    StructuredBuffer<GridHashMapEntry> prev_hmap_entries,
     StructuredBuffer<ActiveBlockHeader> active_blocks,
+    StructuredBuffer<BoundaryCondition> body_materials,
+    StructuredBuffer<Shape> collision_shapes,
+    StructuredBuffer<Pose> collision_shape_poses,
+    #if DIM == 3
+    StructuredBuffer<Vect> collision_shape_vtx,
+    StructuredBuffer<uint> collision_shape_idx,
+    #endif
+    StructuredBuffer<NodeCollision> prev_node_collisions,
+    RWStructuredBuffer<NodeCollision> node_collisions,
     RWStructuredBuffer<Node> nodes,
 ) {
     let bid = block_id.x;
-    let vid = active_blocks[bid].virtual_id;
+    // HACK: force copying the virtual ID otherwise there is a naga bug when
+    //       translating from WGSL to SpirV (works fine for Metal and HLSL…)
+    let vid = BlockVirtualId(active_blocks[bid].virtual_id.id);
     let cell_width = grid[0].cell_width;
 
     let global_chunk_id = block_header_id_to_physical_id(BlockHeaderId(bid));
@@ -44,12 +68,68 @@ func grid_update(
 #endif
 
     let global_id = global_node_id.id;
+
+    /*
+     * Step 1: momentum -> velocity update (gravity + clamping).
+     */
     let momentum_velocity_mass = nodes[global_id].momentum_velocity_mass;
     let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
-    let new_grid_velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass);
-    let new_grid_velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible);
-    nodes[global_id].momentum_velocity_mass = new_grid_velocity_mass;
-    nodes[global_id].momentum_velocity_mass_incompatible = new_grid_velocity_mass_incompatible;
+    var velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass);
+    let velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible);
+    nodes[global_id].momentum_velocity_mass_incompatible = velocity_mass_incompatible;
+
+    /*
+     * Step 2: rigid-body collision boundary condition.
+     *
+     * Collision objects are assumed to never move, so a node’s collision only
+     * depends on its (fixed) world-space position. If this block already existed
+     * in the previous step we reuse the cached result instead of running the
+     * expensive collision-detection again.
+     */
+    var collision = NodeCollision(Vect<float>(0.0), Vect<float>(0.0), 0u, 0u);
+    let prev_hid = find_block_header_id(prev_grid, prev_hmap_entries, vid);
+    if (prev_hid.id != NONE) {
+        let prev_pid = block_header_id_to_physical_id(prev_hid);
+    #if DIM == 2
+        let prev_global_id = node_id(prev_pid, tid.xy).id;
+    #else
+        let prev_global_id = node_id(prev_pid, tid).id;
+    #endif
+        collision = prev_node_collisions[prev_global_id];
+    } else {
+        collision = collide(
+            collision_shapes,
+            collision_shape_poses,
+            #if DIM == 3
+            collision_shape_vtx,
+            collision_shape_idx,
+            #endif
+            cell_width,
+            cell_pos
+        ).to_node();
+    }
+
+    node_collisions[global_id] = collision;
+
+    if (collision.valid != 0u) {
+        // Apply boundary condition.
+        let material = body_materials[collision.collider_id];
+        let dist_with_margin = dot(cell_pos - collision.point, collision.normal) - cell_width;
+        // TODO: take rigid-body velocity into account too.
+        #if DIM == 2
+            let node_velocity = velocity_mass.xy;
+            let node_mass = velocity_mass.z;
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt);
+            velocity_mass = float3(projected, node_mass);
+        #else
+            let node_velocity = velocity_mass.xyz;
+            let node_mass = velocity_mass.w;
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt);
+            velocity_mass = float4(projected, node_mass);
+        #endif
+    }
+
+    nodes[global_id].momentum_velocity_mass = velocity_mass;
 }
 
 #if DIM == 2

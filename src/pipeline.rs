@@ -6,7 +6,7 @@
 use crate::grid::grid::{GpuGrid, WgGrid};
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgGridUpdateCollide, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
+use crate::solver::{GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles, GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P, WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds};
 use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::math::{GpuSim, Vector};
@@ -41,7 +41,6 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     p2g: WgP2G<B>,
     p2g_cdf: WgP2GCdf<B>,
     grid_update_cdf: WgGridUpdateCdf<B>,
-    grid_update_collide: WgGridUpdateCollide<B>,
     grid_update: WgGridUpdate<B>,
     particles_update: WgParticleUpdate<B>,
     g2p: WgG2P<B>,
@@ -341,7 +340,6 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
-            grid_update_collide: WgGridUpdateCollide::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
             particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
             #[cfg(feature = "runtime")]
@@ -486,13 +484,14 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
 
         {
             let mut pass = encoder.begin_pass("grid_update", timestamps.as_deref_mut());
-            self.grid_update
-                .launch(backend, &mut pass, &data.sim_params, &data.grid)?;
-        }
-        {
-            let mut pass = encoder.begin_pass("grid_update_collide", timestamps.as_deref_mut());
-            self.grid_update_collide
-                .launch(backend, &mut pass, &data.sim_params, &mut data.grid, &data.bodies, &data.body_materials)?;
+            self.grid_update.launch(
+                backend,
+                &mut pass,
+                &data.sim_params,
+                &data.grid,
+                &data.bodies,
+                &data.body_materials,
+            )?;
         }
 
         hooks.after_grid_update(backend, encoder, data, hooks_state, timestamps.as_deref_mut())?;
