@@ -27,6 +27,13 @@ pub struct WgP2G<B: Backend> {
     pub p2g: GpuFunction<B>,
 }
 
+#[derive(Shader)]
+#[shader(module = "slosh::solver::p2g_scatter_style")]
+pub struct WgP2GScatterStyle<B: Backend> {
+    /// Compiled P2G compute shader.
+    pub p2g_scatter_style: GpuFunction<B>,
+}
+
 #[derive(ShaderArgs)]
 struct P2GArgs<'a, B: Backend> {
     grid: &'a GpuScalar<GpuGridMetadata, B>,
@@ -37,6 +44,7 @@ struct P2GArgs<'a, B: Backend> {
     particles_pos: &'a GpuVector<ParticlePosition, B>,
     particles_kin: &'a GpuVector<Kinematics, B>,
     nodes: &'a GpuVector<GpuGridNode, B>,
+    sorted_particle_ids: &'a GpuVector<u32, B>,
     body_vels: &'a GpuVector<GpuVelocity, B>,
     body_impulses: &'a GpuVector<RigidImpulse, B>,
     body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
@@ -60,6 +68,7 @@ impl<B: Backend> WgP2G<B> {
             active_blocks: &grid.active_blocks,
             nodes: &grid.nodes,
             nodes_linked_lists: &grid.nodes_linked_lists,
+            sorted_particle_ids: particles.sorted_ids(),
             particles_pos: particles.positions(),
             particles_kin: &particles.kinematics,
             particle_node_linked_lists: particles.node_linked_lists(),
@@ -68,6 +77,41 @@ impl<B: Backend> WgP2G<B> {
             body_materials: &body_materials.materials,
         };
         self.p2g.launch_indirect(
+            backend,
+            pass,
+            &args,
+            grid.indirect_n_g2p_p2g_groups.buffer(),
+        )
+    }
+}
+
+impl<B: Backend> WgP2GScatterStyle<B> {
+    /// Launches the P2G kernel to transfer particle data to grid nodes.
+    pub fn launch<GpuModel: GpuParticleModelData>(
+        &self,
+        backend: &B,
+        pass: &mut B::Pass,
+        grid: &GpuGrid<B>,
+        particles: &GpuParticles<B, GpuModel>,
+        impulses: &GpuImpulses<B>,
+        bodies: &GpuBodySet<B>,
+        body_materials: &GpuMaterials<B>,
+    ) -> Result<(), B::Error> {
+        let args = P2GArgs {
+            grid: &grid.meta,
+            hmap_entries: &grid.hmap_entries,
+            active_blocks: &grid.active_blocks,
+            nodes: &grid.nodes,
+            nodes_linked_lists: &grid.nodes_linked_lists,
+            sorted_particle_ids: particles.sorted_ids(),
+            particles_pos: particles.positions(),
+            particles_kin: &particles.kinematics,
+            particle_node_linked_lists: particles.node_linked_lists(),
+            body_vels: bodies.vels(),
+            body_impulses: &impulses.incremental_impulses,
+            body_materials: &body_materials.materials,
+        };
+        self.p2g_scatter_style.launch_indirect(
             backend,
             pass,
             &args,

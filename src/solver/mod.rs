@@ -35,7 +35,7 @@
 
 pub use g2p::WgG2P;
 pub use g2p_cdf::WgG2PCdf;
-pub use p2g::WgP2G;
+pub use p2g::{WgP2G, WgP2GScatterStyle};
 pub use p2g_cdf::WgP2GCdf;
 pub use params::{GpuSimulationParams, SimulationParams};
 pub use particle::*;

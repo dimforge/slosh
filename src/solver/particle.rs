@@ -493,7 +493,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
             def_grad: GpuTensor::vector_encased(backend, &data.def_grad, resizeable)?,
             properties: GpuTensor::vector_encased(backend, &data.properties, resizeable)?,
             models: GpuTensor::vector(backend, &data.models, resizeable)?,
-            sorted_ids: GpuTensor::vector_uninit(backend, particles.len() as u32, resizeable)?,
+            sorted_ids: GpuTensor::vector_uninit(backend, particles.len() as u32 * 8, resizeable)?,
             node_linked_lists: GpuTensor::vector_uninit(
                 backend,
                 particles.len() as u32,

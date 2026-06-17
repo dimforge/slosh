@@ -20,7 +20,7 @@ pub struct WgSort<B: Backend> {
     pub(crate) mark_rigid_particles_needing_block: GpuFunction<B>,
     pub(crate) update_block_particle_count: GpuFunction<B>,
     pub(crate) copy_particles_len_to_scan_value: GpuFunction<B>,
-    pub(crate) copy_scan_values_to_first_particles: GpuFunction<B>,
+    pub(crate) copy_scan_values_to_first_particles_and_prepare_for_finalize: GpuFunction<B>,
     pub(crate) finalize_particles_sort: GpuFunction<B>,
     pub(crate) sort_rigid_particles: GpuFunction<B>,
 }
