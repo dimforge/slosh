@@ -12,8 +12,8 @@ use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
     GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses,
-    WgRigidParticleUpdate, WgTimestepBounds, WgP2GScatterStyle
+    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgP2GScatterStyle, WgParticleUpdate,
+    WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
 };
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
@@ -43,14 +43,20 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     grid: WgGrid<B>,
     prefix_sum: WgPrefixSum<B>,
     sort: WgSort<B>,
+    // Kept for the alternative/CDF code paths that are currently commented out in `step`.
+    #[allow(dead_code)]
     p2g: WgP2G<B>,
     p2g_scatter_style: WgP2GScatterStyle<B>,
+    #[allow(dead_code)]
     p2g_cdf: WgP2GCdf<B>,
+    #[allow(dead_code)]
     grid_update_cdf: WgGridUpdateCdf<B>,
     grid_update: WgGridUpdate<B>,
     particles_update: WgParticleUpdate<B>,
     g2p: WgG2P<B>,
+    #[allow(dead_code)]
     g2p_cdf: WgG2PCdf<B>,
+    #[allow(dead_code)]
     rigid_particles_update: WgRigidParticleUpdate<B>,
     /// Maximum timestep bound calculation.
     pub timestep_bounds: WgTimestepBounds<B>,
@@ -571,7 +577,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         )?;
 
         {
-            let mut pass = encoder.begin_pass("integrate_bodies", timestamps.as_deref_mut());
+            let mut pass = encoder.begin_pass("integrate_bodies", timestamps);
             // TODO: should this be in a separate pipeline? Within impulse probably?
             self.impulses.launch(
                 backend,

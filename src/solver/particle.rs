@@ -101,7 +101,7 @@ impl ParticleDynamics {
     }
 
     /// Extracts the kinematic state for GPU upload.
-    fn to_kinematics(&self) -> Kinematics {
+    fn to_kinematics(self) -> Kinematics {
         Kinematics {
             affine: self.affine,
             velocity: self.velocity,
@@ -113,7 +113,7 @@ impl ParticleDynamics {
     }
 
     /// Extracts the static properties for GPU upload.
-    fn to_properties(&self) -> ParticleProperties {
+    fn to_properties(self) -> ParticleProperties {
         ParticleProperties {
             init_volume: self.init_volume,
             init_radius: self.init_radius,

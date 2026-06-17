@@ -38,7 +38,7 @@ pub struct SimulationStepResult {
     /// Can be cast to the concrete model type using `bytemuck::cast_slice`.
     pub model_data_raw: Vec<u32>,
     /// Raw deformation gradient data read back from GPU, stored as f32 values.
-    /// Stride per particle is [`GPU_DEF_GRAD_STRIDE_F32`]: 4 in 2D (a
+    /// Stride per particle is `GPU_DEF_GRAD_STRIDE_F32`: 4 in 2D (a
     /// `mat2x2<f32>`), 12 in 3D (a `mat3x3<f32>` with `vec4`-aligned columns).
     /// In 3D only the first three entries of each column are meaningful; the
     /// fourth entry of each column is slang padding.

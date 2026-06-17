@@ -16,7 +16,10 @@ use stensor::tensor::GpuScalar;
 #[shader(module = "slosh::grid::sort")]
 pub struct WgSort<B: Backend> {
     pub(crate) touch_particle_blocks: GpuFunction<B>,
+    // Bound to GPU kernels; currently only used by commented-out rigid-particle code paths.
+    #[allow(dead_code)]
     pub(crate) touch_rigid_particle_blocks: GpuFunction<B>,
+    #[allow(dead_code)]
     pub(crate) mark_rigid_particles_needing_block: GpuFunction<B>,
     pub(crate) update_block_particle_count: GpuFunction<B>,
     pub(crate) copy_particles_len_to_scan_value: GpuFunction<B>,
