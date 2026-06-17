@@ -3,7 +3,7 @@ name = "slosh2d"
 authors = ["Sébastien Crozet <sebcrozet@dimforge.com>"]
 description = "Cross-platform GPU 2D Material Point Method implementation."
 repository = "https://github.com/dimforge/slosh"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 license = "Apache-2.0"
 
