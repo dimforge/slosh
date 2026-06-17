@@ -105,9 +105,22 @@ func update_block_particle_count(
     if (id < particles_len) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
-        let block_id = block_associated_to_point(cell_width, particle.pt);
-        let active_block_id = find_block_header_id(grid, hmap_entries, block_id);
-        active_blocks[active_block_id.id].num_particles.add(1u);
+
+        var blocks = blocks_associated_to_point(cell_width, particle.pt);
+        let active_block_id_0 = find_block_header_id(grid, hmap_entries, blocks[0]);
+        active_blocks[active_block_id_0.id].num_particles.add(1u);
+        active_blocks[active_block_id_0.id].num_particles_with_extras.add(1u);
+
+        let assoc = associated_cell_index_in_block_off_by_one(particle, cell_width);
+        let mask = uint3(assoc >= 2);
+
+        for (var i = 1u; i < NUM_ASSOC_BLOCKS; i += 1u) {
+            let bshift = blocks[i].id - blocks[0].id;
+            if (all((bshift * mask) == bshift)) {
+                let active_block_id_i = find_block_header_id(grid, hmap_entries, blocks[i]);
+                active_blocks[active_block_id_i.id].num_particles_with_extras.add(1u);
+            }
+        }
     }
 }
 
@@ -121,13 +134,13 @@ func copy_particles_len_to_scan_value(
 ) {
     let id = invocation_id.x;
     if (id < grid[0].num_active_blocks) {
-        scan_values[id] = active_blocks[id].num_particles;
+        scan_values[id] = active_blocks[id].num_particles_with_extras;
     }
 }
 
 [shader("compute")]
 [numthreads(GRID_WORKGROUP_SIZE, 1, 1)]
-func copy_scan_values_to_first_particles(
+func copy_scan_values_to_first_particles_and_prepare_for_finalize(
     uint3 invocation_id: SV_DispatchThreadID,
     StructuredBuffer<Grid> grid,
     StructuredBuffer<uint> scan_values,
@@ -136,6 +149,8 @@ func copy_scan_values_to_first_particles(
     let id = invocation_id.x;
     if (id < grid[0].num_active_blocks) {
         active_blocks[id].first_particle = scan_values[id];
+        active_blocks[id].num_particles_with_extras = active_blocks[id].num_particles;
+        active_blocks[id].num_particles = 0u;
     }
 }
 
@@ -147,26 +162,40 @@ func finalize_particles_sort(
     StructuredBuffer<GridHashMapEntry> hmap_entries,
     StructuredBuffer<Position> particles_pos,
     ConstantBuffer<uint> particles_len,
-    RWStructuredBuffer<Atomic<uint>> scan_values,
     RWStructuredBuffer<AtomicNodeLinkedList> nodes_linked_lists,
     RWStructuredBuffer<uint> particle_node_linked_lists,
     RWStructuredBuffer<uint> sorted_particle_ids,
+    RWStructuredBuffer<AtomicActiveBlockHeader> active_blocks,
 
 ) {
     let id = invocation_id.x;
     if (id < particles_len) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
-        let block_id = block_associated_to_point(cell_width, particle.pt);
 
         // Place the particle to its sorted place.
-        let active_block_id = find_block_header_id(grid, hmap_entries, block_id);
-        let target_index = scan_values[active_block_id.id].add(1u);
+        var blocks = blocks_associated_to_point(cell_width, particle.pt);
+        let active_block_id_0 = find_block_header_id(grid, hmap_entries, blocks[0]);
+        let target_index = active_blocks[active_block_id_0.id].first_particle +
+            active_blocks[active_block_id_0.id].num_particles.add(1u);
         sorted_particle_ids[target_index] = id;
+
+        let assoc = associated_cell_index_in_block_off_by_one(particle, cell_width);
+        let mask = uint3(assoc >= 2);
+
+        for (var i = 1u; i < NUM_ASSOC_BLOCKS; i += 1u) {
+            let bshift = blocks[i].id - blocks[0].id;
+            if (all((bshift * mask) == bshift)) {
+                let active_block_id_i = find_block_header_id(grid, hmap_entries, blocks[i]);
+                let target_index = active_blocks[active_block_id_i.id].first_particle +
+                    active_blocks[active_block_id_i.id].num_particles_with_extras.add(1u);
+                sorted_particle_ids[target_index] = id;
+            }
+        }
 
         // Setup the per-node particle linked-list.
         let node_local_id = associated_cell_index_in_block_off_by_one(particle, cell_width);
-        let node_global_id = node_id(block_header_id_to_physical_id(active_block_id), node_local_id);
+        let node_global_id = node_id(block_header_id_to_physical_id(active_block_id_0), node_local_id);
         let prev_head = nodes_linked_lists[node_global_id.id].head.exchange(id);
         nodes_linked_lists[node_global_id.id].len.add(1u);
         particle_node_linked_lists[id] = prev_head;

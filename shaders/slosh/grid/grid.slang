@@ -216,7 +216,8 @@ public static const int OFF_BY_ONE = 1;
 public struct ActiveBlockHeaderGeneric<MaybeAtomicUint> {
     public BlockVirtualId virtual_id; // Needed to compute the world-space position of a block.
     public uint first_particle;
-    public MaybeAtomicUint num_particles;
+    public MaybeAtomicUint num_particles_with_extras; // Total count of particles contributing to this block.
+    public MaybeAtomicUint num_particles; // Count of particles assigned to this block exclusively.
 }
 
 public typealias ActiveBlockHeader = ActiveBlockHeaderGeneric<uint>;
@@ -339,6 +340,7 @@ public func mark_block_as_active(
         let block_header_id = grid[0].num_active_blocks.add(1u);
         active_blocks[block_header_id].virtual_id = block;
         active_blocks[block_header_id].first_particle = 0u;
+        active_blocks[block_header_id].num_particles_with_extras = 0u;
         active_blocks[block_header_id].num_particles = 0u;
         hmap_entries[slot].value = BlockHeaderId(block_header_id);
     }

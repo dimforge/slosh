@@ -12,8 +12,8 @@ use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
     GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgParticleUpdate, WgRigidImpulses,
-    WgRigidParticleUpdate, WgTimestepBounds,
+    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgP2GScatterStyle, WgParticleUpdate,
+    WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
 };
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
@@ -43,13 +43,20 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     grid: WgGrid<B>,
     prefix_sum: WgPrefixSum<B>,
     sort: WgSort<B>,
+    // Kept for the alternative/CDF code paths that are currently commented out in `step`.
+    #[allow(dead_code)]
     p2g: WgP2G<B>,
+    p2g_scatter_style: WgP2GScatterStyle<B>,
+    #[allow(dead_code)]
     p2g_cdf: WgP2GCdf<B>,
+    #[allow(dead_code)]
     grid_update_cdf: WgGridUpdateCdf<B>,
     grid_update: WgGridUpdate<B>,
     particles_update: WgParticleUpdate<B>,
     g2p: WgG2P<B>,
+    #[allow(dead_code)]
     g2p_cdf: WgG2PCdf<B>,
+    #[allow(dead_code)]
     rigid_particles_update: WgRigidParticleUpdate<B>,
     /// Maximum timestep bound calculation.
     pub timestep_bounds: WgTimestepBounds<B>,
@@ -342,6 +349,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             prefix_sum: WgPrefixSum::from_backend(backend, compiler)?,
             sort: WgSort::from_backend(backend, compiler)?,
             p2g: WgP2G::from_backend(backend, compiler)?,
+            p2g_scatter_style: WgP2GScatterStyle::from_backend(backend, compiler)?,
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
@@ -479,7 +487,16 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
 
         {
             let mut pass = encoder.begin_pass("p2g", timestamps.as_deref_mut());
-            self.p2g.launch(
+            // self.p2g.launch(
+            //     backend,
+            //     &mut pass,
+            //     &data.grid,
+            //     &data.particles,
+            //     &data.impulses,
+            //     &data.bodies,
+            //     &data.body_materials,
+            // )?;
+            self.p2g_scatter_style.launch(
                 backend,
                 &mut pass,
                 &data.grid,
@@ -560,7 +577,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         )?;
 
         {
-            let mut pass = encoder.begin_pass("integrate_bodies", timestamps.as_deref_mut());
+            let mut pass = encoder.begin_pass("integrate_bodies", timestamps);
             // TODO: should this be in a separate pipeline? Within impulse probably?
             self.impulses.launch(
                 backend,

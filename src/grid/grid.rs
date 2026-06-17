@@ -164,7 +164,7 @@ impl<B: Backend> WgGrid<B> {
         prefix_sum_module.launch(backend, pass, prefix_sum, &grid.scan_values)?;
 
         sort_module
-            .copy_scan_values_to_first_particles
+            .copy_scan_values_to_first_particles_and_prepare_for_finalize
             .launch_indirect(backend, pass, &args, grid.indirect_n_blocks_groups.buffer())?;
 
         // Reset here so the linked list heads get reset before `finalize_particles_sort` which
@@ -263,6 +263,7 @@ impl Default for GpuGridHashMapEntry {
 pub struct GpuActiveBlockHeader {
     virtual_id: BlockVirtualId,
     first_particle: u32,
+    num_particles_with_extras: u32,
     num_particles: u32,
 }
 
