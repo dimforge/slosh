@@ -97,6 +97,6 @@ impl<B: Backend> WgTimestepBounds<B> {
         self.reset_timestep_bound
             .launch(backend, pass, &args, [1; 3])?;
         self.estimate_timestep_bound
-            .launch(backend, pass, &args, [particles.len() as u32, 1, 1])
+            .launch_capped(backend, pass, &args, particles.len() as u32)
     }
 }
