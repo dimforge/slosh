@@ -13,8 +13,9 @@ func touch_particle_blocks(
     StructuredBuffer<Position> particles_pos,
     ConstantBuffer<uint> particles_len,
 ) {
-    let id = invocation_id.x;
-    if (id < particles_len) {
+    let _gs_n = particles_len;
+    let _gs_total = min((_gs_n + (GRID_WORKGROUP_SIZE - 1u)) / GRID_WORKGROUP_SIZE, 65535u) * GRID_WORKGROUP_SIZE;
+    for (var id = invocation_id.x; id < _gs_n; id += _gs_total) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
         var blocks = blocks_associated_to_point(cell_width, particle.pt);
@@ -101,8 +102,9 @@ func update_block_particle_count(
     ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<AtomicActiveBlockHeader> active_blocks,
 ) {
-    let id = invocation_id.x;
-    if (id < particles_len) {
+    let _gs_n = particles_len;
+    let _gs_total = min((_gs_n + (GRID_WORKGROUP_SIZE - 1u)) / GRID_WORKGROUP_SIZE, 65535u) * GRID_WORKGROUP_SIZE;
+    for (var id = invocation_id.x; id < _gs_n; id += _gs_total) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
 
@@ -168,8 +170,9 @@ func finalize_particles_sort(
     RWStructuredBuffer<AtomicActiveBlockHeader> active_blocks,
 
 ) {
-    let id = invocation_id.x;
-    if (id < particles_len) {
+    let _gs_n = particles_len;
+    let _gs_total = min((_gs_n + (GRID_WORKGROUP_SIZE - 1u)) / GRID_WORKGROUP_SIZE, 65535u) * GRID_WORKGROUP_SIZE;
+    for (var id = invocation_id.x; id < _gs_n; id += _gs_total) {
         let cell_width = grid[0].cell_width;
         let particle = particles_pos[id];
 

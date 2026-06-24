@@ -108,11 +108,11 @@ impl<B: Backend> WgGrid<B> {
             self.reset_hmap
                 .launch(backend, pass, &args, [grid.cpu_meta.hmap_capacity, 1, 1])?;
 
-            sort_module.touch_particle_blocks.launch(
+            sort_module.touch_particle_blocks.launch_capped(
                 backend,
                 pass,
                 &args,
-                [particles.len() as u32, 1, 1],
+                particles.len() as u32,
             )?;
 
             // // Ensure blocks exist wherever we have rigid particles that might affect
@@ -151,11 +151,11 @@ impl<B: Backend> WgGrid<B> {
         self.init_indirect_workgroups
             .launch_grid(backend, pass, &args, [1, 1, 1])?;
 
-        sort_module.update_block_particle_count.launch(
+        sort_module.update_block_particle_count.launch_capped(
             backend,
             pass,
             &args,
-            [particles.len() as u32, 1, 1],
+            particles.len() as u32,
         )?;
 
         sort_module
@@ -175,11 +175,11 @@ impl<B: Backend> WgGrid<B> {
             &args,
             grid.indirect_n_g2p_p2g_groups.buffer(),
         )?;
-        sort_module.finalize_particles_sort.launch(
+        sort_module.finalize_particles_sort.launch_capped(
             backend,
             pass,
             &args,
-            [particles.len() as u32, 1, 1],
+            particles.len() as u32,
         )?;
 
         Ok(())

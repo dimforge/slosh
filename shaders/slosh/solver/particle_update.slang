@@ -43,11 +43,9 @@ func particle_update(
     RWStructuredBuffer<ParticleProperties> particles_props,
     ConstantBuffer<uint> particles_len,
 ) {
-    let particle_id = invocation_id.x;
-
-    if (particle_id >= particles_len) {
-        return;
-    }
+    let _gs_n = particles_len;
+    let _gs_total = min((_gs_n + 63u) / 64u, 65535u) * 64u;
+    for (var particle_id = invocation_id.x; particle_id < _gs_n; particle_id += _gs_total) {
 
     let model = ParticleModel();
     let flags = model.model_flags(particles_model, particle_id);
@@ -161,4 +159,5 @@ func particle_update(
 
     particles_kin[particle_id] = kin;
     particles_def_grad[particle_id] = def_grad;
+    }
 }

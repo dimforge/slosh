@@ -67,6 +67,6 @@ impl<B: Backend> WgParticleUpdate<B> {
             particles_len: particles.gpu_len(),
         };
         self.particle_update
-            .launch(backend, pass, &args, [particles.len() as u32, 1, 1])
+            .launch_capped(backend, pass, &args, particles.len() as u32)
     }
 }

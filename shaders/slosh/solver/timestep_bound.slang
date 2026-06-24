@@ -46,14 +46,12 @@ func estimate_timestep_bound(
     ConstantBuffer<uint> particles_len,
     RWStructuredBuffer<GpuTimestepBounds> result,
 ) {
-    let particle_id = invocation_id.x;
-
-    if (particle_id >= particles_len) {
-        return;
-    }
+    let _gs_n = particles_len;
+    let _gs_total = min((_gs_n + (WORKGROUP_SIZE - 1u)) / WORKGROUP_SIZE, 65535u) * WORKGROUP_SIZE;
+    for (var particle_id = invocation_id.x; particle_id < _gs_n; particle_id += _gs_total) {
 
     if (particles_kin[particle_id].enabled == 0) {
-        return;
+        continue;
     }
 
     let cell_width = grid[0].cell_width;
@@ -91,4 +89,5 @@ func estimate_timestep_bound(
 
     let candidate = GpuTimestepBounds::secs_to_int(dt);
     result[0].computed_max_dt_as_uint.min(candidate);
+    }
 }
