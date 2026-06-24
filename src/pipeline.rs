@@ -79,6 +79,38 @@ pub trait MpmPipelineHooks<B: Backend, GpuModel: GpuParticleModelData> {
         Ok(())
     }
 
+    /// Replace the built-in Particle-To-Grid transfer.
+    ///
+    /// Return `Ok(true)` if the transfer was handled by this hook; the pipeline then
+    /// skips its built-in P2G. Return `Ok(false)` (the default) to keep slosh's P2G.
+    /// The hook is responsible for beginning its own compute pass.
+    fn run_p2g(
+        &mut self,
+        _backend: &B,
+        _encoder: &mut B::Encoder,
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
+        _timestamps: Option<&mut GpuTimestamps>,
+    ) -> Result<bool, B::Error> {
+        Ok(false)
+    }
+
+    /// Replace the built-in Grid-To-Particle transfer.
+    ///
+    /// Return `Ok(true)` if the transfer was handled by this hook; the pipeline then
+    /// skips its built-in G2P. Return `Ok(false)` (the default) to keep slosh's G2P.
+    /// The hook is responsible for beginning its own compute pass.
+    fn run_g2p(
+        &mut self,
+        _backend: &B,
+        _encoder: &mut B::Encoder,
+        _data: &mut MpmData<B, GpuModel>,
+        _state: &mut dyn Any,
+        _timestamps: Option<&mut GpuTimestamps>,
+    ) -> Result<bool, B::Error> {
+        Ok(false)
+    }
+
     /// Custom operation run after the main Particle-To-Grid transfer.
     fn after_p2g(
         &mut self,
@@ -485,17 +517,16 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         //     )?;
         // }
 
-        {
+        // Let a hook replace the built-in P2G transfer (e.g. to fuse extra fields into the
+        // same sweep). When no hook handles it, run slosh's default scatter-style P2G.
+        if !hooks.run_p2g(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )? {
             let mut pass = encoder.begin_pass("p2g", timestamps.as_deref_mut());
-            // self.p2g.launch(
-            //     backend,
-            //     &mut pass,
-            //     &data.grid,
-            //     &data.particles,
-            //     &data.impulses,
-            //     &data.bodies,
-            //     &data.body_materials,
-            // )?;
             self.p2g_scatter_style.launch(
                 backend,
                 &mut pass,
@@ -535,7 +566,15 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )?;
 
-        {
+        // Let a hook replace the built-in G2P transfer (e.g. to fuse extra fields into the
+        // same sweep). When no hook handles it, run slosh's default G2P.
+        if !hooks.run_g2p(
+            backend,
+            encoder,
+            data,
+            hooks_state,
+            timestamps.as_deref_mut(),
+        )? {
             let mut pass = encoder.begin_pass("g2p", timestamps.as_deref_mut());
             self.g2p.launch(
                 backend,

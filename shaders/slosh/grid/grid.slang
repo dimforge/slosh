@@ -211,13 +211,50 @@ public static const uint NUM_ASSOC_BLOCKS = 4;
 #else
 public static const uint NUM_ASSOC_BLOCKS = 8;
 #endif
+// Number of +1 neighbour blocks of a primary block (all associated blocks but the primary).
+public static const uint NUM_NBH_BLOCKS = NUM_ASSOC_BLOCKS - 1;
 public static const int OFF_BY_ONE = 1;
+
+// Number of "slab" buckets for the within-block counting sort of regular particles whose
+// primary block is the block being sorted. One bucket per associated-cell slab along the
+// slowest-varying node axis (y in 2D, z in 3D), so the sorted order lets P2G derive tight
+// per-chunk slab bounds for culling.
+#if DIM == 2
+public static const uint NUM_PRIMARY_SORT_BUCKETS = 8;
+// Number of slab buckets for "extras" (particles spilling in from a neighbour block). Their
+// associated slab relative to this block lies in [-2, block_width - 1], clamped at -2 (slabs
+// below -2 cannot influence any node of the block anyway): [-2, 7] -> 10 buckets in 2D.
+public static const uint NUM_EXTRA_SORT_BUCKETS = 10;
+#else
+public static const uint NUM_PRIMARY_SORT_BUCKETS = 4;
+// [-2, 3] -> 6 buckets in 3D.
+public static const uint NUM_EXTRA_SORT_BUCKETS = 6;
+#endif
+// Total number of within-block sort buckets. Primary buckets come first so primaries end up
+// contiguous in [first_particle, first_particle + num_particles), which G2P relies on.
+public static const uint NUM_SORT_BUCKETS = NUM_PRIMARY_SORT_BUCKETS + NUM_EXTRA_SORT_BUCKETS;
+
+// Minimum local base-cell index along an axis for a particle's quadratic stencil to spill into
+// the +1 neighbour block along that axis.
+#if DIM == 2
+public static const uint EXTRA_PARTICLE_MIN_SHIFT = 6;
+#else
+public static const uint EXTRA_PARTICLE_MIN_SHIFT = 2;
+#endif
 
 public struct ActiveBlockHeaderGeneric<MaybeAtomicUint> {
     public BlockVirtualId virtual_id; // Needed to compute the world-space position of a block.
     public uint first_particle;
     public MaybeAtomicUint num_particles_with_extras; // Total count of particles contributing to this block.
     public MaybeAtomicUint num_particles; // Count of particles assigned to this block exclusively.
+    // Per-slab-bucket cursors for the within-block counting sort. The count pass accumulates
+    // per-bucket counts here; the prepare pass converts them in place to absolute insertion
+    // cursors (first_particle baked in); the finalize pass increments them while inserting.
+    // The resulting segment is ordered by slab key, which P2G uses for per-chunk culling.
+    public MaybeAtomicUint sort_bucket_cursors[NUM_SORT_BUCKETS];
+    // Header IDs of the +1 neighbour blocks, precomputed once per block to avoid repeated
+    // hashmap lookups in the count/finalize passes. Inactive neighbours are stored as NONE.
+    public BlockHeaderId nbh_block_ids[NUM_NBH_BLOCKS];
 }
 
 public typealias ActiveBlockHeader = ActiveBlockHeaderGeneric<uint>;
@@ -342,6 +379,9 @@ public func mark_block_as_active(
         active_blocks[block_header_id].first_particle = 0u;
         active_blocks[block_header_id].num_particles_with_extras = 0u;
         active_blocks[block_header_id].num_particles = 0u;
+        for (var k = 0u; k < NUM_SORT_BUCKETS; k += 1u) {
+            active_blocks[block_header_id].sort_bucket_cursors[k] = 0u;
+        }
         hmap_entries[slot].value = BlockHeaderId(block_header_id);
     }
 }
@@ -362,6 +402,21 @@ public func node_id(pid: BlockPhysicalId, shift_in_block: uint3) -> NodePhysical
 
 func div_ceil(x: uint, y: uint) -> uint {
     return (x + y - 1) / y;
+}
+
+// Snapshots the current `num_active_blocks` into a single-element buffer.
+//
+// Used by the two-pass block activation: after `touch_primary_blocks` has activated all
+// particle base blocks, this captures their count so that `touch_neighbor_blocks` only
+// iterates over base blocks (and not over the neighbour blocks it appends).
+[shader("compute")]
+[numthreads(1, 1, 1)]
+func capture_num_active_blocks(
+    uint3 invocation_id: SV_DispatchThreadID,
+    StructuredBuffer<Grid> grid,
+    RWStructuredBuffer<uint> num_base_blocks,
+) {
+    num_base_blocks[0] = grid[0].num_active_blocks;
 }
 
 [shader("compute")]

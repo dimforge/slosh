@@ -15,7 +15,13 @@ use stensor::tensor::GpuScalar;
 #[derive(Shader)]
 #[shader(module = "slosh::grid::sort")]
 pub struct WgSort<B: Backend> {
+    // Legacy single-pass block activation, superseded by the two-pass
+    // touch_primary_blocks / touch_neighbor_blocks. Kept bound for reference/fallback.
+    #[allow(dead_code)]
     pub(crate) touch_particle_blocks: GpuFunction<B>,
+    pub(crate) touch_primary_blocks: GpuFunction<B>,
+    pub(crate) touch_neighbor_blocks: GpuFunction<B>,
+    pub(crate) update_nbh_block_ids: GpuFunction<B>,
     // Bound to GPU kernels; currently only used by commented-out rigid-particle code paths.
     #[allow(dead_code)]
     pub(crate) touch_rigid_particle_blocks: GpuFunction<B>,
