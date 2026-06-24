@@ -21,6 +21,7 @@ pub struct WgGrid<B: Backend> {
     reset_hmap: GpuFunction<B>,
     reset: GpuFunction<B>,
     init_indirect_workgroups: GpuFunction<B>,
+    capture_num_active_blocks: GpuFunction<B>,
 }
 
 // TODO: should we have all the kernel launches just use
@@ -36,6 +37,9 @@ struct GridArgs<'a, B: Backend> {
     nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
     rigid_nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
     scan_values: &'a GpuVector<u32, B>,
+    // Snapshot of `num_active_blocks` after the primary-block touch pass (the base-block count),
+    // consumed by `touch_neighbor_blocks`.
+    num_base_blocks: &'a GpuVector<u32, B>,
     // From particles
     particles_pos: &'a GpuVector<ParticlePosition, B>,
     particles_len: &'a GpuScalar<u32, B>,
@@ -86,6 +90,7 @@ impl<B: Backend> WgGrid<B> {
             nodes_linked_lists: &grid.nodes_linked_lists,
             rigid_nodes_linked_lists: &grid.rigid_nodes_linked_lists,
             scan_values: &grid.scan_values,
+            num_base_blocks: &grid.active_blocks_snapshot,
             particles_pos: particles.positions(),
             particles_len: particles.gpu_len(),
             active_blocks: &grid.active_blocks,
@@ -108,11 +113,32 @@ impl<B: Backend> WgGrid<B> {
             self.reset_hmap
                 .launch(backend, pass, &args, [grid.cpu_meta.hmap_capacity, 1, 1])?;
 
-            sort_module.touch_particle_blocks.launch_capped(
+            // Block activation in two passes (cheaper than every particle inserting all
+            // NUM_ASSOC_BLOCKS of its stencil):
+            // 1. Each particle activates only its primary (base) block.
+            // 2. Each base block activates its +1 neighbour blocks (once per block, not once
+            //    per particle). `active_blocks_snapshot` records the base-block count so pass 2
+            //    doesn't reprocess the neighbours it appends.
+            sort_module.touch_primary_blocks.launch_capped(
                 backend,
                 pass,
                 &args,
                 particles.len() as u32,
+            )?;
+
+            self.capture_num_active_blocks
+                .launch_grid(backend, pass, &args, [1, 1, 1])?;
+
+            // Indirect dispatch sized for the base blocks (the neighbour pass runs one thread
+            // per base block).
+            self.init_indirect_workgroups
+                .launch_grid(backend, pass, &args, [1, 1, 1])?;
+
+            sort_module.touch_neighbor_blocks.launch_indirect(
+                backend,
+                pass,
+                &args,
+                grid.indirect_n_blocks_groups.buffer(),
             )?;
 
             // // Ensure blocks exist wherever we have rigid particles that might affect
@@ -147,9 +173,18 @@ impl<B: Backend> WgGrid<B> {
         // - Launch write_blocks_multiplicity_to_scan_value
         // - Launch cumulated sum
 
-        // Prepare workgroups for indirect dispatches based on the number of active blocks.
+        // Prepare workgroups for indirect dispatches based on the (final) number of active blocks.
         self.init_indirect_workgroups
             .launch_grid(backend, pass, &args, [1, 1, 1])?;
+
+        // Cache each active block's +1 neighbour header IDs so the count/finalize passes don't
+        // re-query the hashmap per particle per neighbour.
+        sort_module.update_nbh_block_ids.launch_indirect(
+            backend,
+            pass,
+            &args,
+            grid.indirect_n_blocks_groups.buffer(),
+        )?;
 
         sort_module.update_block_particle_count.launch_capped(
             backend,
@@ -255,9 +290,26 @@ impl Default for GpuGridHashMapEntry {
     }
 }
 
+/// Number of within-block slab sort buckets (primary + extra). Must match `NUM_SORT_BUCKETS`
+/// in `shaders/slosh/grid/grid.slang`.
+#[cfg(feature = "dim2")]
+const NUM_SORT_BUCKETS: usize = 18; // 8 primary + 10 extra
+#[cfg(feature = "dim3")]
+const NUM_SORT_BUCKETS: usize = 10; // 4 primary + 6 extra
+
+/// Number of +1 neighbour blocks of a primary block. Must match `NUM_NBH_BLOCKS` in
+/// `shaders/slosh/grid/grid.slang` (`NUM_ASSOC_BLOCKS - 1`).
+#[cfg(feature = "dim2")]
+const NUM_NBH_BLOCKS: usize = 3;
+#[cfg(feature = "dim3")]
+const NUM_NBH_BLOCKS: usize = 7;
+
 /// Header for an active grid block containing particles.
 ///
-/// Tracks which particles belong to this block for efficient iteration.
+/// Tracks which particles belong to this block for efficient iteration. This buffer is
+/// GPU-private (allocated uninitialized, written and read only on the GPU), so the field
+/// layout only needs to be at least as large as the shader-side `ActiveBlockHeader` for the
+/// allocation to be correctly sized; the field order is kept in sync for clarity.
 #[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuActiveBlockHeader {
@@ -265,6 +317,10 @@ pub struct GpuActiveBlockHeader {
     first_particle: u32,
     num_particles_with_extras: u32,
     num_particles: u32,
+    /// Per-slab-bucket insertion cursors for the within-block counting sort.
+    sort_bucket_cursors: [u32; NUM_SORT_BUCKETS],
+    /// Cached header IDs of the +1 neighbour blocks (resolved by `update_nbh_block_ids`).
+    nbh_block_ids: [u32; NUM_NBH_BLOCKS],
 }
 
 /// Cached collision information for a grid node.
@@ -325,6 +381,9 @@ pub struct GpuGrid<B: Backend> {
     pub prev_node_collisions: GpuVector<GpuNodeCollision, B>,
     /// Active block headers tracking particle ranges.
     pub active_blocks: GpuVector<GpuActiveBlockHeader, B>,
+    /// Single-element snapshot of `num_active_blocks` after the primary-block touch pass,
+    /// used by the two-pass block activation.
+    pub active_blocks_snapshot: GpuVector<u32, B>,
     /// Workspace for prefix sum operations.
     pub scan_values: GpuVector<u32, B>,
     /// Per-node linked lists for MPM particles.
@@ -393,6 +452,7 @@ impl<B: Backend> GpuGrid<B> {
         let rigid_nodes_linked_lists =
             GpuVector::vector_uninit(backend, capacity * NODES_PER_BLOCK, BufferUsages::STORAGE)?;
         let active_blocks = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
+        let active_blocks_snapshot = GpuVector::vector_uninit(backend, 1, BufferUsages::STORAGE)?;
         let scan_values = GpuVector::vector_uninit(backend, capacity, BufferUsages::STORAGE)?;
         let indirect_n_blocks_groups = Arc::new(GpuVector::scalar_uninit(
             backend,
@@ -414,6 +474,7 @@ impl<B: Backend> GpuGrid<B> {
             node_collisions,
             prev_node_collisions,
             active_blocks,
+            active_blocks_snapshot,
             scan_values,
             indirect_n_blocks_groups,
             indirect_n_g2p_p2g_groups,

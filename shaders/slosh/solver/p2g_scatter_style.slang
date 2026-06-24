@@ -33,6 +33,10 @@ groupshared float3 shared_momentum[WORKGROUP_SIZE];
 groupshared float3x3 shared_affine[WORKGROUP_SIZE];
 #endif
 groupshared float shared_mass[WORKGROUP_SIZE];
+// Per-particle slab key (associated-cell coordinate along the slowest node axis, relative to
+// the block), used to derive the per-chunk culling bounds. Matches the bucket key the sort used,
+// so the keys are ascending within the primaries and within the extras of each chunk.
+groupshared int shared_zkey[WORKGROUP_SIZE];
 
 [shader("compute")]
 [numthreads(WORKGROUP_SIZE, 1, 1)]
@@ -53,6 +57,9 @@ func p2g_scatter_style(
     let first_particle = active_blocks[bid].first_particle;
     let num_particles = active_blocks[bid].num_particles_with_extras;
     let last_particle = first_particle + num_particles;
+    // End of the primaries segment: the sorted slab keys are ascending within the primaries and
+    // within the extras, so the per-chunk slab bounds need this boundary.
+    let primaries_end = first_particle + active_blocks[bid].num_particles;
     let block_vid = active_blocks[bid].virtual_id.id;
 
     // Each thread owns one cell (grid node) of this block and accumulates the
@@ -64,10 +71,13 @@ func p2g_scatter_style(
     let local_cell = int2(int(tid % 8u), int(tid / 8u));
     let cell_pos = float2(block_vid * 8 + local_cell) * cell_width;
     var acc = float3(0.0);
+    // This thread's node slab along the sort axis (the slowest-varying node axis).
+    let node_slab = local_cell.y;
 #else
     let local_cell = int3(int(tid % 4u), int((tid / 4u) % 4u), int(tid / 16u));
     let cell_pos = float3(block_vid * 4 + local_cell) * cell_width;
     var acc = float4(0.0);
+    let node_slab = local_cell.z;
 #endif
 
     // Stream the block's particles through shared memory one chunk at a time.
@@ -79,10 +89,21 @@ func p2g_scatter_style(
         if (load_idx < last_particle) {
             let pid = sorted_particle_ids[load_idx];
             let kin = particles_kin[pid];
-            shared_pos[tid] = particles_pos[pid].pt;
+            let pos = particles_pos[pid].pt;
+            shared_pos[tid] = pos;
             shared_mass[tid] = kin.mass;
             shared_affine[tid] = kin.affine;
             shared_momentum[tid] = kin.velocity * kin.mass + kin.force_dt;
+
+            // Slab key along the sort axis, relative to this block; must match the bucket key
+            // used by the sort (same associated-cell rounding, same clamp at -2) so the shared
+            // keys stay ascending within each segment.
+            let assoc_cell = round(pos / cell_width) - 1.0;
+#if DIM == 2
+            shared_zkey[tid] = max(int(assoc_cell.y) - block_vid.y * 8, -2);
+#else
+            shared_zkey[tid] = max(int(assoc_cell.z) - block_vid.z * 4, -2);
+#endif
         }
 
         GroupMemoryBarrierWithGroupSync();
@@ -90,7 +111,24 @@ func p2g_scatter_style(
         // `chunk_len` is uniform across the workgroup, so the barriers above stay in
         // uniform control flow regardless of the total particle count.
         let chunk_len = min(WORKGROUP_SIZE, last_particle - chunk_base);
-        for (var p = 0u; p < chunk_len; p += 1u) {
+
+        // Per-chunk slab bounds, exact thanks to the within-block sort: the keys are ascending
+        // within the primaries and within the extras, so the range is given by the chunk's
+        // first/last key, plus the two values around the primaries/extras boundary if the chunk
+        // straddles it.
+        var zmin = shared_zkey[0];
+        var zmax = shared_zkey[chunk_len - 1u];
+        if (primaries_end > chunk_base && primaries_end < chunk_base + chunk_len) {
+            let b = primaries_end - chunk_base;
+            zmin = min(zmin, shared_zkey[b]);
+            zmax = max(zmax, shared_zkey[b - 1u]);
+        }
+
+        // A particle with slab key `a` only influences nodes in slabs [a, a + 2]: skip the whole
+        // chunk if this thread's node slab is outside the chunk's dilated slab range. When that
+        // holds for every thread of a warp, the warp skips the chunk entirely.
+        let culled_len = (node_slab >= zmin && node_slab <= zmax + 2) ? chunk_len : 0u;
+        for (var p = 0u; p < culled_len; p += 1u) {
             let dpt = cell_pos - shared_pos[p];
 #if DIM == 2
             let weight = QuadraticKernel::eval(dpt.x * inv_cell_width)
