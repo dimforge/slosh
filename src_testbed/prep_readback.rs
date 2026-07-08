@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use nalgebra::Vector4;
+use glam::Vec4;
 use slang_hal::backend::{Backend, Encoder};
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};
@@ -15,7 +15,7 @@ use stensor::tensor::GpuTensor;
 #[derive(Default, Copy, Clone, Debug, Pod, Zeroable)]
 #[repr(C)]
 pub struct ReadbackData {
-    pub color: Vector4<f32>,
+    pub color: Vec4,
     pub deformation: nalgebra::Matrix2<f32>,
     pub position: nalgebra::Vector2<f32>,
     // NOTE: for now we are using explicit padding since
@@ -28,12 +28,12 @@ pub struct ReadbackData {
 #[derive(Default, Copy, Clone, Debug, Pod, Zeroable)]
 #[repr(C)]
 pub struct ReadbackData {
-    pub color: Vector4<f32>,
+    pub color: Vec4,
     // NOTE: for now we are using explicit padding since
     //       gpu buffer read based on Pod/bytemuck is much
     //       faster (about 20x) than with ShaderType/encase.
     pub deformation: nalgebra::Matrix4x3<f32>,
-    pub position: Vector4<f32>,
+    pub position: Vec4,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -104,7 +104,7 @@ pub struct PrepReadback<B: Backend> {
 
 pub struct GpuReadbackData<B: Backend> {
     pub mode: GpuTensor<RenderConfig, B>,
-    pub base_colors: GpuTensor<Vector4<f32>, B>,
+    pub base_colors: GpuTensor<Vec4, B>,
     pub instances: GpuTensor<ReadbackData, B>,
     pub instances_staging: GpuTensor<ReadbackData, B>,
 }
@@ -114,7 +114,7 @@ impl<B: Backend> GpuReadbackData<B> {
         backend: &B,
         num_particles: usize,
         mode: RenderMode,
-        custom_colors: Option<&[Vector4<f32>]>,
+        custom_colors: Option<&[Vec4]>,
     ) -> Result<Self, B::Error> {
         let config = mode.config();
         let palette = [
@@ -129,10 +129,10 @@ impl<B: Backend> GpuReadbackData<B> {
         let instances: Vec<_> = (0..num_particles)
             .map(|_| ReadbackData::default())
             .collect();
-        let base_colors: Vec<Vector4<f32>> = match custom_colors {
+        let base_colors: Vec<Vec4> = match custom_colors {
             Some(c) if c.len() == num_particles => c.to_vec(),
             _ => (0..num_particles)
-                .map(|i| palette[i % palette.len()].into())
+                .map(|i| Vec4::from_array(palette[i % palette.len()]))
                 .collect(),
         };
 
@@ -160,11 +160,11 @@ impl<B: Backend> GpuReadbackData<B> {
 #[derive(ShaderArgs)]
 struct PrepReadbackArgs<'a, B: Backend> {
     instances: &'a GpuTensor<ReadbackData, B>,
-    base_colors: &'a GpuTensor<Vector4<f32>, B>,
+    base_colors: &'a GpuTensor<Vec4, B>,
     particles_pos: &'a GpuTensor<ParticlePosition, B>,
     particles_kin: &'a GpuTensor<Kinematics, B>,
     particles_cdf: &'a GpuTensor<Cdf, B>,
-    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_def_grad: &'a GpuTensor<Matrix, B>,
     particles_props: &'a GpuTensor<ParticleProperties, B>,
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     params: &'a GpuTensor<SimulationParams, B>,

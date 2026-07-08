@@ -1,7 +1,7 @@
 //! Particle sorting kernels for spatial acceleration.
 
 use crate::grid::grid::{GpuGrid, GpuGridHashMapEntry, GpuGridMetadata};
-use crate::math::Point;
+use crate::math::Vector;
 use crate::solver::GpuRigidParticles;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
@@ -39,7 +39,7 @@ struct SortArgs<'a, B: Backend> {
     grid: &'a GpuScalar<GpuGridMetadata, B>,
     hmap_entries: &'a GpuScalar<GpuGridHashMapEntry, B>,
     rigid_nodes_linked_lists: &'a GpuScalar<[u32; 2], B>,
-    rigid_particles_pos: &'a GpuScalar<Point<f32>, B>,
+    rigid_particles_pos: &'a GpuScalar<Vector, B>,
     rigid_particle_node_linked_lists: &'a GpuScalar<u32, B>,
 }
 

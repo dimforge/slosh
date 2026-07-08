@@ -3,7 +3,7 @@
 use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
 };
-use crate::math::Point;
+use crate::math::Vector;
 use crate::rbd::dynamics::GpuBodySet;
 use crate::sampling::GpuSampleIds;
 use crate::solver::GpuRigidParticles;
@@ -30,7 +30,7 @@ struct P2GCdfArgs<'a, B: Backend> {
     active_blocks: &'a GpuVector<GpuActiveBlockHeader, B>,
     rigid_nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
     particle_node_linked_lists: &'a GpuVector<u32, B>,
-    collider_vertices: &'a GpuVector<Point<f32>, B>,
+    collider_vertices: &'a GpuVector<Vector, B>,
     rigid_particle_indices: &'a GpuVector<GpuSampleIds, B>,
     nodes: &'a GpuVector<GpuGridNode, B>,
 }

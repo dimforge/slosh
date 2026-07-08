@@ -1,6 +1,6 @@
 //! Rigid body particle transformation kernels.
 
-use crate::math::{GpuSim, Point};
+use crate::math::{GpuSim, Vector};
 use crate::rbd::dynamics::GpuBodySet;
 use crate::sampling::GpuSampleIds;
 use crate::solver::GpuRigidParticles;
@@ -27,8 +27,8 @@ struct RigidParticleUpdateArgs<'a, B: Backend> {
     vertex_collider_ids: Option<&'a GpuTensor<u32, B>>,
     rigid_particle_indices: Option<&'a GpuTensor<GpuSampleIds, B>>,
     poses: &'a GpuTensor<GpuSim, B>,
-    local_pts: &'a GpuTensor<Point<f32>, B>,
-    world_pts: &'a GpuTensor<Point<f32>, B>,
+    local_pts: &'a GpuTensor<Vector, B>,
+    world_pts: &'a GpuTensor<Vector, B>,
 }
 
 impl<B: Backend> WgRigidParticleUpdate<B> {

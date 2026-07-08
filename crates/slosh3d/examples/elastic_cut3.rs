@@ -1,7 +1,8 @@
 use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{DMatrix, Isometry3, point, vector};
+use glam::{Quat, vec3};
 use rapier3d::geometry::HeightField;
+use rapier3d::parry::utils::Array2;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -24,11 +25,11 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     for i in 0..nxz {
         for j in 0..30 {
             for k in 0..nxz {
-                let position = point![
+                let position = vec3(
                     i as f32 + 0.5 - nxz as f32 / 2.0,
                     j as f32 + 0.5 + 60.0,
-                    k as f32 + 0.5 - nxz as f32 / 2.0
-                ] * cell_width
+                    k as f32 + 0.5 - nxz as f32 / 2.0,
+                ) * cell_width
                     / 2.0;
                 let density = 2700.0;
                 let radius = cell_width / 4.0;
@@ -45,11 +46,11 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81, 0.0] * app_state.gravity_factor,
+        gravity: vec3(0.0, -9.81, 0.0) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
     };
 
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, -4.0, 0.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(0.0, -4.0, 0.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(100.0, 1.0, 100.0);
     rapier_data
@@ -59,12 +60,13 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     // TODO: use only two rectangle per cutting tool.
     //       We can’t right now since we don’t really sample the triangles.
     for k in 0..3 {
-        let heights = DMatrix::zeros(10, 10);
-        let heightfield = HeightField::new(heights, vector![35.0, 1.0, 10.0]);
+        let heights = Array2::zeros(10, 10);
+        let heightfield = HeightField::new(heights, vec3(35.0, 1.0, 10.0));
         let (mut vtx, idx) = heightfield.to_trimesh();
+        let rotation = Quat::from_scaled_axis(vec3(1.3, 0.0, 0.0));
+        let translation = vec3(0.0, 10.0, k as f32 * 10.0 - 10.0);
         vtx.iter_mut().for_each(|pt| {
-            *pt = Isometry3::rotation(vector![1.3, 0.0, 0.0]) * *pt
-                + vector![0.0, 10.0, k as f32 * 10.0 - 10.0]
+            *pt = rotation * *pt + translation;
         });
         let rb = RigidBodyBuilder::fixed();
         let rb_handle = rapier_data.bodies.insert(rb);

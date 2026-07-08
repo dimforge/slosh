@@ -1,4 +1,4 @@
-use crate::math::{Matrix, Point, Vector};
+use crate::math::{Matrix, Vector};
 use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::dynamics::body::BodyCouplingEntry;
 use crate::rbd::shapes::ShapeBuffers;
@@ -22,15 +22,15 @@ use stensor::tensor::{GpuScalar, GpuTensor};
 #[repr(C)]
 pub struct ParticleDynamics {
     /// Current velocity (m/s).
-    pub velocity: Vector<f32>,
+    pub velocity: Vector,
     /// Deformation gradient tracking how the particle has deformed from its initial state.
-    pub def_grad: Matrix<f32>,
+    pub def_grad: Matrix,
     /// APIC affine velocity matrix for improved momentum conservation.
-    pub affine: Matrix<f32>,
+    pub affine: Matrix,
     /// Additional force applied indirectly to the particle.
     /// Resets automatically at the `particle_update` stage of the
     /// MPM pipeline.
-    pub force_dt: Vector<f32>,
+    pub force_dt: Vector,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
     /// Collision detection field data for rigid body coupling.
@@ -67,10 +67,10 @@ impl ParticleDynamics {
         let exponent = if cfg!(feature = "dim2") { 2 } else { 3 };
         let init_volume = (radius * 2.0).powi(exponent); // NOTE: the particles are square-ish.
         Self {
-            velocity: Vector::zeros(),
-            def_grad: Matrix::identity(),
-            affine: Matrix::zeros(),
-            force_dt: Vector::zeros(),
+            velocity: Vector::ZERO,
+            def_grad: Matrix::IDENTITY,
+            affine: Matrix::ZERO,
+            force_dt: Vector::ZERO,
             vel_grad_det: 0.0,
             init_volume,
             init_radius: radius,
@@ -133,11 +133,11 @@ impl ParticleDynamics {
 #[repr(C)]
 pub struct Kinematics {
     /// APIC affine velocity matrix / velocity gradient.
-    pub affine: Matrix<f32>,
+    pub affine: Matrix,
     /// Current velocity (m/s).
-    pub velocity: Vector<f32>,
+    pub velocity: Vector,
     /// Additional force * dt applied to the particle.
-    pub force_dt: Vector<f32>,
+    pub force_dt: Vector,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
     /// Particle mass (kg).
@@ -205,9 +205,9 @@ impl ParticlePhase {
 #[repr(C)]
 pub struct Cdf {
     /// Surface normal of the closest rigid body surface.
-    pub normal: Vector<f32>,
+    pub normal: Vector,
     /// Velocity of the rigid body at the contact point.
-    pub rigid_vel: Vector<f32>,
+    pub rigid_vel: Vector,
     /// Signed distance to the nearest rigid body surface (negative = penetration).
     pub signed_distance: f32,
     /// Index of the rigid body this particle is coupled with.
@@ -225,7 +225,7 @@ pub struct Cdf {
 #[derive(Copy, Clone, Debug)]
 pub struct Particle<Model> {
     /// Spatial position (m).
-    pub position: Point<f32>,
+    pub position: Vector,
     /// Physical state (velocity, deformation, mass, etc.).
     pub dynamics: ParticleDynamics,
     /// Material model defining constitutive behavior.
@@ -241,7 +241,7 @@ impl<Model> Particle<Model> {
     /// * `radius` - Particle radius (used to compute mass and volume)
     /// * `density` - Material density
     /// * `model` - Material model instance
-    pub fn new(position: Point<f32>, radius: f32, density: f32, model: Model) -> Self {
+    pub fn new(position: Vector, radius: f32, density: f32, model: Model) -> Self {
         Particle {
             position,
             dynamics: ParticleDynamics::new(radius, density),
@@ -257,9 +257,9 @@ impl<Model> Particle<Model> {
 /// interact with MPM particles through the CDF (Collision Detection Field).
 pub struct GpuRigidParticles<B: Backend> {
     /// Sample points in local (body-relative) coordinates.
-    pub local_sample_points: GpuTensor<Point<f32>, B>,
+    pub local_sample_points: GpuTensor<Vector, B>,
     /// Sample points transformed to world coordinates.
-    pub sample_points: GpuTensor<Point<f32>, B>,
+    pub sample_points: GpuTensor<Vector, B>,
     /// Bitmask indicating which rigid particles need grid cell blocking.
     pub rigid_particle_needs_block: GpuTensor<u32, B>,
     /// Linked list for spatially sorting rigid particles into grid cells.
@@ -381,18 +381,18 @@ impl<B: Backend> GpuRigidParticles<B> {
     }
 }
 
-/// Particle position type (2D: Point2, 3D: Point4 for alignment).
+/// Particle position type (2D: Vec2, 3D: Vec4 for alignment).
 #[cfg(feature = "dim2")]
-pub type ParticlePosition = Point<f32>;
-/// Particle position type (2D: Point2, 3D: Point4 for alignment).
+pub type ParticlePosition = glam::Vec2;
+/// Particle position type (2D: Vec2, 3D: Vec4 for alignment).
 #[cfg(feature = "dim3")]
-pub type ParticlePosition = nalgebra::Point4<f32>;
+pub type ParticlePosition = glam::Vec4;
 
 struct SoAParticles<GpuModel: GpuParticleModelData> {
     positions: Vec<ParticlePosition>,
     kinematics: Vec<Kinematics>,
     cdf: Vec<Cdf>,
-    def_grad: Vec<Matrix<f32>>,
+    def_grad: Vec<Matrix>,
     properties: Vec<ParticleProperties>,
     models: Vec<GpuModel>,
 }
@@ -402,10 +402,7 @@ impl<GpuModel: GpuParticleModelData> SoAParticles<GpuModel> {
         #[cfg(feature = "dim2")]
         let positions: Vec<_> = particles.iter().map(|p| p.position).collect();
         #[cfg(feature = "dim3")]
-        let positions: Vec<_> = particles
-            .iter()
-            .map(|p| p.position.coords.push(0.0).into())
-            .collect();
+        let positions: Vec<_> = particles.iter().map(|p| p.position.extend(0.0)).collect();
         let kinematics: Vec<_> = particles
             .iter()
             .map(|p| p.dynamics.to_kinematics())
@@ -446,7 +443,7 @@ pub struct GpuParticles<B: Backend, GpuModel: GpuParticleModelData> {
     /// Collision detection field data for rigid body coupling.
     pub cdf: GpuTensor<Cdf, B>,
     /// Deformation gradient matrices.
-    pub def_grad: GpuTensor<Matrix<f32>, B>,
+    pub def_grad: GpuTensor<Matrix, B>,
     /// Static per-particle properties (read-only on GPU).
     pub properties: GpuTensor<ParticleProperties, B>,
     models: GpuTensor<GpuModel, B>,
@@ -487,7 +484,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> GpuParticles<B, GpuModel> {
                 particles.len() as u32,
                 BufferUsages::STORAGE | BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             )?,
-            positions: GpuTensor::vector(backend, &data.positions, resizeable)?,
+            positions: GpuTensor::vector_encased(backend, &data.positions, resizeable)?,
             kinematics: GpuTensor::vector_encased(backend, &data.kinematics, resizeable)?,
             cdf: GpuTensor::vector_encased(backend, &data.cdf, resizeable)?,
             def_grad: GpuTensor::vector_encased(backend, &data.def_grad, resizeable)?,

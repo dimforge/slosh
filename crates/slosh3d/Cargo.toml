@@ -19,12 +19,12 @@ required-features = ["dim3"]
 default = ["dim3"]
 dim3 = []
 
-comptime = [ "stensor/comptime", "slosh_testbed3d/comptime" ]
-runtime = [ "stensor/runtime", "slosh_testbed3d/runtime" ]
-webgpu = [ "stensor/webgpu", "slosh_testbed3d/webgpu" ]
+comptime = ["stensor/comptime", "slosh_testbed3d/comptime"]
+runtime = ["stensor/runtime", "slosh_testbed3d/runtime"]
+webgpu = ["stensor/webgpu", "slosh_testbed3d/webgpu"]
 
 [dependencies]
-nalgebra = { workspace = true }
+glam = { workspace = true }
 wgpu = { workspace = true }
 encase = { workspace = true }
 bytemuck = { workspace = true }
@@ -37,10 +37,9 @@ bvh = "0.12.0"
 serde = "1"
 
 # TODO: make rapier optional?
-rapier3d = "0.31"
+rapier3d = "0.32"
 
 [dev-dependencies]
-nalgebra = { version = "0.34", features = ["rand"] }
 futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"

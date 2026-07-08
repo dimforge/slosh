@@ -19,12 +19,12 @@ required-features = ["dim2"]
 default = ["dim2"]
 dim2 = []
 
-comptime = [ "slosh_testbed2d/comptime", "stensor/comptime" ]
-runtime = [ "slosh_testbed2d/runtime", "stensor/runtime" ]
-webgpu = [ "slosh_testbed2d/webgpu", "stensor/webgpu" ]
+comptime = ["slosh_testbed2d/comptime", "stensor/comptime"]
+runtime = ["slosh_testbed2d/runtime", "stensor/runtime"]
+webgpu = ["slosh_testbed2d/webgpu", "stensor/webgpu"]
 
 [dependencies]
-nalgebra = { workspace = true }
+glam = { workspace = true }
 wgpu = { workspace = true }
 encase = { workspace = true }
 slang-hal = { workspace = true }
@@ -37,7 +37,7 @@ static_assertions = { workspace = true }
 bvh = "0.12.0"
 
 # TODO: make rapier optional?
-rapier2d = "0.31"
+rapier2d = "0.32"
 
 # For wasm?
 getrandom = { version = "0.3.1", features = ["wasm_js"] }
@@ -45,12 +45,13 @@ uuid = { version = "1", features = ["js"] }
 
 
 [dev-dependencies]
-nalgebra = { version = "0.34", features = ["rand"] }
 futures-test = "0.3"
 serial_test = "3"
 approx = "0.5"
 async-std = { version = "1", features = ["attributes"] }
-slosh_testbed2d = { path = "../slosh_testbed2d", features = ["dim2"], default-features = false }
+slosh_testbed2d = { path = "../slosh_testbed2d", features = [
+    "dim2",
+], default-features = false }
 kiss3d = { version = "0.37.0" }
 
 [build-dependencies]

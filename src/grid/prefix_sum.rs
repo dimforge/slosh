@@ -1,6 +1,5 @@
 //! Parallel prefix sum (scan) implementation for GPU.
 
-use nalgebra::DVector;
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};
@@ -95,7 +94,7 @@ impl<B: Backend> WgPrefixSum<B> {
     /// CPU implementation of the prefix sum for testing/validation.
     ///
     /// Applies the same algorithm as the GPU version but on CPU.
-    pub fn eval_cpu(&self, v: &mut DVector<u32>) {
+    pub fn eval_cpu(&self, v: &mut [u32]) {
         for i in 0..v.len() - 1 {
             v[i + 1] += v[i];
         }
@@ -158,7 +157,7 @@ impl<B: Backend> PrefixSumWorkspace<B> {
             while stage_len != 1 {
                 let buffer = GpuTensor::vector(
                     backend,
-                    DVector::<u32>::zeros(stage_len as usize),
+                    vec![0u32; stage_len as usize],
                     BufferUsages::STORAGE,
                 )?;
                 self.stages.push(PrefixSumStage {
@@ -172,11 +171,7 @@ impl<B: Backend> PrefixSumWorkspace<B> {
             // The last stage always has only 1 element.
             self.stages.push(PrefixSumStage {
                 capacity: 1,
-                buffer: GpuTensor::vector(
-                    backend,
-                    DVector::<u32>::zeros(1),
-                    BufferUsages::STORAGE,
-                )?,
+                buffer: GpuTensor::vector(backend, vec![0u32; 1], BufferUsages::STORAGE)?,
             });
             self.num_stages = self.stages.len();
         } else if self.stages[0].buffer.len() as u32 != stage_len {

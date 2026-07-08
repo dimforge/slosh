@@ -1,9 +1,8 @@
 //! Rigid-body definition and set.
 
-use crate::math::{AngularInertia, GpuSim};
+use crate::math::{AngVector, AngularInertia, GpuSim, Vector};
 use crate::rbd::shapes::{GpuShape, ShapeBuffers};
 use rapier::geometry::ColliderHandle;
-use rapier::math::{AngVector, Point, Vector};
 use rapier::prelude::MassProperties;
 use rapier::{
     dynamics::{RigidBodyHandle, RigidBodySet},
@@ -17,9 +16,9 @@ use stensor::tensor::GpuTensor;
 /// Linear and angular forces with a layout compatible with the corresponding WGSL struct.
 pub struct GpuForce {
     /// The linear part of the force.
-    pub linear: Vector<f32>,
+    pub linear: Vector,
     /// The angular part of the force (aka. the torque).
-    pub angular: AngVector<f32>,
+    pub angular: AngVector,
 }
 
 #[derive(Copy, Clone, PartialEq, Default, encase::ShaderType)]
@@ -27,9 +26,9 @@ pub struct GpuForce {
 /// Linear and angular velocities with a layout compatible with the corresponding WGSL struct.
 pub struct GpuVelocity {
     /// The linear (translational) velocity.
-    pub linear: Vector<f32>,
+    pub linear: Vector,
     /// The angular (rotational) velocity.
-    pub angular: AngVector<f32>,
+    pub angular: AngVector,
 }
 
 #[derive(Copy, Clone, PartialEq, encase::ShaderType)]
@@ -37,11 +36,11 @@ pub struct GpuVelocity {
 /// Rigid-body mass-properties, with a layout compatible with the corresponding WGSL struct.
 pub struct GpuMassProperties {
     /// The inverse angular inertia tensor.
-    pub inv_inertia: AngularInertia<f32>,
+    pub inv_inertia: AngularInertia,
     /// The inverse mass.
-    pub inv_mass: Vector<f32>,
+    pub inv_mass: Vector,
     /// The center-of-mass.
-    pub com: Vector<f32>, // ShaderType isn’t implemented for Point
+    pub com: Vector,
 }
 
 impl From<MassProperties> for GpuMassProperties {
@@ -51,8 +50,8 @@ impl From<MassProperties> for GpuMassProperties {
             inv_inertia: props.inv_principal_inertia,
             #[cfg(feature = "dim3")]
             inv_inertia: props.reconstruct_inverse_inertia_matrix(),
-            inv_mass: Vector::repeat(props.inv_mass),
-            com: props.local_com.coords,
+            inv_mass: Vector::splat(props.inv_mass),
+            com: props.local_com,
         }
     }
 }
@@ -64,9 +63,9 @@ impl Default for GpuMassProperties {
             #[cfg(feature = "dim2")]
             inv_inertia: 1.0,
             #[cfg(feature = "dim3")]
-            inv_inertia: AngularInertia::identity(),
-            inv_mass: Vector::repeat(1.0),
-            com: Vector::zeros(),
+            inv_inertia: AngularInertia::IDENTITY,
+            inv_mass: Vector::splat(1.0),
+            com: Vector::ZERO,
         }
     }
 }
@@ -82,11 +81,11 @@ pub struct GpuBodySet<B: Backend> {
     // TODO: support other shape types.
     // TODO: support a shape with a shift relative to the body.
     pub(crate) shapes: GpuTensor<GpuShape, B>,
-    pub(crate) shapes_local_vertex_buffers: GpuTensor<Point<f32>, B>,
-    pub(crate) shapes_vertex_buffers: GpuTensor<Point<f32>, B>,
+    pub(crate) shapes_local_vertex_buffers: GpuTensor<Vector, B>,
+    pub(crate) shapes_vertex_buffers: GpuTensor<Vector, B>,
     pub(crate) shapes_vertex_collider_id: GpuTensor<u32, B>, // NOTE: this is a bit of a hack for wgsparkl
     /// Vertex buffer for trimesh collision (BVH AABBs, vertices, pseudo-normals).
-    pub(crate) shapes_collision_vertices: GpuTensor<Point<f32>, B>,
+    pub(crate) shapes_collision_vertices: GpuTensor<Vector, B>,
     /// Index buffer for trimesh collision (BVH topology, triangle indices).
     pub(crate) shapes_collision_indices: GpuTensor<u32, B>,
 }
@@ -113,7 +112,7 @@ impl Default for BodyDesc {
             mprops: Default::default(),
             vel: Default::default(),
             pose: Default::default(),
-            shape: GpuShape::cuboid(Vector::repeat(0.5)),
+            shape: GpuShape::cuboid(Vector::splat(0.5)),
         }
     }
 }
@@ -206,14 +205,14 @@ impl<B: Backend> GpuBodySet<B> {
             let two_ways_coupling = rb.is_dynamic() && coupling.mode == BodyCoupling::TwoWays;
             let desc = BodyDesc {
                 vel: GpuVelocity {
-                    linear: *rb.linvel(),
+                    linear: rb.linvel(),
                     #[allow(clippy::clone_on_copy)] // Needed for 2D/3D switch.
                     angular: rb.angvel().clone(),
                 },
                 #[cfg(feature = "dim2")]
-                pose: (*rb.position()).into(),
+                pose: GpuSim::from(rapier::na::Isometry2::from(*rb.position())),
                 #[cfg(feature = "dim3")]
-                pose: GpuSim::from_isometry(*rb.position(), 1.0),
+                pose: GpuSim::from_isometry((*rb.position()).into(), 1.0),
                 shape,
                 local_mprops: if two_ways_coupling {
                     rb.mass_properties().local_mprops.into()
@@ -257,7 +256,7 @@ impl<B: Backend> GpuBodySet<B> {
         // zero-sized buffer bindings. A single dummy element is harmless because
         // the shader only accesses these buffers through index ranges stored in
         // the per-shape data, so the dummy element is never read.
-        let dummy_pt = Point::origin();
+        let dummy_pt = Vector::ZERO;
         let vertices = if shape_buffers.vertices.is_empty() {
             vec![dummy_pt]
         } else {
@@ -371,7 +370,7 @@ impl<B: Backend> GpuBodySet<B> {
     ///
     /// Contains vertices for polylines and trimeshes in world-space coordinates.
     /// Updated when body poses change.
-    pub fn shapes_vertex_buffers(&self) -> &GpuTensor<Point<f32>, B> {
+    pub fn shapes_vertex_buffers(&self) -> &GpuTensor<Vector, B> {
         &self.shapes_vertex_buffers
     }
 
@@ -379,7 +378,7 @@ impl<B: Backend> GpuBodySet<B> {
     ///
     /// Contains vertices for polylines and trimeshes in body-local coordinates.
     /// These are the original untransformed vertices.
-    pub fn shapes_local_vertex_buffers(&self) -> &GpuTensor<Point<f32>, B> {
+    pub fn shapes_local_vertex_buffers(&self) -> &GpuTensor<Vector, B> {
         &self.shapes_local_vertex_buffers
     }
 
@@ -394,7 +393,7 @@ impl<B: Backend> GpuBodySet<B> {
     /// GPU storage buffer containing collision vertices for trimesh shapes.
     ///
     /// Contains BVH AABBs, mesh vertices, and pseudo-normals in body-local coordinates.
-    pub fn shapes_collision_vertices(&self) -> &GpuTensor<Point<f32>, B> {
+    pub fn shapes_collision_vertices(&self) -> &GpuTensor<Vector, B> {
         &self.shapes_collision_vertices
     }
 

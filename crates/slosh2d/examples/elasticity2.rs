@@ -1,6 +1,6 @@
 use slosh_testbed2d::{RapierData, slosh};
 
-use nalgebra::{Vector2, point, vector};
+use glam::vec2;
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -25,8 +25,8 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
     for i in 0..700 {
         for j in 0..700 {
             let position =
-                point![i as f32 + 0.5 + (i / 50) as f32 * 2.0, j as f32 + 0.5] * cell_width / 2.0
-                    + Vector2::y() * offset_y;
+                vec2(i as f32 + 0.5 + (i / 50) as f32 * 2.0, j as f32 + 0.5) * cell_width / 2.0
+                    + vec2(0.0, offset_y);
             let density = 1000.0;
             let radius = cell_width / 4.0;
             let model = ParticleModel::elastic(5.0e6, 0.2);
@@ -40,12 +40,12 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81] * app_state.gravity_factor,
+        gravity: vec2(0.0, -9.81) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
         padding: 0.0,
     };
 
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, -1.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec2(0.0, -1.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1000.0, 1.0);
     rapier_data
@@ -53,7 +53,7 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::fixed()
-        .translation(vector![-20.0, 0.0])
+        .translation(vec2(-20.0, 0.0))
         .rotation(0.5);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 60.0);
@@ -62,7 +62,7 @@ pub fn elasticity_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCon
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::fixed()
-        .translation(vector![90.0, 0.0])
+        .translation(vec2(90.0, 0.0))
         .rotation(-0.5);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 60.0);

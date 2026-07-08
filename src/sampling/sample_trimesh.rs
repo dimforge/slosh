@@ -1,5 +1,6 @@
+use crate::math::Vector;
 use encase::ShaderType;
-use nalgebra::{Point3, Vector3, vector};
+use glam::UVec3;
 use rapier::geometry::{Segment, TriMesh, Triangle};
 use std::collections::HashSet;
 
@@ -9,13 +10,13 @@ const EPS: f32 = 1.0e-5;
 
 pub struct TriangleSample {
     pub triangle_id: u32,
-    pub point: Point3<f32>,
+    pub point: Vector,
 }
 
 #[derive(Copy, Clone, Debug, ShaderType)]
 #[repr(C)]
 pub struct GpuSampleIds {
-    pub triangle: Vector3<u32>,
+    pub triangle: UVec3,
     pub collider: u32,
 }
 
@@ -28,8 +29,8 @@ pub struct SamplingParams {
 
 #[derive(Default, Clone)]
 pub struct SamplingBuffers {
-    pub local_samples: Vec<Point3<f32>>,
-    pub samples: Vec<Point3<f32>>,
+    pub local_samples: Vec<Vector>,
+    pub samples: Vec<Vector>,
     pub samples_ids: Vec<GpuSampleIds>,
 }
 
@@ -39,11 +40,11 @@ pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut 
     for sample in samples {
         let tri_idx = trimesh.indices()[sample.triangle_id as usize];
         let sample_id = GpuSampleIds {
-            triangle: vector![
+            triangle: UVec3::new(
                 params.base_vid + tri_idx[0],
                 params.base_vid + tri_idx[1],
-                params.base_vid + tri_idx[2]
-            ],
+                params.base_vid + tri_idx[2],
+            ),
             collider: params.collider_id,
         };
         buffers.local_samples.push(sample.point);
@@ -61,7 +62,7 @@ pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut 
 /// Samples a triangle mesh with a set of points such that at least one point is generated
 /// inside each cell on a grid on the x-y plane with cells sized by `xy_spacing`.
 pub fn sample_mesh(
-    vertices: &[Point3<f32>],
+    vertices: &[Vector],
     indices: &[[u32; 3]],
     xy_spacing: f32,
 ) -> Vec<TriangleSample> {
@@ -117,7 +118,7 @@ pub fn sample_edge(
     triangle_id: u32,
 ) {
     let ab = edge.b - edge.a;
-    let edge_length = ab.norm();
+    let edge_length = ab.length();
 
     if edge_length > EPS {
         let edge_dir = ab / edge_length;
@@ -153,9 +154,9 @@ pub fn sample_triangle(
     triangle_id: u32,
 ) {
     // select the longest edge as the base
-    let distance_ab = nalgebra::distance(&triangle.b, &triangle.a);
-    let distance_bc = nalgebra::distance(&triangle.c, &triangle.b);
-    let distance_ca = nalgebra::distance(&triangle.a, &triangle.c);
+    let distance_ab = triangle.b.distance(triangle.a);
+    let distance_bc = triangle.c.distance(triangle.b);
+    let distance_ca = triangle.a.distance(triangle.c);
     let max = distance_ab.max(distance_bc).max(distance_ca);
 
     let triangle = if max == distance_bc {
@@ -176,7 +177,7 @@ pub fn sample_triangle(
 
     let ac = triangle.c - triangle.a;
     let base = triangle.b - triangle.a;
-    let base_length = base.norm();
+    let base_length = base.length();
     let base_dir = base / base_length;
 
     // Adjust the spacing so it matches the required spacing on the x-y plane.
@@ -194,7 +195,7 @@ pub fn sample_triangle(
     let base_step = base_dir * spacing;
 
     // Project C on the base AB.
-    let ac_offset_length = ac.dot(&base_dir);
+    let ac_offset_length = ac.dot(base_dir);
     let bc_offset_length = base_length - ac_offset_length;
 
     if ac_offset_length < EPS || bc_offset_length < EPS || base_length < EPS {
@@ -203,7 +204,7 @@ pub fn sample_triangle(
 
     // Compute the triangle’s height vector.
     let height = ac - base_dir * ac_offset_length;
-    let height_length = height.norm();
+    let height_length = height.length();
     let height_dir = height / height_length;
     // Calculate the tangents.
     let tan_alpha = height_length / ac_offset_length;
@@ -216,8 +217,8 @@ pub fn sample_triangle(
 
         // Compute the height at the current base_position. The point at the
         // end of that height is either in the line (AC) or (BC), whichever is closer.
-        let height_ac = tan_alpha * nalgebra::distance(&triangle.a, &base_position);
-        let height_bc = tan_beta * nalgebra::distance(&triangle.b, &base_position);
+        let height_ac = tan_alpha * triangle.a.distance(base_position);
+        let height_bc = tan_beta * triangle.b.distance(base_position);
         let height_length = height_ac.min(height_bc);
 
         // Calculate the step increment on the height.
@@ -228,7 +229,7 @@ pub fn sample_triangle(
         for j in 1..height_step_count as u32 {
             let particle_position = base_position + (j as f32) * height_step;
 
-            if particle_position.iter().any(|e| !e.is_finite()) {
+            if !particle_position.is_finite() {
                 continue;
             }
 

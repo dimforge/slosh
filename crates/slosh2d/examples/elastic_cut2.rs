@@ -1,6 +1,6 @@
 use slosh_testbed2d::{RapierData, slosh};
 
-use nalgebra::{Vector2, point, vector};
+use glam::vec2;
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -25,7 +25,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     for i in 0..700 {
         for j in 0..700 {
             let position =
-                point![i as f32 + 0.5, j as f32 + 0.5] * cell_width / 2.0 + Vector2::y() * offset_y;
+                vec2(i as f32 + 0.5, j as f32 + 0.5) * cell_width / 2.0 + vec2(0.0, offset_y);
 
             let density = 1000.0;
             let radius = cell_width / 4.0;
@@ -40,7 +40,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81] * app_state.gravity_factor,
+        gravity: vec2(0.0, -9.81) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
         padding: 0.0,
     };
@@ -50,7 +50,7 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     /*
      * Static platforms.
      */
-    let rb = RigidBodyBuilder::fixed().translation(vector![35.0, 20.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec2(35.0, 20.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(70.0, 1.0);
     rapier_data
@@ -60,12 +60,12 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     let mut polyline = vec![];
     let subdivs = 100;
     let length = 84.0;
-    let start = point![35.0, 70.0] - vector![length / 2.0, 0.0];
+    let start = vec2(35.0 - length / 2.0, 70.0);
 
     for i in 0..=subdivs {
         let step = length / (subdivs as f32);
         let dx = i as f32 * step;
-        polyline.push(start + vector![dx, dx.sin()])
+        polyline.push(start + vec2(dx, dx.sin()))
     }
 
     let rb = RigidBodyBuilder::fixed();
@@ -80,8 +80,8 @@ pub fn elastic_cut_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
         let rb_handle = rapier_data.bodies.insert(rb);
         let co = ColliderBuilder::polyline(
             vec![
-                point![0.0 + k as f32 * 15.0, 20.0],
-                point![-10.0 + k as f32 * 15.0, 45.0],
+                vec2(0.0 + k as f32 * 15.0, 20.0),
+                vec2(-10.0 + k as f32 * 15.0, 45.0),
             ],
             None,
         )

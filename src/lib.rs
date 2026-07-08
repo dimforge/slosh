@@ -108,10 +108,10 @@ pub mod math {
 
     /// Angular inertia type for 2D simulations (scalar).
     #[cfg(feature = "dim2")]
-    pub type AngularInertia<N> = N;
+    pub type AngularInertia = f32;
     /// Angular inertia type for 3D simulations (3x3 matrix).
     #[cfg(feature = "dim3")]
-    pub type AngularInertia<N> = rapier::na::Matrix3<N>;
+    pub type AngularInertia = glam::Mat3;
 }
 
 /// Re-exports of commonly used dependencies for convenience.

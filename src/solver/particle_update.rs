@@ -39,7 +39,7 @@ struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     particles_pos: &'a GpuTensor<ParticlePosition, B>,
     particles_kin: &'a GpuTensor<Kinematics, B>,
     particles_cdf: &'a GpuTensor<Cdf, B>,
-    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_def_grad: &'a GpuTensor<Matrix, B>,
     particles_props: &'a GpuTensor<ParticleProperties, B>,
     particles_len: &'a GpuScalar<u32, B>,
 }

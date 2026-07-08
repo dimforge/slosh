@@ -1,6 +1,6 @@
 use slosh_testbed3d::{RapierData, slosh};
 
-use nalgebra::{point, vector};
+use glam::vec3;
 use rapier3d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -29,11 +29,11 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     for i in 0..nxz {
         for j in 0..100 {
             for k in 0..nxz {
-                let position = point![
+                let position = vec3(
                     i as f32 + 0.5 - nxz as f32 / 2.0,
                     j as f32 + 0.5 + 10.0,
-                    k as f32 + 0.5 - nxz as f32 / 2.0
-                ] * cell_width
+                    k as f32 + 0.5 - nxz as f32 / 2.0,
+                ) * cell_width
                     / 2.0;
                 let radius = cell_width / 4.0;
                 let model = ParticleModel::sand(YOUNG_MODULUS, POISSON_RATIO);
@@ -73,36 +73,36 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81, 0.0] * app_state.gravity_factor,
+        gravity: vec3(0.0, -9.81, 0.0) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
     };
 
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, -4.0, 0.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(0.0, -4.0, 0.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(100.0, 4.0, 100.0);
     rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, 5.0, -35.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(0.0, 5.0, -35.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(35.0, 5.0, 0.5);
     rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
-    let rb = RigidBodyBuilder::fixed().translation(vector![0.0, 5.0, 35.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(0.0, 5.0, 35.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(35.0, 5.0, 0.5);
     rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
-    let rb = RigidBodyBuilder::fixed().translation(vector![-35.0, 5.0, 0.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(-35.0, 5.0, 0.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(0.5, 5.0, 35.0);
     rapier_data
         .colliders
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
-    let rb = RigidBodyBuilder::fixed().translation(vector![35.0, 5.0, 0.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec3(35.0, 5.0, 0.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(0.5, 5.0, 35.0);
     rapier_data
@@ -110,9 +110,9 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![0.0, 2.0, 0.0])
-        .rotation(vector![0.0, 0.0, -0.5])
-        .angvel(vector![0.0, -1.0, 0.0]);
+        .translation(vec3(0.0, 2.0, 0.0))
+        .rotation(vec3(0.0, 0.0, -0.5))
+        .angvel(vec3(0.0, -1.0, 0.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(0.5, 2.0, 30.0);
     rapier_data

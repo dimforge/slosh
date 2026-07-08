@@ -1,11 +1,12 @@
+use crate::math::Vector;
 use encase::ShaderType;
-use nalgebra::{Point2, Vector2, vector};
+use glam::UVec2;
 use rapier::geometry::{Polyline, Segment};
 
 #[derive(Copy, Clone, Debug, ShaderType)]
 #[repr(C)]
 pub struct GpuSampleIds {
-    pub segment: Vector2<u32>,
+    pub segment: UVec2,
     pub collider: u32,
 }
 
@@ -19,7 +20,7 @@ pub struct SamplingParams {
 
 #[derive(Default, Clone)]
 pub struct SamplingBuffers {
-    pub samples: Vec<Point2<f32>>,
+    pub samples: Vec<Vector>,
     pub samples_ids: Vec<GpuSampleIds>,
 }
 
@@ -34,7 +35,7 @@ pub fn sample_polyline(
             polyline.vertices()[seg_idx[1] as usize],
         );
         let sample_id = GpuSampleIds {
-            segment: vector![params.base_vid + seg_idx[0], params.base_vid + seg_idx[1]],
+            segment: UVec2::new(params.base_vid + seg_idx[0], params.base_vid + seg_idx[1]),
             collider: params.collider_id,
         };
         buffers.samples.push(seg.a);
@@ -47,7 +48,7 @@ pub fn sample_polyline(
                     break;
                 }
 
-                buffers.samples.push(seg.a + *dir * shift);
+                buffers.samples.push(seg.a + dir * shift);
                 buffers.samples_ids.push(sample_id);
             }
 

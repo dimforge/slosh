@@ -1,6 +1,6 @@
 use slosh_testbed2d::{RapierData, slosh};
 
-use nalgebra::{Vector2, point, vector};
+use glam::vec2;
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -25,7 +25,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     for i in 0..700 {
         for j in 0..700 {
             let position =
-                point![i as f32 + 0.5, j as f32 + 0.5] * cell_width / 2.0 + Vector2::y() * offset_y;
+                vec2(i as f32 + 0.5, j as f32 + 0.5) * cell_width / 2.0 + vec2(0.0, offset_y);
             let density = 1000.0;
             let radius = cell_width / 4.0;
             let young_modulus = 1.0e7;
@@ -43,7 +43,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81] * app_state.gravity_factor,
+        gravity: vec2(0.0, -9.81) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
         padding: 0.0,
     };
@@ -53,7 +53,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     /*
      * Static platforms.
      */
-    let rb = RigidBodyBuilder::fixed().translation(vector![35.0, -1.0]);
+    let rb = RigidBodyBuilder::fixed().translation(vec2(35.0, -1.0));
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(42.0, 1.0);
     rapier_data
@@ -61,7 +61,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::fixed()
-        .translation(vector![-25.0, 45.0])
+        .translation(vec2(-25.0, 45.0))
         .rotation(0.5);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 52.0);
@@ -70,7 +70,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::fixed()
-        .translation(vector![95.0, 45.0])
+        .translation(vec2(95.0, 45.0))
         .rotation(-0.5);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 52.0);
@@ -82,7 +82,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
      * Rotating platforms.
      */
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![5.0, 35.0])
+        .translation(vec2(5.0, 35.0))
         .angvel(ANGVEL);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 10.0);
@@ -91,7 +91,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![35.0, 35.0])
+        .translation(vec2(35.0, 35.0))
         .angvel(-ANGVEL);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(10.0, 1.0);
@@ -100,7 +100,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![65.0, 35.0])
+        .translation(vec2(65.0, 35.0))
         .angvel(ANGVEL);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(1.0, 10.0);
@@ -109,7 +109,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![20.0, 20.0])
+        .translation(vec2(20.0, 20.0))
         .angvel(-ANGVEL);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::ball(5.0);
@@ -118,7 +118,7 @@ pub fn sand_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
         .insert_with_parent(co, rb_handle, &mut rapier_data.bodies);
 
     let rb = RigidBodyBuilder::kinematic_velocity_based()
-        .translation(vector![50.0, 20.0])
+        .translation(vec2(50.0, 20.0))
         .angvel(-ANGVEL);
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::capsule_y(5.0, 3.0);
