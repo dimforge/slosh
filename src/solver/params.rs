@@ -1,3 +1,4 @@
+use crate::math::Vector;
 use bytemuck::{Pod, Zeroable};
 use slang_hal::{BufferUsages, backend::Backend};
 use stensor::tensor::{GpuScalar, GpuTensor};
@@ -11,14 +12,10 @@ use stensor::tensor::{GpuScalar, GpuTensor};
 #[repr(C)]
 pub struct SimulationParams {
     /// Gravitational acceleration vector (m/s²).
-    #[cfg(feature = "dim2")]
-    pub gravity: nalgebra::Vector2<f32>,
+    pub gravity: Vector,
     /// Padding for GPU alignment (2D only).
     #[cfg(feature = "dim2")]
     pub padding: f32,
-    /// Gravitational acceleration vector (m/s²).
-    #[cfg(feature = "dim3")]
-    pub gravity: nalgebra::Vector3<f32>,
     /// Simulation timestep duration (seconds).
     pub dt: f32,
 }

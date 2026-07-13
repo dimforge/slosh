@@ -28,13 +28,12 @@ use crate::prep_readback::{GpuReadbackData, PrepReadback, RenderMode};
 use kiss3d::egui;
 use kiss3d::planar_camera::Sidescroll;
 use kiss3d::prelude::*;
-#[cfg(feature = "dim3")]
-use nalgebra::Vector3;
 use regex::Regex;
 use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::re_exports::include_dir;
 use slang_hal::BufferUsages;
 use slang_hal::SlangCompiler;
+use slosh::math::Vector;
 use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::geometry::ShapeType;
@@ -125,13 +124,13 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             #[cfg(feature = "dim3")]
             render_aabb_enabled: false,
             #[cfg(feature = "dim3")]
-            render_aabb_min: nalgebra::Vector3::repeat(-100.0),
+            render_aabb_min: Vector::splat(-100.0),
             #[cfg(feature = "dim3")]
-            render_aabb_max: nalgebra::Vector3::repeat(100.0),
+            render_aabb_max: Vector::splat(100.0),
             #[cfg(feature = "dim3")]
-            render_aabb_slider_min: nalgebra::Vector3::repeat(-100.0),
+            render_aabb_slider_min: Vector::splat(-100.0),
             #[cfg(feature = "dim3")]
-            render_aabb_slider_max: nalgebra::Vector3::repeat(100.0),
+            render_aabb_slider_max: Vector::splat(100.0),
             #[cfg(feature = "dim3")]
             initial_camera_eye: None,
             #[cfg(feature = "dim3")]
@@ -247,8 +246,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         // inward stay where they are.
         #[cfg(feature = "dim3")]
         if !self.step_result.instances.is_empty() {
-            let mut new_min = nalgebra::Vector3::repeat(f32::INFINITY);
-            let mut new_max = nalgebra::Vector3::repeat(f32::NEG_INFINITY);
+            let mut new_min = Vector::splat(f32::INFINITY);
+            let mut new_max = Vector::splat(f32::NEG_INFINITY);
             for d in &self.step_result.instances {
                 new_min.x = new_min.x.min(d.position.x);
                 new_min.y = new_min.y.min(d.position.y);
@@ -281,7 +280,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                 .iter()
                 .map(|d| PlanarInstanceData {
                     position: kiss3d::nalgebra::Point2::new(d.position.x, d.position.y),
-                    color: d.color.into(),
+                    color: d.color.to_array(),
                     #[rustfmt::skip]
                     deformation: kiss3d::nalgebra::Matrix2::new(
                         d.deformation.m11, d.deformation.m12,
@@ -313,7 +312,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
                             d.position.y,
                             d.position.z,
                         ),
-                        color: d.color.into(),
+                        color: d.color.to_array(),
                         #[rustfmt::skip]
                         deformation: kiss3d::nalgebra::Matrix3::new(
                             d.deformation.m11, d.deformation.m12, d.deformation.m13,
@@ -342,7 +341,7 @@ pub async fn run_with_compiler<GpuModel: GpuParticleModelData>(
     }
     #[cfg(feature = "dim3")]
     {
-        run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector3::y()).await;
+        run_with_hooks(compiler, |_, _| Box::new(()), scene_builders, Vector::Y).await;
     }
 }
 
@@ -350,7 +349,7 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
-    #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
+    #[cfg(feature = "dim3")] up_axis: Vector,
 ) {
     run_with_hooks_and_ui(
         compiler,
@@ -373,7 +372,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
         &SimulationStepResult,
         bool,
     ) -> Option<RunState>,
-    #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
+    #[cfg(feature = "dim3")] up_axis: Vector,
 ) {
     let mut colliders_gfx = HashMap::new();
     let mut stage = Stage::new(compiler, hooks, scene_builders).await;
@@ -409,7 +408,9 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     };
     #[cfg(feature = "dim3")]
     {
-        camera3d.set_up_axis(up_axis);
+        camera3d.set_up_axis(kiss3d::nalgebra::Vector3::new(
+            up_axis.x, up_axis.y, up_axis.z,
+        ));
     }
     let mut camera2d = Sidescroll::new();
     #[cfg(feature = "dim2")]
@@ -632,17 +633,17 @@ fn update_colliders<GpuModel: GpuParticleModelData>(
             {
                 // TODO: here we are converting between nalgebra versions.
                 //       This can be simplified once kiss3d is updated to the latest nalgebra.
-                let tra = pose.translation.vector;
-                let rot = pose.rotation.into_inner();
+                let tra = pose.translation;
+                let rot = pose.rotation;
                 node.set_local_translation([tra.x, tra.y, tra.z].into());
                 node.set_local_rotation(kiss3d::nalgebra::Unit::new_unchecked(
-                    kiss3d::nalgebra::Quaternion::new(rot.w, rot.i, rot.j, rot.k),
+                    kiss3d::nalgebra::Quaternion::new(rot.w, rot.x, rot.y, rot.z),
                 ));
             }
             #[cfg(feature = "dim2")]
             {
-                let tra = pose.translation.vector;
-                let rot = pose.rotation.into_inner();
+                let tra = pose.translation;
+                let rot = pose.rotation;
                 node.set_local_translation([tra.x, tra.y].into());
                 node.set_local_rotation(kiss3d::nalgebra::Unit::new_unchecked(
                     kiss3d::nalgebra::Complex::new(rot.re, rot.im),
@@ -711,11 +712,11 @@ fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<PlanarMesh> {
             for vox in voxels.voxels() {
                 if !vox.state.is_empty() {
                     let bid = vtx.len() as u32;
-                    let center = nalgebra::point![vox.center.x, vox.center.y];
-                    vtx.push(center + nalgebra::vector![sz.x, sz.y]);
-                    vtx.push(center + nalgebra::vector![-sz.x, sz.y]);
-                    vtx.push(center + nalgebra::vector![-sz.x, -sz.y]);
-                    vtx.push(center + nalgebra::vector![sz.x, -sz.y]);
+                    let center = vox.center;
+                    vtx.push(center + Vector::new(sz.x, sz.y));
+                    vtx.push(center + Vector::new(-sz.x, sz.y));
+                    vtx.push(center + Vector::new(-sz.x, -sz.y));
+                    vtx.push(center + Vector::new(sz.x, -sz.y));
                     idx.push([bid, bid + 1, bid + 2]);
                     idx.push([bid + 2, bid + 3, bid]);
                 }
@@ -753,7 +754,7 @@ fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<PlanarMesh> {
 }
 
 #[cfg(feature = "dim2")]
-fn kiss3d_mesh_from_polyline(vertices: Vec<nalgebra::Point2<f32>>) -> PlanarMesh {
+fn kiss3d_mesh_from_polyline(vertices: Vec<Vector>) -> PlanarMesh {
     let n = vertices.len();
     let idx = (1..n as u32 - 1).map(|i| [0, i, i + 1]).collect();
     kiss3d_mesh((vertices, idx))
@@ -805,7 +806,7 @@ fn generate_collider_mesh(co_shape: &dyn Shape) -> Option<GpuMesh> {
 }
 
 #[cfg(feature = "dim3")]
-fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::resource::GpuMesh {
+fn kiss3d_mesh(buffers: (Vec<Vector>, Vec<[u32; 3]>)) -> kiss3d::resource::GpuMesh {
     let (vtx, idx) = buffers;
     let kiss_vtx: Vec<_> = vtx
         .into_iter()
@@ -819,9 +820,7 @@ fn kiss3d_mesh(buffers: (Vec<nalgebra::Point3<f32>>, Vec<[u32; 3]>)) -> kiss3d::
 }
 
 #[cfg(feature = "dim2")]
-fn kiss3d_mesh(
-    buffers: (Vec<nalgebra::Point2<f32>>, Vec<[u32; 3]>),
-) -> kiss3d::resource::PlanarMesh {
+fn kiss3d_mesh(buffers: (Vec<Vector>, Vec<[u32; 3]>)) -> kiss3d::resource::PlanarMesh {
     let (vtx, idx) = buffers;
     let kiss_vtx: Vec<_> = vtx
         .into_iter()

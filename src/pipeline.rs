@@ -175,7 +175,8 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipelineHooks<B, GpuModel> f
 pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     /// The simulation timestep.
     pub base_dt: f32,
-    pub gravity: Vector<f32>,
+    /// Gravitational acceleration vector (m/s²).
+    pub gravity: Vector,
     /// Global simulation parameters (gravity, timestep).
     pub sim_params: GpuSimulationParams<B>,
     /// Spatial grid for momentum transfer.

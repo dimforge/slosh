@@ -4,11 +4,16 @@ members = [
     "crates/slosh_testbed3d",
     "crates/slosh2d",
     "crates/slosh3d",
-#    "validation_tests",
+    # "validation_tests",
 ]
 resolver = "2"
 
 [workspace.dependencies]
+glam = { version = "0.30", default-features = false, features = [
+    "std",
+    "encase",
+    "bytemuck",
+] }
 nalgebra = { version = "0.34", features = ["convert-bytemuck"] }
 wgpu = { version = "27", features = ["naga-ir"] }
 encase = "0.12"

@@ -1,4 +1,5 @@
 # Unreleased
+- Update to Rapier 0.32. This migrates most public APIs and internals to use `glam` instead of `nalgebra`.
 - Fix a GPU validation error / panic on simulations with more than ~4.19M particles, caused by
   compute kernels dispatching more than 65535 workgroups along a single dimension. The affected 
   kernels now clamp the dispatch and grid-stride over the particles.

@@ -47,7 +47,7 @@ struct TimestepBoundsArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     grid: &'a GpuTensor<GpuGridMetadata, B>,
     particles_model: &'a GpuTensor<GpuModel, B>,
     particles_kin: &'a GpuTensor<Kinematics, B>,
-    particles_def_grad: &'a GpuTensor<Matrix<f32>, B>,
+    particles_def_grad: &'a GpuTensor<Matrix, B>,
     particles_props: &'a GpuTensor<ParticleProperties, B>,
     particles_len: &'a GpuScalar<u32, B>,
     result: &'a GpuScalar<GpuTimestepBounds, B>,

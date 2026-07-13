@@ -18,6 +18,7 @@ webgpu = ["slosh3d/webgpu"]
 render = ["kiss3d"]
 
 [dependencies]
+glam = { workspace = true }
 nalgebra = { workspace = true }
 wgpu = { workspace = true }
 slang-hal = { workspace = true }
@@ -38,7 +39,10 @@ plotters = "0.3"
 rstar = "0.12"
 
 # Rendering dependencies (optional)
-kiss3d = { version = "0.37", features = ["vertex_index_u32", "egui"], optional = true }
+kiss3d = { version = "0.37", features = [
+    "vertex_index_u32",
+    "egui",
+], optional = true }
 
 [dependencies.pollster]
 version = "0.4"

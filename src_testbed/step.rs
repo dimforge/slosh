@@ -4,14 +4,13 @@ use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::BufferUsages;
 #[cfg(feature = "webgpu")]
 use slang_hal::GpuTimingResult;
-use slosh::rapier::na;
 use slosh::solver::{GpuParticleModelData, SimulationParams};
 use stensor::tensor::GpuTensor;
 
 /// Byte stride of one `Mat<f32>` element in the GPU def-grad buffer, matching
 /// the slang/WGSL structured-buffer layout. In 3D, `mat3x3<f32>` has three
 /// `vec4`-aligned columns for a total of 48 bytes (not the tightly-packed 36
-/// bytes of a CPU `nalgebra::Matrix3`). In 2D, `mat2x2<f32>` is already
+/// bytes of a CPU `glam::Mat3`). In 2D, `mat2x2<f32>` is already
 /// tightly packed at 16 bytes, so there is no mismatch.
 #[cfg(feature = "dim2")]
 pub const GPU_DEF_GRAD_STRIDE_BYTES: usize = 16;
@@ -287,9 +286,9 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 
         // Copy deformation gradient buffer to staging for readback. We use the
         // GPU-side stride (see `GPU_DEF_GRAD_STRIDE_BYTES`) rather than
-        // `size_of::<Matrix<f32>>()`, which is only correct in 2D. In 3D the
+        // `size_of::<Matrix>()`, which is only correct in 2D. In 3D the
         // GPU mat3x3 has vec4-aligned columns (48 bytes), not the tightly
-        // packed 36 bytes of a CPU nalgebra Matrix3.
+        // packed 36 bytes of a CPU `glam::Mat3`.
         {
             let def_grad_buf = physics.data.particles.def_grad.buffer();
             let staging_buf = self.def_grad_staging.buffer();
@@ -337,7 +336,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         // Step rapier to update kinematic bodies.
         let rapier = &mut self.physics.rapier_data;
         rapier.physics_pipeline.step(
-            &na::zero(),
+            slosh::math::Vector::ZERO,
             &rapier.params,
             &mut rapier.islands,
             &mut rapier.broad_phase,

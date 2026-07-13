@@ -4,10 +4,10 @@
 //! optimized for GPU computation. It includes conversion utilities from Rapier/Parry
 //! shapes to GPU-friendly formats with vertex buffers.
 
-use crate::rapier::na::{Vector4, vector};
+use glam::Vec4;
 use rapier::geometry::{Shape, ShapeType, TypedShape};
 
-use crate::math::{Point, Vector};
+use crate::math::Vector;
 
 /// GPU shape type identifiers.
 ///
@@ -43,9 +43,9 @@ pub struct ShapeBuffers {
     /// Vertex positions for all complex shapes.
     ///
     /// Polyline and trimesh shapes store references to ranges within this buffer.
-    pub vertices: Vec<Point<f32>>,
+    pub vertices: Vec<Vector>,
     /// Vertex buffer for trimesh collision (BVH AABBs, vertices, pseudo-normals).
-    pub collision_vertices: Vec<Point<f32>>,
+    pub collision_vertices: Vec<Vector>,
     /// Index buffer for trimesh collision (BVH topology, triangle indices).
     pub collision_indices: Vec<u32>,
 }
@@ -64,8 +64,8 @@ pub struct ShapeBuffers {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
 pub struct GpuShape {
-    a: Vector4<f32>,
-    b: Vector4<f32>,
+    a: Vec4,
+    b: Vec4,
 }
 
 impl GpuShape {
@@ -82,8 +82,8 @@ impl GpuShape {
     pub fn ball(radius: f32) -> Self {
         let tag = f32::from_bits(GpuShapeType::Ball as u32);
         Self {
-            a: vector![radius, 0.0, 0.0, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: Vec4::new(radius, 0.0, 0.0, tag),
+            b: Vec4::ZERO,
         }
     }
 
@@ -98,14 +98,14 @@ impl GpuShape {
     /// # use crate::math::vector;
     /// let cuboid = GpuShape::cuboid(vector![1.0, 2.0, 3.0]);
     /// ```
-    pub fn cuboid(half_extents: Vector<f32>) -> Self {
+    pub fn cuboid(half_extents: Vector) -> Self {
         let tag = f32::from_bits(GpuShapeType::Cuboid as u32);
         Self {
             #[cfg(feature = "dim2")]
-            a: vector![half_extents.x, half_extents.y, 0.0, tag],
+            a: Vec4::new(half_extents.x, half_extents.y, 0.0, tag),
             #[cfg(feature = "dim3")]
-            a: vector![half_extents.x, half_extents.y, half_extents.z, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: Vec4::new(half_extents.x, half_extents.y, half_extents.z, tag),
+            b: Vec4::ZERO,
         }
     }
 
@@ -117,17 +117,17 @@ impl GpuShape {
     /// * `a` - First endpoint of the capsule's central segment
     /// * `b` - Second endpoint of the capsule's central segment
     /// * `radius` - The radius of the capsule's rounded ends
-    pub fn capsule(a: Point<f32>, b: Point<f32>, radius: f32) -> Self {
+    pub fn capsule(a: Vector, b: Vector, radius: f32) -> Self {
         let tag = f32::from_bits(GpuShapeType::Capsule as u32);
         #[cfg(feature = "dim2")]
         return Self {
-            a: vector![a.x, a.y, 0.0, tag],
-            b: vector![b.x, b.y, 0.0, radius],
+            a: Vec4::new(a.x, a.y, 0.0, tag),
+            b: Vec4::new(b.x, b.y, 0.0, radius),
         };
         #[cfg(feature = "dim3")]
         return Self {
-            a: vector![a.x, a.y, a.z, tag],
-            b: vector![b.x, b.y, b.z, radius],
+            a: Vec4::new(a.x, a.y, a.z, tag),
+            b: Vec4::new(b.x, b.y, b.z, radius),
         };
     }
 
@@ -142,8 +142,8 @@ impl GpuShape {
         let rng0 = f32::from_bits(vertex_range[0]);
         let rng1 = f32::from_bits(vertex_range[1]);
         Self {
-            a: vector![rng0, rng1, 0.0, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: Vec4::new(rng0, rng1, 0.0, tag),
+            b: Vec4::ZERO,
         }
     }
 
@@ -157,18 +157,18 @@ impl GpuShape {
     pub fn trimesh(trimesh: &crate::trimesh::GpuTriMesh, vertex_base_id: u32) -> Self {
         let tag = f32::from_bits(GpuShapeType::TriMesh as u32);
         Self {
-            a: vector![
+            a: Vec4::new(
                 f32::from_bits(trimesh.bvh_vtx_root_id),
                 f32::from_bits(trimesh.bvh_idx_root_id),
                 f32::from_bits(trimesh.bvh_node_len),
-                tag
-            ],
-            b: vector![
+                tag,
+            ),
+            b: Vec4::new(
                 f32::from_bits(trimesh.num_triangles),
                 f32::from_bits(trimesh.num_vertices),
                 f32::from_bits(vertex_base_id),
-                0.0
-            ],
+                0.0,
+            ),
         }
     }
 
@@ -181,8 +181,8 @@ impl GpuShape {
     pub fn cone(half_height: f32, radius: f32) -> Self {
         let tag = f32::from_bits(GpuShapeType::Cone as u32);
         Self {
-            a: vector![half_height, radius, 0.0, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: Vec4::new(half_height, radius, 0.0, tag),
+            b: Vec4::ZERO,
         }
     }
 
@@ -195,8 +195,8 @@ impl GpuShape {
     pub fn cylinder(half_height: f32, radius: f32) -> Self {
         let tag = f32::from_bits(GpuShapeType::Cylinder as u32);
         Self {
-            a: vector![half_height, radius, 0.0, tag],
-            b: vector![0.0, 0.0, 0.0, 0.0],
+            a: Vec4::new(half_height, radius, 0.0, tag),
+            b: Vec4::ZERO,
         }
     }
 

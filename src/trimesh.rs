@@ -1,8 +1,9 @@
 // TODO: move this to rbd?
 
+use crate::math::Vector;
 use encase::ShaderType;
 use rapier::geometry::TriMesh;
-use rapier::prelude::{DIM, Point};
+use rapier::prelude::DIM;
 
 #[derive(Copy, Clone, ShaderType)]
 pub struct GpuTriMesh {
@@ -20,7 +21,7 @@ pub struct GpuTriMesh {
 
 pub fn convert_trimesh_to_gpu(
     shape: &TriMesh,
-    vertices: &mut Vec<Point<f32>>,
+    vertices: &mut Vec<Vector>,
     indices: &mut Vec<u32>,
 ) -> GpuTriMesh {
     let bvh_vtx_root_id = vertices.len();
@@ -56,7 +57,7 @@ pub fn convert_trimesh_to_gpu(
         .map(|tri| {
             let aabb = tri.local_aabb();
             BvhObject {
-                aabb: bvh::aabb::Aabb::with_bounds(aabb.mins, aabb.maxs),
+                aabb: bvh::aabb::Aabb::with_bounds(aabb.mins.into(), aabb.maxs.into()),
                 node_index: 0,
             }
         })
@@ -64,7 +65,11 @@ pub fn convert_trimesh_to_gpu(
 
     let bvh = bvh::bvh::Bvh::build(&mut objects);
     let flat_bvh = bvh.flatten();
-    vertices.extend(flat_bvh.iter().flat_map(|n| [n.aabb.min, n.aabb.max]));
+    vertices.extend(
+        flat_bvh
+            .iter()
+            .flat_map(|n| [Vector::from(n.aabb.min), Vector::from(n.aabb.max)]),
+    );
     let bvh_node_len = flat_bvh.len();
     indices.extend(
         flat_bvh
@@ -79,12 +84,12 @@ pub fn convert_trimesh_to_gpu(
             .pseudo_normals()
             .expect("trimeshes without pseudo-normals are not supported");
         vertices.extend_from_slice(shape.vertices());
-        vertices.extend(pn.vertices_pseudo_normal.iter().map(|n| Point::from(*n)));
+        vertices.extend_from_slice(&pn.vertices_pseudo_normal);
         assert_eq!(shape.vertices().len(), pn.vertices_pseudo_normal.len());
         vertices.extend(
             pn.edges_pseudo_normal
                 .iter()
-                .flat_map(|n| n.map(Point::from)),
+                .flat_map(|n| n.map(Vector::from)),
         );
     }
     indices.extend(shape.indices().iter().flat_map(|tri| tri.iter().copied()));

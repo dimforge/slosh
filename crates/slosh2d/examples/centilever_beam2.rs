@@ -1,6 +1,6 @@
 use slosh_testbed2d::{RapierData, slosh};
 
-use nalgebra::{point, vector};
+use glam::vec2;
 use rapier2d::prelude::{ColliderBuilder, RigidBodyBuilder};
 use slang_hal::backend::WebGpu;
 use slosh::{
@@ -33,7 +33,7 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     let mut particles = vec![];
     for i in 0..ni {
         for j in 0..nj {
-            let position = point![i as f32, j as f32] * diameter;
+            let position = vec2(i as f32, j as f32) * diameter;
             let density = 1000.0;
             let radius = diameter / 2.0;
             let model = ParticleModel::elastic_neo_hookean(young_modulus, poisson_ratio);
@@ -48,13 +48,13 @@ pub fn beam_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsContext {
     };
 
     let params = SimulationParams {
-        gravity: vector![0.0, -9.81] * app_state.gravity_factor,
+        gravity: vec2(0.0, -9.81) * app_state.gravity_factor,
         dt: 1.0 / 60.0,
         padding: 0.0,
     };
 
     let rb = RigidBodyBuilder::fixed()
-        .translation(vector![0.0, height / 2.0])
+        .translation(vec2(0.0, height / 2.0))
         .build();
     let rb_handle = rapier_data.bodies.insert(rb);
     let co = ColliderBuilder::cuboid(fixed_part, height);

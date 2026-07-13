@@ -10,7 +10,7 @@ use crate::grid::grid::{
     GpuActiveBlockHeader, GpuGrid, GpuGridHashMapEntry, GpuGridMetadata, GpuGridNode,
     GpuNodeCollision,
 };
-use crate::math::{GpuSim, Point};
+use crate::math::{GpuSim, Vector};
 use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::shapes::GpuShape;
 use crate::solver::params::GpuSimulationParams;
@@ -42,7 +42,7 @@ struct GridUpdateArgs<'a, B: Backend> {
     body_materials: &'a GpuVector<GpuBoundaryCondition, B>,
     collision_shapes: &'a GpuTensor<GpuShape, B>,
     collision_shape_poses: &'a GpuTensor<GpuSim, B>,
-    collision_shape_vtx: &'a GpuTensor<Point<f32>, B>,
+    collision_shape_vtx: &'a GpuTensor<Vector, B>,
     collision_shape_idx: &'a GpuTensor<u32, B>,
     prev_node_collisions: &'a GpuVector<GpuNodeCollision, B>,
     node_collisions: &'a GpuVector<GpuNodeCollision, B>,

@@ -1,12 +1,11 @@
 //! Impulse accumulation and application for MPM-rigid body coupling.
 
 use crate::grid::grid::{GpuGrid, GpuGridMetadata};
-use crate::math::GpuSim;
+use crate::math::{AngVector, GpuSim, Vector};
 use crate::rbd::dynamics::{GpuBodySet, GpuMassProperties, GpuVelocity};
 use crate::solver::SimulationParams;
 use crate::solver::params::GpuSimulationParams;
 use encase::ShaderType;
-use rapier::math::{AngVector, Point, Vector};
 use slang_hal::backend::Backend;
 use slang_hal::function::GpuFunction;
 use slang_hal::{BufferUsages, Shader, ShaderArgs};
@@ -32,11 +31,11 @@ pub struct WgRigidImpulses<B: Backend> {
 #[repr(C)]
 pub struct RigidImpulse {
     /// Center of mass (for convenience).
-    pub com: Point<f32>,
+    pub com: Vector,
     /// Linear impulse vector.
-    pub linear: Vector<f32>,
+    pub linear: Vector,
     /// Angular impulse (torque).
-    pub angular: AngVector<f32>,
+    pub angular: AngVector,
 }
 
 /// GPU buffers for storing impulses from MPM to rigid bodies.

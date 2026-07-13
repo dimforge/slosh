@@ -18,12 +18,13 @@ required-features = ["dim2"]
 dim2 = []
 default = ["dim2"]
 
-comptime = [ "slosh2d/comptime" ]
-runtime = [ "slosh2d/runtime" ]
+comptime = ["slosh2d/comptime"]
+runtime = ["slosh2d/runtime"]
 
-webgpu = [ "slosh2d/webgpu" ]
+webgpu = ["slosh2d/webgpu"]
 
 [dependencies]
+glam = { workspace = true }
 nalgebra = { workspace = true, features = ["rand"] }
 wgpu = { workspace = true }
 bytemuck = { workspace = true }
@@ -41,7 +42,7 @@ slosh2d = { version = "0.6", path = "../slosh2d" }
 regex = "1"
 web-time = "1"
 
-kiss3d = { version = "0.37", features = [ "vertex_index_u32", "egui" ] }
+kiss3d = { version = "0.37", features = ["vertex_index_u32", "egui"] }
 
 
 [build-dependencies]

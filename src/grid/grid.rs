@@ -2,7 +2,7 @@
 
 use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
-use crate::math::{Point, Vector};
+use crate::math::Vector;
 use crate::solver::{GpuParticleModelData, GpuParticles, GpuRigidParticles, ParticlePosition};
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
@@ -44,7 +44,7 @@ struct GridArgs<'a, B: Backend> {
     particles_pos: &'a GpuVector<ParticlePosition, B>,
     particles_len: &'a GpuScalar<u32, B>,
     active_blocks: &'a GpuVector<GpuActiveBlockHeader, B>,
-    rigid_particles_pos: &'a GpuVector<Point<f32>, B>,
+    rigid_particles_pos: &'a GpuVector<Vector, B>,
     rigid_particle_needs_block: &'a GpuVector<u32, B>,
     sorted_particle_ids: &'a GpuVector<u32, B>,
     particle_node_linked_lists: &'a GpuVector<u32, B>,
@@ -240,8 +240,8 @@ pub struct GpuGridMetadata {
 #[derive(Copy, Clone, PartialEq, ShaderType)]
 #[repr(C)]
 pub struct GpuGridNode {
-    momentum_velocity_mass: nalgebra::Vector4<f32>,
-    momentum_velocity_mass_incompatible: nalgebra::Vector4<f32>,
+    momentum_velocity_mass: glam::Vec4,
+    momentum_velocity_mass_incompatible: glam::Vec4,
     cdf: GpuGridNodeCdf,
 }
 
@@ -253,9 +253,9 @@ pub struct GpuGridNode {
 #[repr(C)]
 pub struct BlockVirtualId {
     #[cfg(feature = "dim2")]
-    id: nalgebra::Vector2<i32>,
+    id: glam::IVec2,
     #[cfg(feature = "dim3")]
-    id: nalgebra::Vector4<i32>, // Vector3 with padding.
+    id: glam::IVec4, // IVec3 with padding.
 }
 
 /// Hash map entry mapping virtual block IDs to physical storage indices.
@@ -269,13 +269,13 @@ pub struct GpuGridHashMapEntry {
     #[cfg(feature = "dim2")]
     pad0: u32,
     #[cfg(feature = "dim3")]
-    pad0: nalgebra::Vector3<u32>,
+    pad0: glam::UVec3,
     key: BlockVirtualId,
     value: u32,
     #[cfg(feature = "dim2")]
     pad1: u32,
     #[cfg(feature = "dim3")]
-    pad1: nalgebra::Vector3<u32>,
+    pad1: glam::UVec3,
 }
 
 impl Default for GpuGridHashMapEntry {
@@ -331,9 +331,9 @@ pub struct GpuActiveBlockHeader {
 #[derive(Copy, Clone, Default, ShaderType)]
 pub struct GpuNodeCollision {
     /// Outward collision normal at the node.
-    normal: Vector<f32>,
+    normal: Vector,
     /// Closest point on the collider surface.
-    point: Vector<f32>,
+    point: Vector,
     /// ID of the colliding shape.
     collider_id: u32,
     /// Whether a collision was detected (stored as a uint for layout reasons).

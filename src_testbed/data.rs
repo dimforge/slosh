@@ -1,4 +1,5 @@
 use crate::step::SimulationStepResult;
+use glam::Vec4;
 use slang_hal::backend::WebGpu;
 use slosh::pipeline::{MpmData, MpmPipeline};
 use slosh::rapier::prelude::{
@@ -26,7 +27,7 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     /// the particle count, these override the default index-cycled palette
     /// in the readback color buffer. Scene builders set this field on
     /// `&mut AppState` during `init()` to color particles by material.
-    pub particle_colors: Option<Vec<nalgebra::Vector4<f32>>>,
+    pub particle_colors: Option<Vec<Vec4>>,
     /// Enable the axis-aligned cutting box (3D only). When false, no filtering
     /// is applied and all particles render.
     #[cfg(feature = "dim3")]
@@ -34,16 +35,16 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     /// Current cutting-box bounds (3D only). Particles outside this box are
     /// culled before being sent to the GPU.
     #[cfg(feature = "dim3")]
-    pub render_aabb_min: nalgebra::Vector3<f32>,
+    pub render_aabb_min: glam::Vec3,
     #[cfg(feature = "dim3")]
-    pub render_aabb_max: nalgebra::Vector3<f32>,
+    pub render_aabb_max: glam::Vec3,
     /// Slider range for the cutting-box sliders (3D only). Scene builders
     /// set this from their particle positions at init time so the sliders
     /// span the actual scene extent.
     #[cfg(feature = "dim3")]
-    pub render_aabb_slider_min: nalgebra::Vector3<f32>,
+    pub render_aabb_slider_min: glam::Vec3,
     #[cfg(feature = "dim3")]
-    pub render_aabb_slider_max: nalgebra::Vector3<f32>,
+    pub render_aabb_slider_max: glam::Vec3,
     /// Optional initial camera eye position (3D only). Set by the scene
     /// builder during `init()` to override the testbed's default arc-ball
     /// camera placement.
