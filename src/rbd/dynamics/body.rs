@@ -2,8 +2,11 @@
 
 use crate::math::{AngVector, AngularInertia, GpuSim, Vector};
 use crate::rbd::shapes::{GpuShape, ShapeBuffers};
+#[cfg(feature = "rapier")]
 use rapier::geometry::ColliderHandle;
+#[cfg(feature = "rapier")]
 use rapier::prelude::MassProperties;
+#[cfg(feature = "rapier")]
 use rapier::{
     dynamics::{RigidBodyHandle, RigidBodySet},
     geometry::ColliderSet,
@@ -43,15 +46,17 @@ pub struct GpuMassProperties {
     pub com: Vector,
 }
 
+#[cfg(feature = "rapier")]
 impl From<MassProperties> for GpuMassProperties {
     fn from(props: MassProperties) -> Self {
+        use crate::math::{real, vector};
         GpuMassProperties {
             #[cfg(feature = "dim2")]
-            inv_inertia: props.inv_principal_inertia,
+            inv_inertia: real(props.inv_principal_inertia),
             #[cfg(feature = "dim3")]
-            inv_inertia: props.reconstruct_inverse_inertia_matrix(),
-            inv_mass: Vector::splat(props.inv_mass),
-            com: props.local_com,
+            inv_inertia: crate::math::matrix(props.reconstruct_inverse_inertia_matrix()),
+            inv_mass: Vector::splat(real(props.inv_mass)),
+            com: vector(props.local_com),
         }
     }
 }
@@ -139,6 +144,7 @@ pub enum BodyCoupling {
 ///
 /// Defines which Rapier rigid body and collider pair should be included in the
 /// GPU simulation and how they should be coupled.
+#[cfg(feature = "rapier")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct BodyCouplingEntry {
     /// Handle to the Rapier rigid body
@@ -180,12 +186,15 @@ impl<B: Backend> GpuBodySet<B> {
     ///
     /// # Panics
     /// Panics if a collider has an unsupported shape type
+    #[cfg(feature = "rapier")]
     pub fn from_rapier(
         backend: &B,
         bodies: &RigidBodySet,
         colliders: &ColliderSet,
         coupling: &[BodyCouplingEntry],
     ) -> Result<Self, B::Error> {
+        use crate::math::vector;
+
         let mut shape_buffers = ShapeBuffers::default();
         let mut gpu_bodies = vec![];
         let mut pt_collider_ids = vec![];
@@ -205,14 +214,19 @@ impl<B: Backend> GpuBodySet<B> {
             let two_ways_coupling = rb.is_dynamic() && coupling.mode == BodyCoupling::TwoWays;
             let desc = BodyDesc {
                 vel: GpuVelocity {
-                    linear: rb.linvel(),
-                    #[allow(clippy::clone_on_copy)] // Needed for 2D/3D switch.
-                    angular: rb.angvel().clone(),
+                    linear: vector(rb.linvel()),
+                    #[cfg(feature = "dim2")]
+                    angular: crate::math::real(rb.angvel()),
+                    #[cfg(feature = "dim3")]
+                    angular: vector(rb.angvel()),
                 },
                 #[cfg(feature = "dim2")]
-                pose: GpuSim::from(rapier::na::Isometry2::from(*rb.position())),
+                pose: GpuSim::from(rapier::na::Isometry2::from(*rb.position()).cast::<f32>()),
                 #[cfg(feature = "dim3")]
-                pose: GpuSim::from_isometry((*rb.position()).into(), 1.0),
+                pose: GpuSim::from_isometry(
+                    rapier::na::Isometry3::from(*rb.position()).cast::<f32>(),
+                    1.0,
+                ),
                 shape,
                 local_mprops: if two_ways_coupling {
                     rb.mass_properties().local_mprops.into()

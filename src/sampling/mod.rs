@@ -4,12 +4,25 @@
 //! MPM-rigid body coupling. In 2D, samples polyline edges; in 3D, samples
 //! triangle mesh surfaces.
 
-#[cfg(feature = "dim2")]
-pub use sample_polyline::*;
-#[cfg(feature = "dim3")]
-pub use sample_trimesh::*;
+#[cfg(feature = "rapier")]
+mod rapier;
+#[cfg(feature = "rapier")]
+pub use rapier::*;
+
+use encase::ShaderType;
 
 #[cfg(feature = "dim2")]
-mod sample_polyline;
+#[derive(Copy, Clone, Debug, ShaderType)]
+#[repr(C)]
+pub struct GpuSampleIds {
+    pub segment: glam::UVec2,
+    pub collider: u32,
+}
+
 #[cfg(feature = "dim3")]
-mod sample_trimesh;
+#[derive(Copy, Clone, Debug, ShaderType)]
+#[repr(C)]
+pub struct GpuSampleIds {
+    pub triangle: glam::UVec3,
+    pub collider: u32,
+}

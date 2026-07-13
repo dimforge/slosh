@@ -18,7 +18,9 @@
 //! # Features
 //!
 //! - `dim2`: Enable 2D simulation mode (mutually exclusive with `dim3`)
-//! - `dim3`: Enable 3D simulation mode (default, mutually exclusive with `dim2`)
+//! - `dim3`: Enable 3D simulation mode (mutually exclusive with `dim2`)
+//! - `rapier-f32`: Support coupling with Rapier using `f32` precision (mutually exclusive with `rapier-f64`)
+//! - `rapier-f64`: Support coupling with Rapier using `f64` precision (mutually exclusive with `rapier-f32`)
 //!
 //! # Example
 //!
@@ -55,10 +57,24 @@
 #![allow(clippy::module_inception)]
 #![allow(missing_docs)]
 
-#[cfg(feature = "dim2")]
+#[cfg(all(feature = "rapier-f32", feature = "rapier-f64"))]
+compile_error!(
+    "Features `rapier-f32` and `rapier-f64` are mutually exclusive. Please enable only one of them."
+);
+#[cfg(all(
+    feature = "rapier",
+    not(any(feature = "rapier-f32", feature = "rapier-f64"))
+))]
+compile_error!("Feature `rapier` requires either `rapier-f32` or `rapier-f64` to be enabled.");
+
+#[cfg(all(feature = "dim2", feature = "rapier-f32"))]
 pub extern crate rapier2d as rapier;
-#[cfg(feature = "dim3")]
+#[cfg(all(feature = "dim2", feature = "rapier-f64"))]
+pub extern crate rapier2d_f64 as rapier;
+#[cfg(all(feature = "dim3", feature = "rapier-f32"))]
 pub extern crate rapier3d as rapier;
+#[cfg(all(feature = "dim3", feature = "rapier-f64"))]
+pub extern crate rapier3d_f64 as rapier;
 
 use slang_hal::re_exports::include_dir;
 
@@ -108,8 +124,43 @@ pub fn register_shaders(compiler: &mut SlangCompiler) {
 /// Re-exports Rapier's math types and defines dimension-specific type aliases
 /// for GPU simulation and angular inertia calculations.
 pub mod math {
-    /// Re-export all mathematical types from Rapier (vectors, matrices, etc.)
-    pub use rapier::math::*;
+    /// Scalar type used by the simulation.
+    pub type Real = f32;
+
+    /// Spatial point type.
+    #[cfg(feature = "dim2")]
+    pub type Point = glam::Vec2;
+    /// Spatial point type.
+    #[cfg(feature = "dim3")]
+    pub type Point = glam::Vec3;
+
+    /// Spatial vector type.
+    #[cfg(feature = "dim2")]
+    pub type Vector = glam::Vec2;
+    /// Spatial vector type.
+    #[cfg(feature = "dim3")]
+    pub type Vector = glam::Vec3;
+
+    /// Square matrix type.
+    #[cfg(feature = "dim2")]
+    pub type Matrix = glam::Mat2;
+    /// Square matrix type.
+    #[cfg(feature = "dim3")]
+    pub type Matrix = glam::Mat3;
+
+    /// Angular vector type.
+    #[cfg(feature = "dim2")]
+    pub type AngVector = f32;
+    /// Angular vector type.
+    #[cfg(feature = "dim3")]
+    pub type AngVector = glam::Vec3;
+
+    /// Spatial dimension.
+    #[cfg(feature = "dim2")]
+    pub const DIM: usize = 2;
+    /// Spatial dimension.
+    #[cfg(feature = "dim3")]
+    pub const DIM: usize = 3;
 
     /// GPU similarity transformation for 2D simulations (translation + rotation).
     #[cfg(feature = "dim2")]
@@ -124,6 +175,68 @@ pub mod math {
     /// Angular inertia type for 3D simulations (3x3 matrix).
     #[cfg(feature = "dim3")]
     pub type AngularInertia = glam::Mat3;
+
+    /// Conversions from Rapier's math types to the simulation's `f32` types.
+    ///
+    /// This is needed to support using Rapier with `f64` precision.
+    #[cfg(feature = "rapier")]
+    pub use rapier_convert::*;
+
+    #[cfg(feature = "rapier")]
+    mod rapier_convert {
+        use super::{Matrix, Vector};
+
+        /// Converts a Rapier scalar into the simulation's `f32` scalar.
+        #[cfg(feature = "rapier-f32")]
+        #[inline]
+        pub fn real(x: rapier::math::Real) -> f32 {
+            x
+        }
+        /// Converts a Rapier scalar into the simulation's `f32` scalar.
+        #[cfg(feature = "rapier-f64")]
+        #[inline]
+        pub fn real(x: rapier::math::Real) -> f32 {
+            x as f32
+        }
+
+        /// Converts a Rapier vector into the simulation's `f32` vector.
+        #[cfg(feature = "rapier-f32")]
+        #[inline]
+        pub fn vector(v: rapier::math::Vector) -> Vector {
+            v
+        }
+        /// Converts a Rapier vector into the simulation's `f32` vector.
+        #[cfg(all(feature = "rapier-f64", feature = "dim2"))]
+        #[inline]
+        pub fn vector(v: rapier::math::Vector) -> Vector {
+            v.as_vec2()
+        }
+        /// Converts a Rapier vector into the simulation's `f32` vector.
+        #[cfg(all(feature = "rapier-f64", feature = "dim3"))]
+        #[inline]
+        pub fn vector(v: rapier::math::Vector) -> Vector {
+            v.as_vec3()
+        }
+
+        /// Converts a Rapier matrix into the simulation's `f32` matrix.
+        #[cfg(feature = "rapier-f32")]
+        #[inline]
+        pub fn matrix(m: rapier::math::Matrix) -> Matrix {
+            m
+        }
+        /// Converts a Rapier matrix into the simulation's `f32` matrix.
+        #[cfg(all(feature = "rapier-f64", feature = "dim2"))]
+        #[inline]
+        pub fn matrix(m: rapier::math::Matrix) -> Matrix {
+            m.as_mat2()
+        }
+        /// Converts a Rapier matrix into the simulation's `f32` matrix.
+        #[cfg(all(feature = "rapier-f64", feature = "dim3"))]
+        #[inline]
+        pub fn matrix(m: rapier::math::Matrix) -> Matrix {
+            m.as_mat3()
+        }
+    }
 }
 
 /// Re-exports of commonly used dependencies for convenience.

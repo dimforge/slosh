@@ -1,4 +1,8 @@
 # Unreleased
+- Make Rapier an optional dependency. Enable either the `rapier-f32` or `rapier-f64`
+  feature for coupling with Rapier rigid bodies and colliders support.
+- Add support for the `f64` version of Rapier with the `rapier-f64` feature.
+  The MPM simulation still uses single-precision values.
 - Update to Rapier 0.32. This migrates most public APIs and internals to use `glam` instead of `nalgebra`.
 - Fix a GPU validation error / panic on simulations with more than ~4.19M particles, caused by
   compute kernels dispatching more than 65535 workgroups along a single dimension. The affected 
