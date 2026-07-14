@@ -85,6 +85,7 @@ impl<B: Backend> WgGrid<B> {
         prefix_sum: &mut PrefixSumWorkspace<B>,
         sort_module: &'a WgSort<B>,
         prefix_sum_module: &'a WgPrefixSum<B>,
+        reset_nodes: bool,
     ) -> Result<(), B::Error> {
         let args = GridArgs {
             grid: &grid.meta,
@@ -210,14 +211,22 @@ impl<B: Backend> WgGrid<B> {
             .copy_scan_values_to_first_particles_and_prepare_for_finalize
             .launch_indirect(backend, pass, &args, grid.indirect_n_blocks_groups.buffer())?;
 
-        // Reset here so the linked list heads get reset before `finalize_particles_sort` which
-        // also setups the per-node linked list.
-        self.reset.launch_indirect(
-            backend,
-            pass,
-            &args,
-            grid.indirect_n_g2p_p2g_groups.buffer(),
-        )?;
+        // `reset` zeroes the node momentum lane, but it's also the only thing that initializes
+        // the per-node data the features depend on: the cpic incompatible/cdf lanes that
+        // grid_update reads, and the linked-list heads/len that finalize_particles_sort builds
+        // onto. Those buffers start uninitialized, so we can only honor `reset_nodes: false` when
+        // both features are off and the momentum lane (overwritten by every P2G) is all that's
+        // left. It has to run before finalize_particles_sort, which populates the linked list.
+        let must_reset =
+            reset_nodes || cfg!(feature = "cpic") || cfg!(feature = "node_particle_lists");
+        if must_reset {
+            self.reset.launch_indirect(
+                backend,
+                pass,
+                &args,
+                grid.indirect_n_g2p_p2g_groups.buffer(),
+            )?;
+        }
         sort_module.finalize_particles_sort.launch_capped(
             backend,
             pass,

@@ -206,11 +206,11 @@ void reset_hmap(
 ) {
     let id = invocation_id.x;
     if (id < grid[0].hmap_capacity) {
+        // Only `state` needs clearing: insertion CAS-probes on `state` and the winner writes
+        // `key`, and `find_block_header_id` reads `value` only after matching `state` (which is
+        // always written before any lookup). Skipping key/value saves 44 of the 48 bytes/entry
+        // on this clear, which sweeps the whole fixed-size hashmap every substep.
         hmap_entries[id].state = NONE;
-        // Resetting the following two isn’t necessary for correctness,
-        // but it makes debugging easier.
-        hmap_entries[id].key = BlockVirtualId(vector<uint, DIM>(0));
-        hmap_entries[id].value = BlockHeaderId(0);
     }
     if (id == 0) {
         grid[0].num_active_blocks = 0u;
