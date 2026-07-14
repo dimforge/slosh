@@ -12,9 +12,12 @@ use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
     GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgP2GScatterStyle, WgParticleUpdate,
-    WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
+    WgGridUpdate, WgP2G, WgP2GScatterStyle, WgParticleUpdate, WgRigidImpulses,
+    WgRigidParticleUpdate, WgTimestepBounds,
 };
+// The CDF kernel wrappers read the gated `Node.cdf`, so they only exist under the `cpic` feature.
+#[cfg(feature = "cpic")]
+use crate::solver::{WgG2PCdf, WgGridUpdateCdf, WgP2GCdf};
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
 use slang_hal::backend::{Backend, Encoder, GpuTimestamps};
@@ -47,13 +50,18 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     #[allow(dead_code)]
     p2g: WgP2G<B>,
     p2g_scatter_style: WgP2GScatterStyle<B>,
+    // The CDF kernels read `Node.cdf`, so gate them behind `cpic`: a build without the feature
+    // (slim 16 B node) must not construct a kernel referencing the removed field.
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
     p2g_cdf: WgP2GCdf<B>,
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
     grid_update_cdf: WgGridUpdateCdf<B>,
     grid_update: WgGridUpdate<B>,
     particles_update: WgParticleUpdate<B>,
     g2p: WgG2P<B>,
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
     g2p_cdf: WgG2PCdf<B>,
     #[allow(dead_code)]
@@ -383,8 +391,10 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             sort: WgSort::from_backend(backend, compiler)?,
             p2g: WgP2G::from_backend(backend, compiler)?,
             p2g_scatter_style: WgP2GScatterStyle::from_backend(backend, compiler)?,
+            #[cfg(feature = "cpic")]
             p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
             grid_update: WgGridUpdate::from_backend(backend, compiler)?,
+            #[cfg(feature = "cpic")]
             grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
             particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
@@ -396,6 +406,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             )?,
             rigid_particles_update: WgRigidParticleUpdate::from_backend(backend, compiler)?,
             g2p: WgG2P::from_backend(backend, compiler)?,
+            #[cfg(feature = "cpic")]
             g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]

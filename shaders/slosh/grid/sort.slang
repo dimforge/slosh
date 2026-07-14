@@ -3,6 +3,12 @@ module sort;
 import slosh.grid.grid;
 import slosh.solver.particle;
 
+// SLOSH_NODE_PARTICLE_LISTS gates the per-node particle linked-list build (see grid.slang).
+// Default on so a standalone compile keeps the full behavior.
+#ifndef SLOSH_NODE_PARTICLE_LISTS
+#define SLOSH_NODE_PARTICLE_LISTS 1
+#endif
+
 // Returns the within-block sort bucket for a particle counted/inserted into its primary
 // block: one bucket per associated-cell slab along the slowest-varying node axis (y in 2D,
 // z in 3D).
@@ -303,8 +309,10 @@ func finalize_particles_sort(
     StructuredBuffer<GridHashMapEntry> hmap_entries,
     StructuredBuffer<Position> particles_pos,
     ConstantBuffer<uint> particles_len,
+#if SLOSH_NODE_PARTICLE_LISTS
     RWStructuredBuffer<AtomicNodeLinkedList> nodes_linked_lists,
     RWStructuredBuffer<uint> particle_node_linked_lists,
+#endif
     RWStructuredBuffer<uint> sorted_particle_ids,
     RWStructuredBuffer<AtomicActiveBlockHeader> active_blocks,
 
@@ -337,12 +345,14 @@ func finalize_particles_sort(
             }
         }
 
+#if SLOSH_NODE_PARTICLE_LISTS
         // Setup the per-node particle linked-list (still consumed by the gather P2G and the
         // rigid/CDF paths).
         let node_global_id = node_id(block_header_id_to_physical_id(active_block_id_0), assoc);
         let prev_head = nodes_linked_lists[node_global_id.id].head.exchange(id);
         nodes_linked_lists[node_global_id.id].len.add(1u);
         particle_node_linked_lists[id] = prev_head;
+#endif
     }
 }
 
@@ -353,8 +363,10 @@ func sort_rigid_particles(
     StructuredBuffer<Grid> grid,
     StructuredBuffer<GridHashMapEntry> hmap_entries,
     StructuredBuffer<Position> rigid_particles_pos,
+#if SLOSH_NODE_PARTICLE_LISTS
     RWStructuredBuffer<AtomicNodeLinkedList> rigid_nodes_linked_lists,
     RWStructuredBuffer<uint> rigid_particle_node_linked_lists,
+#endif
 ) {
     let id = invocation_id.x;
     if (id < rigid_particles_pos.getCount()) {
@@ -367,6 +379,7 @@ func sort_rigid_particles(
 
         // NOTE: if the rigid particle doesn’t map to any block, we can just ignore it
         //       is it won’t affect the simulation.
+#if SLOSH_NODE_PARTICLE_LISTS
         if (active_block_id.id != NONE) {
             // Setup the per-node rigid particle linked-list.
             let node_local_id = associated_cell_index_in_block_off_by_one(particle, cell_width);
@@ -375,5 +388,6 @@ func sort_rigid_particles(
             rigid_nodes_linked_lists[node_global_id.id].len.add(1u);
             rigid_particle_node_linked_lists[id] = prev_head;
         }
+#endif
     }
 }

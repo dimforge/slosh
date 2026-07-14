@@ -38,8 +38,10 @@ pub struct WgSort<B: Backend> {
 struct SortArgs<'a, B: Backend> {
     grid: &'a GpuScalar<GpuGridMetadata, B>,
     hmap_entries: &'a GpuScalar<GpuGridHashMapEntry, B>,
+    #[cfg(feature = "node_particle_lists")]
     rigid_nodes_linked_lists: &'a GpuScalar<[u32; 2], B>,
     rigid_particles_pos: &'a GpuScalar<Vector, B>,
+    #[cfg(feature = "node_particle_lists")]
     rigid_particle_node_linked_lists: &'a GpuScalar<u32, B>,
 }
 
@@ -64,8 +66,10 @@ impl<B: Backend> WgSort<B> {
         let args = SortArgs {
             grid: &grid.meta,
             hmap_entries: &grid.hmap_entries,
+            #[cfg(feature = "node_particle_lists")]
             rigid_nodes_linked_lists: &grid.rigid_nodes_linked_lists,
             rigid_particles_pos: &rigid_particles.sample_points,
+            #[cfg(feature = "node_particle_lists")]
             rigid_particle_node_linked_lists: &rigid_particles.node_linked_lists,
         };
 

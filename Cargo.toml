@@ -26,7 +26,7 @@ stensor = "0.4.2"
 
 [workspace.lints]
 rust.unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(feature, values("dim2", "dim3"))',
+    'cfg(feature, values("dim2", "dim3", "cpic", "node_particle_lists"))',
 ] }
 
 [patch.crates-io]

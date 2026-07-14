@@ -34,8 +34,10 @@
 //! - [`SimulationParams`]: Global parameters (gravity, timestep)
 
 pub use g2p::WgG2P;
+#[cfg(feature = "cpic")]
 pub use g2p_cdf::WgG2PCdf;
 pub use p2g::{WgP2G, WgP2GScatterStyle};
+#[cfg(feature = "cpic")]
 pub use p2g_cdf::WgP2GCdf;
 pub use params::{GpuSimulationParams, SimulationParams};
 pub use particle::*;
@@ -43,6 +45,7 @@ pub use particle_model::*;
 // pub use particle_update::WgParticleUpdate;
 pub use boundary_condition::{GpuBoundaryCondition, GpuMaterials};
 pub use grid_update::WgGridUpdate;
+#[cfg(feature = "cpic")]
 pub use grid_update_cdf::WgGridUpdateCdf;
 pub use particle_update::WgParticleUpdate;
 pub use rigid_impulses::{GpuImpulses, RigidImpulse, WgRigidImpulses};
@@ -51,8 +54,10 @@ pub use timestep_bound::{GpuTimestepBounds, WgTimestepBounds};
 
 mod boundary_condition;
 mod g2p;
+#[cfg(feature = "cpic")]
 mod g2p_cdf;
 mod p2g;
+#[cfg(feature = "cpic")]
 mod p2g_cdf;
 mod params;
 mod particle_update;
@@ -60,6 +65,7 @@ mod rigid_impulses;
 mod rigid_particle_update;
 
 mod grid_update;
+#[cfg(feature = "cpic")]
 mod grid_update_cdf;
 mod particle;
 mod particle_model;
