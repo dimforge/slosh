@@ -16,8 +16,10 @@ path = "../../src/lib.rs"
 required-features = ["dim2"]
 
 [features]
-default = ["dim2"]
+default = ["dim2", "cpic", "node_particle_lists"]
 dim2 = []
+cpic = []
+node_particle_lists = []
 
 comptime = ["slosh_testbed2d/comptime", "stensor/comptime"]
 runtime = ["slosh_testbed2d/runtime", "stensor/runtime"]

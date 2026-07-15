@@ -34,7 +34,11 @@ struct GridArgs<'a, B: Backend> {
     n_block_groups: &'a GpuVector<[u32; 3], B>,
     n_g2p_p2g_groups: &'a GpuVector<[u32; 3], B>,
     nodes: &'a GpuVector<GpuGridNode, B>,
+    // Per-node particle linked lists, bound only under the node_particle_lists feature (the
+    // shader params are #if SLOSH_NODE_PARTICLE_LISTS).
+    #[cfg(feature = "node_particle_lists")]
     nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
+    #[cfg(feature = "node_particle_lists")]
     rigid_nodes_linked_lists: &'a GpuVector<[u32; 2], B>,
     scan_values: &'a GpuVector<u32, B>,
     // Snapshot of `num_active_blocks` after the primary-block touch pass (the base-block count),
@@ -47,6 +51,7 @@ struct GridArgs<'a, B: Backend> {
     rigid_particles_pos: &'a GpuVector<Vector, B>,
     rigid_particle_needs_block: &'a GpuVector<u32, B>,
     sorted_particle_ids: &'a GpuVector<u32, B>,
+    #[cfg(feature = "node_particle_lists")]
     particle_node_linked_lists: &'a GpuVector<u32, B>,
 }
 
@@ -80,6 +85,7 @@ impl<B: Backend> WgGrid<B> {
         prefix_sum: &mut PrefixSumWorkspace<B>,
         sort_module: &'a WgSort<B>,
         prefix_sum_module: &'a WgPrefixSum<B>,
+        reset_nodes: bool,
     ) -> Result<(), B::Error> {
         let args = GridArgs {
             grid: &grid.meta,
@@ -87,7 +93,9 @@ impl<B: Backend> WgGrid<B> {
             n_block_groups: &grid.indirect_n_blocks_groups,
             n_g2p_p2g_groups: &grid.indirect_n_g2p_p2g_groups,
             nodes: &grid.nodes,
+            #[cfg(feature = "node_particle_lists")]
             nodes_linked_lists: &grid.nodes_linked_lists,
+            #[cfg(feature = "node_particle_lists")]
             rigid_nodes_linked_lists: &grid.rigid_nodes_linked_lists,
             scan_values: &grid.scan_values,
             num_base_blocks: &grid.active_blocks_snapshot,
@@ -97,6 +105,7 @@ impl<B: Backend> WgGrid<B> {
             rigid_particles_pos: &rigid_particles.sample_points,
             rigid_particle_needs_block: &rigid_particles.rigid_particle_needs_block,
             sorted_particle_ids: particles.sorted_ids(),
+            #[cfg(feature = "node_particle_lists")]
             particle_node_linked_lists: particles.node_linked_lists(),
         };
 
@@ -202,14 +211,22 @@ impl<B: Backend> WgGrid<B> {
             .copy_scan_values_to_first_particles_and_prepare_for_finalize
             .launch_indirect(backend, pass, &args, grid.indirect_n_blocks_groups.buffer())?;
 
-        // Reset here so the linked list heads get reset before `finalize_particles_sort` which
-        // also setups the per-node linked list.
-        self.reset.launch_indirect(
-            backend,
-            pass,
-            &args,
-            grid.indirect_n_g2p_p2g_groups.buffer(),
-        )?;
+        // `reset` zeroes the node momentum lane, but it's also the only thing that initializes
+        // the per-node data the features depend on: the cpic incompatible/cdf lanes that
+        // grid_update reads, and the linked-list heads/len that finalize_particles_sort builds
+        // onto. Those buffers start uninitialized, so we can only honor `reset_nodes: false` when
+        // both features are off and the momentum lane (overwritten by every P2G) is all that's
+        // left. It has to run before finalize_particles_sort, which populates the linked list.
+        let must_reset =
+            reset_nodes || cfg!(feature = "cpic") || cfg!(feature = "node_particle_lists");
+        if must_reset {
+            self.reset.launch_indirect(
+                backend,
+                pass,
+                &args,
+                grid.indirect_n_g2p_p2g_groups.buffer(),
+            )?;
+        }
         sort_module.finalize_particles_sort.launch_capped(
             backend,
             pass,
@@ -241,7 +258,12 @@ pub struct GpuGridMetadata {
 #[repr(C)]
 pub struct GpuGridNode {
     momentum_velocity_mass: glam::Vec4,
+    // Gated by the cpic feature (default on). Turning cpic off drops the node from 48 to 16
+    // bytes, cutting grid traffic ~3x, and gives up collision-detection-field support. Keep in
+    // lockstep with Node in grid.slang, which SLOSH_CPIC gates the same way.
+    #[cfg(feature = "cpic")]
     momentum_velocity_mass_incompatible: glam::Vec4,
+    #[cfg(feature = "cpic")]
     cdf: GpuGridNodeCdf,
 }
 
@@ -343,6 +365,7 @@ pub struct GpuNodeCollision {
 /// Collision detection field data for a grid node.
 ///
 /// Stores signed distance and affinity information for MPM-rigid body coupling.
+#[cfg(feature = "cpic")]
 #[derive(Copy, Clone, PartialEq, Default, Debug, ShaderType)]
 #[repr(C)]
 pub struct GpuGridNodeCdf {
@@ -386,9 +409,12 @@ pub struct GpuGrid<B: Backend> {
     pub active_blocks_snapshot: GpuVector<u32, B>,
     /// Workspace for prefix sum operations.
     pub scan_values: GpuVector<u32, B>,
-    /// Per-node linked lists for MPM particles.
+    /// Per-node linked lists for MPM particles. Only built/reset under the node_particle_lists
+    /// feature, but always allocated: the P2G launchers still bind this buffer (the gather P2G
+    /// reads it; the scatter-style P2G binds it without reading). Gating the allocation means
+    /// dropping that unused scatter-style binding first.
     pub nodes_linked_lists: GpuVector<[u32; 2], B>,
-    /// Per-node linked lists for rigid body particles.
+    /// Per-node linked lists for rigid body particles. See `nodes_linked_lists`.
     pub rigid_nodes_linked_lists: GpuVector<[u32; 2], B>,
     /// Indirect dispatch arguments for block-parallel kernels.
     pub indirect_n_blocks_groups: Arc<GpuScalar<[u32; 3], B>>,

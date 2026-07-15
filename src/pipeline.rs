@@ -12,9 +12,12 @@ use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
     GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgG2PCdf, WgGridUpdate, WgGridUpdateCdf, WgP2G, WgP2GCdf, WgP2GScatterStyle, WgParticleUpdate,
-    WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
+    WgGridUpdate, WgP2G, WgP2GScatterStyle, WgParticleUpdate, WgRigidImpulses,
+    WgRigidParticleUpdate, WgTimestepBounds,
 };
+// The CDF kernel wrappers read the gated `Node.cdf`, so they only exist under the `cpic` feature.
+#[cfg(feature = "cpic")]
+use crate::solver::{WgG2PCdf, WgGridUpdateCdf, WgP2GCdf};
 use rapier::dynamics::RigidBodySet;
 use rapier::geometry::{ColliderHandle, ColliderSet};
 use slang_hal::backend::{Backend, Encoder, GpuTimestamps};
@@ -22,6 +25,72 @@ use slang_hal::{BufferUsages, Shader, SlangCompiler};
 use std::any::Any;
 use std::marker::PhantomData;
 use stensor::tensor::{GpuScalar, GpuTensor, GpuVector};
+
+/// Selects which optional kernel families `MpmPipeline` compiles.
+///
+/// A pipeline that never dispatches some kernels (say hooks replace the built-in P2G/G2P and the
+/// CDF/rigid paths go unused) can skip compiling them. Skipping is mandatory once the `Node`
+/// struct is slimmed: the CDF kernels read `Node.cdf`, so they cannot be compiled after `cpic`
+/// gates that field out.
+///
+/// The gather P2G and the CDF/rigid paths read the per-node linked lists, which only exist with
+/// the `node_particle_lists` feature (on by default). Keep it enabled if you use
+/// `builtin_transfers` (gather), `cdf`, or `rigid_particles`.
+#[derive(Copy, Clone, Debug)]
+pub struct MpmPipelineKernels {
+    /// Built-in P2G/G2P transfer kernels (gather + scatter). Skip only if hooks handle
+    /// `run_p2g`/`run_g2p` on every step.
+    pub builtin_transfers: bool,
+    /// CDF (rigid-body collision field) kernels. Read `Node.cdf`, so compiled only under the
+    /// `cpic` feature. Compile-only for now: `launch_step` doesn't dispatch the CDF passes yet.
+    pub cdf: bool,
+    /// Rigid-particle update kernel. Compile-only for now: `launch_step` doesn't dispatch the
+    /// rigid-particle pass yet.
+    pub rigid_particles: bool,
+    /// Run the per-node `reset` pass during the sort. Its only unconditional job is zeroing
+    /// `Node.momentum_velocity_mass`, which every P2G variant overwrites on every active node
+    /// anyway, so set `false` to skip it when the built-in P2G (or a `run_p2g` hook) is known to
+    /// write every active node.
+    ///
+    /// Only honored with both `cpic` and `node_particle_lists` off. With either on, `reset` also
+    /// does init those features rely on (the cpic incompatible/cdf lanes, the linked-list
+    /// heads/len), so `launch_sort` forces it regardless of this flag.
+    pub node_reset: bool,
+    /// Built-in grid_update pass (momentum to velocity, gravity, velocity clamp, rigid-collision
+    /// boundary condition). Disable only when a `run_p2g` hook folds this into its own kernel;
+    /// the grid must hold velocities by the time G2P runs.
+    pub grid_update: bool,
+    /// Built-in particles_update pass (advection, deformation-gradient update, constitutive
+    /// model, APIC affine). Disable only when a `run_g2p` hook folds this into its own kernel;
+    /// particle state must be fully advanced before `after_particles_update` hooks run.
+    pub particles_update: bool,
+}
+
+impl Default for MpmPipelineKernels {
+    fn default() -> Self {
+        Self {
+            builtin_transfers: true,
+            cdf: true,
+            rigid_particles: true,
+            node_reset: true,
+            grid_update: true,
+            particles_update: true,
+        }
+    }
+}
+
+impl MpmPipelineKernels {
+    /// Minimal set for pipelines whose hooks replace the built-in transfers and that don't use
+    /// the CDF or rigid-particle paths.
+    pub fn hooks_only() -> Self {
+        Self {
+            builtin_transfers: false,
+            cdf: false,
+            rigid_particles: false,
+            ..Self::default()
+        }
+    }
+}
 
 /// GPU compute pipeline for Material Point Method simulation.
 ///
@@ -45,23 +114,31 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     sort: WgSort<B>,
     // Kept for the alternative/CDF code paths that are currently commented out in `step`.
     #[allow(dead_code)]
-    p2g: WgP2G<B>,
-    p2g_scatter_style: WgP2GScatterStyle<B>,
+    p2g: Option<WgP2G<B>>,
+    p2g_scatter_style: Option<WgP2GScatterStyle<B>>,
+    // The CDF kernels read `Node.cdf`, so gate them behind `cpic`: a build without the feature
+    // (slim 16 B node) must not construct a kernel referencing the removed field.
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
-    p2g_cdf: WgP2GCdf<B>,
+    p2g_cdf: Option<WgP2GCdf<B>>,
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
-    grid_update_cdf: WgGridUpdateCdf<B>,
-    grid_update: WgGridUpdate<B>,
-    particles_update: WgParticleUpdate<B>,
-    g2p: WgG2P<B>,
+    grid_update_cdf: Option<WgGridUpdateCdf<B>>,
+    grid_update: Option<WgGridUpdate<B>>,
+    particles_update: Option<WgParticleUpdate<B>>,
+    g2p: Option<WgG2P<B>>,
+    #[cfg(feature = "cpic")]
     #[allow(dead_code)]
-    g2p_cdf: WgG2PCdf<B>,
+    g2p_cdf: Option<WgG2PCdf<B>>,
     #[allow(dead_code)]
-    rigid_particles_update: WgRigidParticleUpdate<B>,
+    rigid_particles_update: Option<WgRigidParticleUpdate<B>>,
     /// Maximum timestep bound calculation.
     pub timestep_bounds: WgTimestepBounds<B>,
     /// Rigid body impulse computation kernel (publicly accessible for external use).
     pub impulses: WgRigidImpulses<B>,
+    /// Kernel families this pipeline was built with; also gates which built-in dispatches
+    /// `launch_step` runs.
+    kernels: MpmPipelineKernels,
     _phantom: PhantomData<GpuModel>,
 }
 
@@ -377,26 +454,71 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
     ///
     /// A ready-to-use MPM pipeline, or an error if shader compilation fails.
     pub fn new(backend: &B, compiler: &SlangCompiler) -> Result<Self, B::Error> {
+        Self::new_with_kernels(backend, compiler, MpmPipelineKernels::default())
+    }
+
+    /// Like [`Self::new`], but only compiles the kernel families selected by `kernels`. Any
+    /// skipped kernel must never be dispatched.
+    pub fn new_with_kernels(
+        backend: &B,
+        compiler: &SlangCompiler,
+        kernels: MpmPipelineKernels,
+    ) -> Result<Self, B::Error> {
         Ok(Self {
             grid: WgGrid::from_backend(backend, compiler)?,
             prefix_sum: WgPrefixSum::from_backend(backend, compiler)?,
             sort: WgSort::from_backend(backend, compiler)?,
-            p2g: WgP2G::from_backend(backend, compiler)?,
-            p2g_scatter_style: WgP2GScatterStyle::from_backend(backend, compiler)?,
-            p2g_cdf: WgP2GCdf::from_backend(backend, compiler)?,
-            grid_update: WgGridUpdate::from_backend(backend, compiler)?,
-            grid_update_cdf: WgGridUpdateCdf::from_backend(backend, compiler)?,
+            p2g: kernels
+                .builtin_transfers
+                .then(|| WgP2G::from_backend(backend, compiler))
+                .transpose()?,
+            p2g_scatter_style: kernels
+                .builtin_transfers
+                .then(|| WgP2GScatterStyle::from_backend(backend, compiler))
+                .transpose()?,
+            #[cfg(feature = "cpic")]
+            p2g_cdf: kernels
+                .cdf
+                .then(|| WgP2GCdf::from_backend(backend, compiler))
+                .transpose()?,
+            grid_update: kernels
+                .grid_update
+                .then(|| WgGridUpdate::from_backend(backend, compiler))
+                .transpose()?,
+            #[cfg(feature = "cpic")]
+            grid_update_cdf: kernels
+                .cdf
+                .then(|| WgGridUpdateCdf::from_backend(backend, compiler))
+                .transpose()?,
             #[cfg(feature = "comptime")]
-            particles_update: WgParticleUpdate::from_backend(backend, compiler)?,
+            particles_update: kernels
+                .particles_update
+                .then(|| WgParticleUpdate::from_backend(backend, compiler))
+                .transpose()?,
             #[cfg(feature = "runtime")]
-            particles_update: WgParticleUpdate::with_specializations(
-                backend,
-                compiler,
-                &GpuModel::specialization_modules(),
-            )?,
-            rigid_particles_update: WgRigidParticleUpdate::from_backend(backend, compiler)?,
-            g2p: WgG2P::from_backend(backend, compiler)?,
-            g2p_cdf: WgG2PCdf::from_backend(backend, compiler)?,
+            particles_update: kernels
+                .particles_update
+                .then(|| {
+                    WgParticleUpdate::with_specializations(
+                        backend,
+                        compiler,
+                        &GpuModel::specialization_modules(),
+                    )
+                })
+                .transpose()?,
+            rigid_particles_update: kernels
+                .rigid_particles
+                .then(|| WgRigidParticleUpdate::from_backend(backend, compiler))
+                .transpose()?,
+            g2p: kernels
+                .builtin_transfers
+                .then(|| WgG2P::from_backend(backend, compiler))
+                .transpose()?,
+            #[cfg(feature = "cpic")]
+            g2p_cdf: kernels
+                .cdf
+                .then(|| WgG2PCdf::from_backend(backend, compiler))
+                .transpose()?,
             impulses: WgRigidImpulses::from_backend(backend, compiler)?,
             #[cfg(feature = "comptime")]
             timestep_bounds: WgTimestepBounds::from_backend(backend, compiler)?,
@@ -406,6 +528,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 compiler,
                 &GpuModel::specialization_modules(),
             )?,
+            kernels,
             _phantom: PhantomData,
         })
     }
@@ -473,6 +596,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 &mut data.prefix_sum,
                 &self.sort,
                 &self.prefix_sum,
+                self.kernels.node_reset,
             )?;
             // self.sort.launch_sort_rigid_particles(
             //     backend,
@@ -490,6 +614,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )?;
 
+        // CDF passes, not yet wired. The cdf kernels are now `#[cfg(feature = "cpic")]
+        // Option<..>`, so re-enabling this means gating the block on `cpic`, unwrapping with
+        // `.as_ref().expect(..)`, and setting `MpmPipelineKernels::cdf`.
         // {
         //     let mut pass = encoder.begin_pass("grid_update_cdf", timestamps.as_deref_mut());
         //     self.grid_update_cdf
@@ -528,15 +655,20 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )? {
             let mut pass = encoder.begin_pass("p2g", timestamps.as_deref_mut());
-            self.p2g_scatter_style.launch(
-                backend,
-                &mut pass,
-                &data.grid,
-                &data.particles,
-                &data.impulses,
-                &data.bodies,
-                &data.body_materials,
-            )?;
+            self.p2g_scatter_style
+                .as_ref()
+                .expect(
+                    "pipeline built without builtin transfer kernels; a hook must handle run_p2g",
+                )
+                .launch(
+                    backend,
+                    &mut pass,
+                    &data.grid,
+                    &data.particles,
+                    &data.impulses,
+                    &data.bodies,
+                    &data.body_materials,
+                )?;
         }
 
         hooks.after_p2g(
@@ -547,9 +679,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )?;
 
-        {
+        if let Some(grid_update) = &self.grid_update {
             let mut pass = encoder.begin_pass("grid_update", timestamps.as_deref_mut());
-            self.grid_update.launch(
+            grid_update.launch(
                 backend,
                 &mut pass,
                 &data.sim_params,
@@ -577,15 +709,20 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )? {
             let mut pass = encoder.begin_pass("g2p", timestamps.as_deref_mut());
-            self.g2p.launch(
-                backend,
-                &mut pass,
-                &data.sim_params,
-                &data.grid,
-                &data.particles,
-                &data.bodies,
-                &data.body_materials,
-            )?;
+            self.g2p
+                .as_ref()
+                .expect(
+                    "pipeline built without builtin transfer kernels; a hook must handle run_g2p",
+                )
+                .launch(
+                    backend,
+                    &mut pass,
+                    &data.sim_params,
+                    &data.grid,
+                    &data.particles,
+                    &data.bodies,
+                    &data.body_materials,
+                )?;
         }
 
         hooks.after_g2p(
@@ -596,9 +733,9 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             timestamps.as_deref_mut(),
         )?;
 
-        {
+        if let Some(particles_update) = &self.particles_update {
             let mut pass = encoder.begin_pass("particles_update", timestamps.as_deref_mut());
-            self.particles_update.launch(
+            particles_update.launch(
                 backend,
                 &mut pass,
                 &data.sim_params,

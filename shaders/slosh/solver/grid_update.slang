@@ -7,6 +7,12 @@ import slosh.solver.params;
 import slosh.collision.collide;
 import slosh.solver.boundary_condition;
 
+// SLOSH_CPIC gates the incompatible-momentum lane on Node (see grid.slang). Default on so a
+// standalone compile matches the crate's default layout.
+#ifndef SLOSH_CPIC
+#define SLOSH_CPIC 1
+#endif
+
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;
 static const uint WORKGROUP_SIZE_Y = 8;
@@ -73,10 +79,12 @@ func grid_update(
      * Step 1: momentum -> velocity update (gravity + clamping).
      */
     let momentum_velocity_mass = nodes[global_id].momentum_velocity_mass;
-    let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
     var velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass);
+#if SLOSH_CPIC
+    let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
     let velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible);
     nodes[global_id].momentum_velocity_mass_incompatible = velocity_mass_incompatible;
+#endif
 
     /*
      * Step 2: rigid-body collision boundary condition.

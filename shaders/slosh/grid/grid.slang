@@ -2,6 +2,20 @@ module grid;
 
 import slosh.aliases;
 
+// SLOSH_CPIC gates the CPIC parts of Node: the incompatible-momentum lane and the cdf collision
+// field. register_shaders sets it from the cpic cargo feature so this layout matches the Rust
+// GpuGridNode. Default on so a compile that never sets the macro still builds the full layout.
+#ifndef SLOSH_CPIC
+#define SLOSH_CPIC 1
+#endif
+
+// SLOSH_NODE_PARTICLE_LISTS gates the per-node particle linked lists (built in
+// finalize_particles_sort, cleared in reset). Set from the node_particle_lists cargo feature; the
+// bound buffers and the Rust GridArgs fields share it so everything stays in sync.
+#ifndef SLOSH_NODE_PARTICLE_LISTS
+#define SLOSH_NODE_PARTICLE_LISTS 1
+#endif
+
 // TODO: a lot if what exposed from this module should be methods of Grid (or other structs)
 //       rather than free function. (For now they have just been converted from WGSL to Slang.)
 
@@ -192,11 +206,11 @@ void reset_hmap(
 ) {
     let id = invocation_id.x;
     if (id < grid[0].hmap_capacity) {
+        // Only `state` needs clearing: insertion CAS-probes on `state` and the winner writes
+        // `key`, and `find_block_header_id` reads `value` only after matching `state` (which is
+        // always written before any lookup). Skipping key/value saves 44 of the 48 bytes/entry
+        // on this clear, which sweeps the whole fixed-size hashmap every substep.
         hmap_entries[id].state = NONE;
-        // Resetting the following two isn’t necessary for correctness,
-        // but it makes debugging easier.
-        hmap_entries[id].key = BlockVirtualId(vector<uint, DIM>(0));
-        hmap_entries[id].value = BlockHeaderId(0);
     }
     if (id == 0) {
         grid[0].num_active_blocks = 0u;
@@ -309,12 +323,14 @@ public struct Node {
     /// (depending on the context). The fourth component contains the cell’s mass.
     // TODO: maybe we don’t really need to pack ourself.
     public vector<float, DIM + 1> momentum_velocity_mass;
+#if SLOSH_CPIC
     // If a particle is incompatible with this node (as pepr CPIC’s concept of compatibility
     // based on affinities), it will contribute to this field instead of `momentum_velocity_mass`.
     // That way the P2G/G2P transfers on incompatible nodes still work properly and we don’t
     // loose the contributions of other compatible particles influencing this incompatible node too.
     public vector<float, DIM + 1> momentum_velocity_mass_incompatible;
     public NodeCdf cdf;
+#endif
 }
 
 #if DIM == 2
@@ -442,8 +458,10 @@ func reset(
     uint3 invocation_id: SV_DispatchThreadID,
     StructuredBuffer<Grid> grid,
     RWStructuredBuffer<Node> nodes,
+#if SLOSH_NODE_PARTICLE_LISTS
     RWStructuredBuffer<NodeLinkedList> nodes_linked_lists,
     RWStructuredBuffer<NodeLinkedList> rigid_nodes_linked_lists,
+#endif
 ) {
 // TODO: slang doesn’t have a way to retrieve the number of workgroups?
 //   let num_threads = num_workgroups.x * GRID_WORKGROUP_SIZE * num_workgroups.y * num_workgroups.z;
@@ -452,12 +470,16 @@ func reset(
 //   for (var i = invocation_id.x; i < num_nodes; i += num_threads) {
     if (i < num_nodes) {
        nodes[i].momentum_velocity_mass = vector<float, DIM + 1>(0.0);
+#if SLOSH_CPIC
        nodes[i].momentum_velocity_mass_incompatible = vector<float, DIM + 1>(0.0);
        nodes[i].cdf = NodeCdf(0.0, 0, NONE);
+#endif
+#if SLOSH_NODE_PARTICLE_LISTS
        nodes_linked_lists[i].head = NONE;
        nodes_linked_lists[i].len = 0u;
        rigid_nodes_linked_lists[i].head = NONE;
        rigid_nodes_linked_lists[i].len = 0u;
+#endif
    }
 //   }
 }

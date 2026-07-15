@@ -89,6 +89,18 @@ pub const SLANG_SRC_DIR: include_dir::Dir<'_> =
 pub fn register_shaders(compiler: &mut SlangCompiler) {
     stensor::register_shaders(compiler);
     compiler.add_dir(SLANG_SRC_DIR.clone());
+    // Mirror the cpic and node_particle_lists cargo features into shader macros so the shader
+    // Node layout and sort kernels match GpuGridNode and GridArgs on the Rust side. slosh sets
+    // these itself (unlike DIM, which the consumer picks) since they're crate-layout invariants.
+    compiler.set_global_macro("SLOSH_CPIC", if cfg!(feature = "cpic") { 1 } else { 0 });
+    compiler.set_global_macro(
+        "SLOSH_NODE_PARTICLE_LISTS",
+        if cfg!(feature = "node_particle_lists") {
+            1
+        } else {
+            0
+        },
+    );
 }
 
 /// Mathematical types and utilities for physics simulation.

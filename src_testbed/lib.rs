@@ -34,7 +34,7 @@ use slang_hal::re_exports::include_dir;
 use slang_hal::BufferUsages;
 use slang_hal::SlangCompiler;
 use slosh::math::Vector;
-use slosh::pipeline::{MpmPipeline, MpmPipelineHooks};
+use slosh::pipeline::{MpmPipeline, MpmPipelineHooks, MpmPipelineKernels};
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::geometry::ShapeType;
 use slosh::rapier::prelude::ColliderHandle;
@@ -45,6 +45,32 @@ use wgpu::Limits;
 
 type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
 type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
+
+/// GPU-construction options for the testbed.
+pub struct TestbedConfig {
+    /// Kernel families compiled into the `MpmPipeline`. Must match what the hooks expect:
+    /// hooks that *replace* built-in passes (e.g. fuse the grid update into P2G or the
+    /// particle update into G2P) require those passes disabled, or they run a second time.
+    pub kernels: MpmPipelineKernels,
+    /// Device limits requested from wgpu. Bump e.g. `max_storage_buffers_per_shader_stage`
+    /// when hook kernels bind more buffers than the built-in passes need.
+    pub limits: Limits,
+}
+
+impl Default for TestbedConfig {
+    fn default() -> Self {
+        Self {
+            kernels: MpmPipelineKernels::default(),
+            limits: Limits {
+                max_storage_buffers_per_shader_stage: 13,
+                max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
+                max_buffer_size: 4_000_000_000,
+                max_storage_buffer_binding_size: 4_000_000_000,
+                ..Limits::default()
+            },
+        }
+    }
+}
 
 #[cfg(feature = "dim2")]
 type RenderNode = PlanarSceneNode;
@@ -79,15 +105,9 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
         mut compiler: SlangCompiler,
         hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
         builders: SceneBuilders<GpuModel>,
+        config: TestbedConfig,
     ) -> Stage<GpuModel> {
-        let limits = Limits {
-            max_storage_buffers_per_shader_stage: 13,
-            max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
-            max_buffer_size: 4_000_000_000,
-            max_storage_buffer_binding_size: 4_000_000_000,
-            ..Limits::default()
-        };
-        let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, limits)
+        let mut gpu = WebGpu::new(wgpu::Features::TIMESTAMP_QUERY, config.limits)
             .await
             .unwrap();
         // TODO: this is a terrible, horrible, hack, to work around the fact that slang isn’t giving us access to
@@ -109,7 +129,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             compiler.set_global_macro("DIM", slosh::math::DIM);
         }
 
-        let mpm_pipeline = MpmPipeline::new(&gpu, &compiler).unwrap();
+        let mpm_pipeline = MpmPipeline::new_with_kernels(&gpu, &compiler, config.kernels).unwrap();
         let mut app_state = AppState {
             pipeline: mpm_pipeline,
             run_state: RunState::Paused,
@@ -351,9 +371,32 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
     scene_builders: SceneBuilders<GpuModel>,
     #[cfg(feature = "dim3")] up_axis: Vector,
 ) {
+    run_with_hooks_and_config(
+        compiler,
+        hooks,
+        TestbedConfig::default(),
+        scene_builders,
+        #[cfg(feature = "dim3")]
+        up_axis,
+    )
+    .await
+}
+
+/// Like [`run_with_hooks`], but with explicit GPU-construction options (kernel set, device
+/// limits). Required when the hooks *replace* built-in passes (e.g. fuse the grid update
+/// into P2G or the particle update into G2P): the default kernel set would run those passes
+/// a second time.
+pub async fn run_with_hooks_and_config<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    config: TestbedConfig,
+    scene_builders: SceneBuilders<GpuModel>,
+    #[cfg(feature = "dim3")] up_axis: Vector,
+) {
     run_with_hooks_and_ui(
         compiler,
         hooks,
+        config,
         scene_builders,
         |_, _, _, _| None,
         #[cfg(feature = "dim3")]
@@ -365,6 +408,7 @@ pub async fn run_with_hooks<GpuModel: GpuParticleModelData>(
 pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    config: TestbedConfig,
     scene_builders: SceneBuilders<GpuModel>,
     mut extra_ui: impl FnMut(
         &egui::Context,
@@ -375,7 +419,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     #[cfg(feature = "dim3")] up_axis: Vector,
 ) {
     let mut colliders_gfx = HashMap::new();
-    let mut stage = Stage::new(compiler, hooks, scene_builders).await;
+    let mut stage = Stage::new(compiler, hooks, scene_builders, config).await;
     let mut window = Window::new("slosh - 3D testbed");
     render_colliders(&mut window, &stage.physics, &mut colliders_gfx);
 
@@ -604,9 +648,28 @@ pub async fn run_headless_with_hooks<GpuModel: GpuParticleModelData>(
     compiler: SlangCompiler,
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     scene_builders: SceneBuilders<GpuModel>,
+    step_callback: impl FnMut(&PhysicsContext<GpuModel>, &SimulationStepResult) -> bool,
+) {
+    run_headless_with_hooks_and_config(
+        compiler,
+        hooks,
+        TestbedConfig::default(),
+        scene_builders,
+        step_callback,
+    )
+    .await
+}
+
+/// Like [`run_headless_with_hooks`], but with explicit GPU-construction options.
+/// See [`run_with_hooks_and_config`].
+pub async fn run_headless_with_hooks_and_config<GpuModel: GpuParticleModelData>(
+    compiler: SlangCompiler,
+    hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
+    config: TestbedConfig,
+    scene_builders: SceneBuilders<GpuModel>,
     mut step_callback: impl FnMut(&PhysicsContext<GpuModel>, &SimulationStepResult) -> bool,
 ) {
-    let mut stage = Stage::new(compiler, hooks, scene_builders).await;
+    let mut stage = Stage::new(compiler, hooks, scene_builders, config).await;
     stage.app_state.run_state = RunState::Running;
 
     loop {
