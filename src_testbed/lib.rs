@@ -33,6 +33,7 @@ use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::re_exports::include_dir;
 use slang_hal::BufferUsages;
 use slang_hal::SlangCompiler;
+use slosh::math::Vector;
 use slosh::pipeline::{MpmPipeline, MpmPipelineHooks, MpmPipelineKernels};
 use slosh::rapier::geometry::Shape;
 use slosh::rapier::geometry::ShapeType;
@@ -390,7 +391,7 @@ pub async fn run_with_hooks_and_config<GpuModel: GpuParticleModelData>(
     hooks: impl FnOnce(&WebGpu, &SlangCompiler) -> Box<dyn MpmPipelineHooks<WebGpu, GpuModel>>,
     config: TestbedConfig,
     scene_builders: SceneBuilders<GpuModel>,
-    #[cfg(feature = "dim3")] up_axis: Vector3<f32>,
+    #[cfg(feature = "dim3")] up_axis: Vector,
 ) {
     run_with_hooks_and_ui(
         compiler,
