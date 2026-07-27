@@ -1,31 +1,11 @@
-use crate::math::Vector;
-use encase::ShaderType;
+use crate::{
+    math::{Vector, vector},
+    sampling::{GpuSampleIds, SamplingParams},
+};
+
 use glam::UVec3;
-use rapier::geometry::{Segment, TriMesh, Triangle};
+use rapier::geometry::TriMesh;
 use std::collections::HashSet;
-
-// Epsilon used as a length threshold in various steps of the sampling. In particular, this avoids
-// degenerate geometries from generating invalid samples.
-const EPS: f32 = 1.0e-5;
-
-pub struct TriangleSample {
-    pub triangle_id: u32,
-    pub point: Vector,
-}
-
-#[derive(Copy, Clone, Debug, ShaderType)]
-#[repr(C)]
-pub struct GpuSampleIds {
-    pub triangle: UVec3,
-    pub collider: u32,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct SamplingParams {
-    pub base_vid: u32,
-    pub collider_id: u32,
-    pub sampling_step: f32,
-}
 
 #[derive(Default, Clone)]
 pub struct SamplingBuffers {
@@ -34,8 +14,31 @@ pub struct SamplingBuffers {
     pub samples_ids: Vec<GpuSampleIds>,
 }
 
+// Epsilon used as a length threshold in various steps of the sampling. In particular, this avoids
+// degenerate geometries from generating invalid samples.
+const EPS: f32 = 1.0e-5;
+
+#[derive(Copy, Clone)]
+struct Segment {
+    a: Vector,
+    b: Vector,
+}
+
+#[derive(Copy, Clone)]
+struct Triangle {
+    a: Vector,
+    b: Vector,
+    c: Vector,
+}
+
+pub struct TriangleSample {
+    pub triangle_id: u32,
+    pub point: Vector,
+}
+
 pub fn sample_trimesh(trimesh: &TriMesh, params: &SamplingParams, buffers: &mut SamplingBuffers) {
-    let samples = sample_mesh(trimesh.vertices(), trimesh.indices(), params.sampling_step);
+    let vertices: Vec<Vector> = trimesh.vertices().iter().map(|v| vector(*v)).collect();
+    let samples = sample_mesh(&vertices, trimesh.indices(), params.sampling_step);
 
     for sample in samples {
         let tri_idx = trimesh.indices()[sample.triangle_id as usize];
@@ -80,25 +83,34 @@ pub fn sample_mesh(
     };
 
     for (tri_id, idx) in indices.iter().enumerate() {
-        let tri = Triangle::new(
-            vertices[idx[0] as usize],
-            vertices[idx[1] as usize],
-            vertices[idx[2] as usize],
-        );
+        let tri = Triangle {
+            a: vertices[idx[0] as usize],
+            b: vertices[idx[1] as usize],
+            c: vertices[idx[2] as usize],
+        };
         sample_triangle(tri, &mut samples, xy_spacing, tri_id as u32);
 
         if seg_needs_sampling(idx[0], idx[1]) {
-            let seg = Segment::new(vertices[idx[0] as usize], vertices[idx[1] as usize]);
+            let seg = Segment {
+                a: vertices[idx[0] as usize],
+                b: vertices[idx[1] as usize],
+            };
             sample_edge(seg, &mut samples, xy_spacing, tri_id as u32);
         }
 
         if seg_needs_sampling(idx[1], idx[2]) {
-            let seg = Segment::new(vertices[idx[1] as usize], vertices[idx[2] as usize]);
+            let seg = Segment {
+                a: vertices[idx[1] as usize],
+                b: vertices[idx[2] as usize],
+            };
             sample_edge(seg, &mut samples, xy_spacing, tri_id as u32);
         }
 
         if seg_needs_sampling(idx[2], idx[0]) {
-            let seg = Segment::new(vertices[idx[2] as usize], vertices[idx[0] as usize]);
+            let seg = Segment {
+                a: vertices[idx[2] as usize],
+                b: vertices[idx[0] as usize],
+            };
             sample_edge(seg, &mut samples, xy_spacing, tri_id as u32);
         }
     }
@@ -111,7 +123,7 @@ pub fn sample_mesh(
 ///
 /// The returned samples will not contain `edge.a`. It might contain `edge.b` (but it is unlikely)
 /// if it aligns exactly with the internal sampling spacing.
-pub fn sample_edge(
+fn sample_edge(
     edge: Segment,
     samples: &mut Vec<TriangleSample>,
     xy_spacing: f32,
@@ -147,7 +159,7 @@ pub fn sample_edge(
 ///
 /// Because this does not attempt to sample the edges of the triangles, small or thin triangles
 /// might not result in any samples. Edges should be sampled separately with [`sample_edge`].
-pub fn sample_triangle(
+fn sample_triangle(
     triangle: Triangle,
     samples: &mut Vec<TriangleSample>,
     xy_spacing: f32,

@@ -1,12 +1,17 @@
 use crate::math::{Matrix, Vector};
+#[cfg(feature = "rapier")]
 use crate::rbd::dynamics::GpuBodySet;
+#[cfg(feature = "rapier")]
 use crate::rbd::dynamics::body::BodyCouplingEntry;
-use crate::rbd::shapes::ShapeBuffers;
+#[cfg(feature = "rapier")]
 use crate::sampling;
-use crate::sampling::{GpuSampleIds, SamplingBuffers, SamplingParams};
+use crate::sampling::GpuSampleIds;
+#[cfg(feature = "rapier")]
+use crate::sampling::{SamplingBuffers, SamplingParams};
 use crate::solver::particle_model::GpuParticleModelData;
 use bytemuck::{Pod, Zeroable};
 use encase::ShaderType;
+#[cfg(feature = "rapier")]
 use rapier::geometry::ColliderSet;
 use slang_hal::{BufferUsages, backend::Backend};
 use std::ops::RangeBounds;
@@ -271,16 +276,25 @@ pub struct GpuRigidParticles<B: Backend> {
 impl<B: Backend> GpuRigidParticles<B> {
     /// Creates an empty set of rigid particles.
     pub fn new(backend: &B) -> Result<Self, B::Error> {
-        Self::from_rapier(
-            backend,
-            &ColliderSet::default(),
-            &GpuBodySet::new(backend, &[], &[], &ShapeBuffers::default())?,
-            &[],
-            1.0,
-        )
+        Ok(Self {
+            local_sample_points: GpuTensor::vector_uninit_encased(
+                backend,
+                1,
+                BufferUsages::STORAGE,
+            )?,
+            sample_points: GpuTensor::vector_uninit_encased(backend, 1, BufferUsages::STORAGE)?,
+            node_linked_lists: GpuTensor::vector_uninit(backend, 1, BufferUsages::STORAGE)?,
+            sample_ids: GpuTensor::vector_uninit_encased(backend, 1, BufferUsages::STORAGE)?,
+            rigid_particle_needs_block: GpuTensor::vector_uninit(
+                backend,
+                1,
+                BufferUsages::STORAGE,
+            )?,
+        })
     }
 
     /// Samples particles from Rapier collider surfaces for MPM coupling.
+    #[cfg(feature = "rapier")]
     pub fn from_rapier(
         backend: &B,
         colliders: &ColliderSet,

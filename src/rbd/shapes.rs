@@ -5,6 +5,7 @@
 //! shapes to GPU-friendly formats with vertex buffers.
 
 use glam::Vec4;
+#[cfg(feature = "rapier")]
 use rapier::geometry::{Shape, ShapeType, TypedShape};
 
 use crate::math::Vector;
@@ -211,18 +212,23 @@ impl GpuShape {
     ///
     /// # Returns
     /// `Some(GpuShape)` if the shape type is supported, `None` otherwise
+    #[cfg(feature = "rapier")]
     pub fn from_parry(shape: &(impl Shape + ?Sized), buffers: &mut ShapeBuffers) -> Option<Self> {
+        use crate::math::{real, vector};
+
         match shape.as_typed_shape() {
-            TypedShape::Ball(shape) => Some(Self::ball(shape.radius)),
-            TypedShape::Cuboid(shape) => Some(Self::cuboid(shape.half_extents)),
+            TypedShape::Ball(shape) => Some(Self::ball(real(shape.radius))),
+            TypedShape::Cuboid(shape) => Some(Self::cuboid(vector(shape.half_extents))),
             TypedShape::Capsule(shape) => Some(Self::capsule(
-                shape.segment.a,
-                shape.segment.b,
-                shape.radius,
+                vector(shape.segment.a),
+                vector(shape.segment.b),
+                real(shape.radius),
             )),
             TypedShape::Polyline(shape) => {
                 let base_id = buffers.vertices.len();
-                buffers.vertices.extend_from_slice(shape.vertices());
+                buffers
+                    .vertices
+                    .extend(shape.vertices().iter().map(|v| vector(*v)));
                 Some(Self::polyline([
                     base_id as u32,
                     buffers.vertices.len() as u32,
@@ -230,7 +236,9 @@ impl GpuShape {
             }
             TypedShape::TriMesh(shape) => {
                 let base_id = buffers.vertices.len() as u32;
-                buffers.vertices.extend_from_slice(shape.vertices());
+                buffers
+                    .vertices
+                    .extend(shape.vertices().iter().map(|v| vector(*v)));
                 let gpu_trimesh = crate::trimesh::convert_trimesh_to_gpu(
                     shape,
                     &mut buffers.collision_vertices,
@@ -243,7 +251,7 @@ impl GpuShape {
             TypedShape::HeightField(shape) => {
                 let base_id = buffers.vertices.len();
                 let (vtx, _) = shape.to_polyline();
-                buffers.vertices.extend_from_slice(&vtx);
+                buffers.vertices.extend(vtx.iter().map(|v| vector(*v)));
                 Some(Self::polyline([
                     base_id as u32,
                     buffers.vertices.len() as u32,
@@ -253,7 +261,7 @@ impl GpuShape {
             TypedShape::HeightField(shape) => {
                 let (vtx, idx) = shape.to_trimesh();
                 let base_id = buffers.vertices.len() as u32;
-                buffers.vertices.extend_from_slice(&vtx);
+                buffers.vertices.extend(vtx.iter().map(|v| vector(*v)));
                 let trimesh = rapier::geometry::TriMesh::with_flags(
                     vtx,
                     idx,
@@ -269,9 +277,13 @@ impl GpuShape {
                 Some(Self::trimesh(&gpu_trimesh, base_id))
             }
             #[cfg(feature = "dim3")]
-            TypedShape::Cone(shape) => Some(Self::cone(shape.half_height, shape.radius)),
+            TypedShape::Cone(shape) => {
+                Some(Self::cone(real(shape.half_height), real(shape.radius)))
+            }
             #[cfg(feature = "dim3")]
-            TypedShape::Cylinder(shape) => Some(Self::cylinder(shape.half_height, shape.radius)),
+            TypedShape::Cylinder(shape) => {
+                Some(Self::cylinder(real(shape.half_height), real(shape.radius)))
+            }
             _ => None,
         }
     }
@@ -285,6 +297,7 @@ impl GpuShape {
     ///
     /// # Panics
     /// Panics if the stored type tag is invalid
+    #[cfg(feature = "rapier")]
     pub fn shape_type(&self) -> ShapeType {
         let tag = self.a.w.to_bits();
 
@@ -309,6 +322,7 @@ impl GpuShape {
     ///
     /// # Panics
     /// Panics if this shape is not a polyline
+    #[cfg(feature = "rapier")]
     pub fn polyline_rngs(&self) -> [u32; 2] {
         assert!(self.shape_type() == ShapeType::Polyline);
         [self.a.x.to_bits(), self.a.y.to_bits()]
@@ -318,6 +332,7 @@ impl GpuShape {
     ///
     /// # Panics
     /// Panics if this shape is not a triangle mesh
+    #[cfg(feature = "rapier")]
     pub fn trimesh_meta(&self) -> crate::trimesh::GpuTriMesh {
         assert!(self.shape_type() == ShapeType::TriMesh);
         crate::trimesh::GpuTriMesh {
@@ -333,6 +348,7 @@ impl GpuShape {
     ///
     /// # Panics
     /// Panics if this shape is not a triangle mesh
+    #[cfg(feature = "rapier")]
     pub fn trimesh_vertex_base_id(&self) -> u32 {
         assert!(self.shape_type() == ShapeType::TriMesh);
         self.b.z.to_bits()

@@ -8,6 +8,7 @@ use crate::grid::prefix_sum::{PrefixSumWorkspace, WgPrefixSum};
 use crate::grid::sort::WgSort;
 use crate::math::{GpuSim, Vector};
 use crate::rbd::dynamics::GpuBodySet;
+#[cfg(feature = "rapier")]
 use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
@@ -18,7 +19,9 @@ use crate::solver::{
 // The CDF kernel wrappers read the gated `Node.cdf`, so they only exist under the `cpic` feature.
 #[cfg(feature = "cpic")]
 use crate::solver::{WgG2PCdf, WgGridUpdateCdf, WgP2GCdf};
+#[cfg(feature = "rapier")]
 use rapier::dynamics::RigidBodySet;
+#[cfg(feature = "rapier")]
 use rapier::geometry::{ColliderHandle, ColliderSet};
 use slang_hal::backend::{Backend, Encoder, GpuTimestamps};
 use slang_hal::{BufferUsages, Shader, SlangCompiler};
@@ -275,6 +278,7 @@ pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     /// Staging buffer for reading the timestep bound estimate.
     pub timestep_bounds_staging: GpuScalar<GpuTimestepBounds, B>,
     prefix_sum: PrefixSumWorkspace<B>,
+    #[cfg(feature = "rapier")]
     coupling: Vec<BodyCouplingEntry>,
 }
 
@@ -308,6 +312,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
     /// # Returns
     ///
     /// GPU-resident simulation state ready for stepping.
+    #[cfg(feature = "rapier")]
     pub fn new(
         backend: &B,
         params: SimulationParams,
@@ -371,6 +376,7 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
     /// # Returns
     ///
     /// GPU-resident simulation state ready for stepping.
+    #[cfg(feature = "rapier")]
     pub fn with_select_coupling(
         backend: &B,
         params: SimulationParams,
@@ -429,10 +435,78 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
         })
     }
 
+    /// Creates MPM simulation data from a pre-built GPU rigid-body set.
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - GPU backend for buffer allocation
+    /// * `params` - Global simulation parameters (gravity, timestep)
+    /// * `particles` - Initial CPU-side particle data to upload
+    /// * `bodies` - GPU rigid bodies coupled with the simulation
+    /// * `materials` - Boundary condition per body (must have the same length as `bodies`)
+    /// * `cell_width` - Spatial width of each grid cell
+    /// * `grid_capacity` - Maximum number of active grid cells
+    ///
+    /// # Returns
+    ///
+    /// GPU-resident simulation state ready for stepping.
+    pub fn with_bodies(
+        backend: &B,
+        params: SimulationParams,
+        particles: &[Particle<GpuModel::Model>],
+        bodies: GpuBodySet<B>,
+        materials: &[GpuBoundaryCondition],
+        cell_width: f32,
+        grid_capacity: u32,
+    ) -> Result<Self, B::Error> {
+        let body_materials = GpuMaterials::new(backend, materials)?;
+        let sim_params = GpuSimulationParams::new(backend, params)?;
+        let particles = GpuParticles::from_particles(backend, particles)?;
+        let rigid_particles = GpuRigidParticles::new(backend)?;
+        let grid = GpuGrid::with_capacity(backend, grid_capacity, cell_width)?;
+        let prefix_sum = PrefixSumWorkspace::with_capacity(backend, grid_capacity)?;
+        let impulses = GpuImpulses::new(backend)?;
+        let poses_staging = GpuVector::vector_uninit(
+            backend,
+            bodies.len(),
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )?;
+        let bounds = GpuTimestepBounds::new();
+        let timestep_bounds = GpuTensor::scalar(
+            backend,
+            bounds,
+            BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+        )?;
+        let timestep_bounds_staging = GpuTensor::scalar(
+            backend,
+            bounds,
+            BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        )?;
+
+        Ok(Self {
+            sim_params,
+            particles,
+            gravity: params.gravity,
+            rigid_particles,
+            bodies,
+            body_materials,
+            impulses,
+            grid,
+            prefix_sum,
+            poses_staging,
+            #[cfg(feature = "rapier")]
+            coupling: Vec::new(),
+            timestep_bounds,
+            timestep_bounds_staging,
+            base_dt: params.dt,
+        })
+    }
+
     /// Returns the list of rigid body coupling entries.
     ///
     /// Each entry specifies a collider-body pair that participates in MPM-rigid body
     /// interaction and the coupling mode.
+    #[cfg(feature = "rapier")]
     pub fn coupling(&self) -> &[BodyCouplingEntry] {
         &self.coupling
     }

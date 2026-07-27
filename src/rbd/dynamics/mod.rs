@@ -1,8 +1,8 @@
 //! Rigid-body dynamics (forces, velocities, etc.)
 
-pub use body::{
-    BodyCoupling, BodyCouplingEntry, BodyDesc, GpuBodySet, GpuForce, GpuMassProperties, GpuVelocity,
-};
+#[cfg(feature = "rapier")]
+pub use body::BodyCouplingEntry;
+pub use body::{BodyCoupling, BodyDesc, GpuBodySet, GpuForce, GpuMassProperties, GpuVelocity};
 
 /// Rigid body definitions and GPU body set management.
 pub mod body;

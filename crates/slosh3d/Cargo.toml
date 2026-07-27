@@ -16,10 +16,14 @@ path = "../../src/lib.rs"
 required-features = ["dim3"]
 
 [features]
-default = ["dim3", "cpic", "node_particle_lists"]
+default = ["dim3", "rapier-f32", "cpic", "node_particle_lists"]
 dim3 = []
 cpic = []
 node_particle_lists = []
+
+rapier-f32 = ["dep:rapier3d", "rapier"]
+rapier-f64 = ["dep:rapier3d-f64", "rapier"]
+rapier = []
 
 comptime = ["stensor/comptime", "slosh_testbed3d/comptime"]
 runtime = ["stensor/runtime", "slosh_testbed3d/runtime"]
@@ -38,8 +42,8 @@ bvh = "0.12.0"
 
 serde = "1"
 
-# TODO: make rapier optional?
-rapier3d = "0.32"
+rapier3d = { version = "0.32", optional = true }
+rapier3d-f64 = { version = "0.32", optional = true }
 
 [dev-dependencies]
 futures-test = "0.3"

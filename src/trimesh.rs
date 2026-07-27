@@ -1,9 +1,8 @@
 // TODO: move this to rbd?
 
-use crate::math::Vector;
 use encase::ShaderType;
-use rapier::geometry::TriMesh;
-use rapier::prelude::DIM;
+#[cfg(feature = "rapier")]
+use {crate::math::Vector, rapier::geometry::TriMesh, rapier::prelude::DIM};
 
 #[derive(Copy, Clone, ShaderType)]
 pub struct GpuTriMesh {
@@ -19,11 +18,14 @@ pub struct GpuTriMesh {
     pub num_vertices: u32,
 }
 
+#[cfg(feature = "rapier")]
 pub fn convert_trimesh_to_gpu(
     shape: &TriMesh,
     vertices: &mut Vec<Vector>,
     indices: &mut Vec<u32>,
 ) -> GpuTriMesh {
+    use crate::math::vector;
+
     let bvh_vtx_root_id = vertices.len();
     let bvh_idx_root_id = indices.len();
     // Append the BVH data to the vertex/index buffers.
@@ -57,7 +59,10 @@ pub fn convert_trimesh_to_gpu(
         .map(|tri| {
             let aabb = tri.local_aabb();
             BvhObject {
-                aabb: bvh::aabb::Aabb::with_bounds(aabb.mins.into(), aabb.maxs.into()),
+                aabb: bvh::aabb::Aabb::with_bounds(
+                    vector(aabb.mins).into(),
+                    vector(aabb.maxs).into(),
+                ),
                 node_index: 0,
             }
         })
@@ -83,14 +88,10 @@ pub fn convert_trimesh_to_gpu(
         let pn = shape
             .pseudo_normals()
             .expect("trimeshes without pseudo-normals are not supported");
-        vertices.extend_from_slice(shape.vertices());
-        vertices.extend_from_slice(&pn.vertices_pseudo_normal);
+        vertices.extend(shape.vertices().iter().map(|v| vector(*v)));
+        vertices.extend(pn.vertices_pseudo_normal.iter().map(|v| vector(*v)));
         assert_eq!(shape.vertices().len(), pn.vertices_pseudo_normal.len());
-        vertices.extend(
-            pn.edges_pseudo_normal
-                .iter()
-                .flat_map(|n| n.map(Vector::from)),
-        );
+        vertices.extend(pn.edges_pseudo_normal.iter().flat_map(|n| n.map(vector)));
     }
     indices.extend(shape.indices().iter().flat_map(|tri| tri.iter().copied()));
     GpuTriMesh {

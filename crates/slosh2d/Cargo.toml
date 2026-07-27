@@ -16,10 +16,14 @@ path = "../../src/lib.rs"
 required-features = ["dim2"]
 
 [features]
-default = ["dim2", "cpic", "node_particle_lists"]
+default = ["dim2", "rapier-f32", "cpic", "node_particle_lists"]
 dim2 = []
 cpic = []
 node_particle_lists = []
+
+rapier-f32 = ["dep:rapier2d", "rapier"]
+rapier-f64 = ["dep:rapier2d-f64", "rapier"]
+rapier = []
 
 comptime = ["slosh_testbed2d/comptime", "stensor/comptime"]
 runtime = ["slosh_testbed2d/runtime", "stensor/runtime"]
@@ -38,8 +42,8 @@ static_assertions = { workspace = true }
 #wgebra = "0.2"
 bvh = "0.12.0"
 
-# TODO: make rapier optional?
-rapier2d = "0.32"
+rapier2d = { version = "0.32", optional = true }
+rapier2d-f64 = { version = "0.32", optional = true }
 
 # For wasm?
 getrandom = { version = "0.3.1", features = ["wasm_js"] }
