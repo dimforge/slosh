@@ -1,13 +1,26 @@
+use crate::models::ElasticCoefficients;
 use bytemuck::{Pod, Zeroable};
 use slang_hal::BufferUsages;
 use slang_hal::backend::Backend;
 use stensor::tensor::GpuVector;
 
+/// Boundary condition applied to the grid nodes in contact with a collider.
+///
+/// The memory layout must match the shader-side `BoundaryCondition` struct in
+/// `shaders/slosh/solver/boundary_condition.slang`.
 #[derive(Copy, Clone, Debug, PartialEq, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuBoundaryCondition {
     pub ty: u32,
     pub friction: f32,
+    /// Pressure (dilatational) wave speed of the material in contact with the boundary (m/s).
+    ///
+    /// Only read by the [`Self::NON_REFLECTING`] boundary condition.
+    pub wave_speed_p: f32,
+    /// Shear wave speed of the material in contact with the boundary (m/s).
+    ///
+    /// Only read by the [`Self::NON_REFLECTING`] boundary condition.
+    pub wave_speed_s: f32,
 }
 
 impl GpuBoundaryCondition {
@@ -19,42 +32,79 @@ impl GpuBoundaryCondition {
     pub const DISABLED: u32 = 5u32;
 
     pub fn stick() -> GpuBoundaryCondition {
-        Self {
-            ty: Self::STICK,
-            friction: 0.0,
-        }
+        Self::new(Self::STICK, 0.0)
     }
 
     pub fn slip() -> GpuBoundaryCondition {
-        Self {
-            ty: Self::SLIP,
-            friction: 0.0,
-        }
+        Self::new(Self::SLIP, 0.0)
     }
 
     pub fn separate(friction: f32) -> GpuBoundaryCondition {
-        Self {
-            ty: Self::SEPARATE,
-            friction,
-        }
+        Self::new(Self::SEPARATE, friction)
     }
 
     pub fn friction_z_up(friction: f32) -> GpuBoundaryCondition {
-        Self {
-            ty: Self::FRICTION_Z_UP,
-            friction,
-        }
+        Self::new(Self::FRICTION_Z_UP, friction)
     }
 
     pub fn disabled() -> GpuBoundaryCondition {
+        Self::new(Self::DISABLED, 0.0)
+    }
+
+    /// An absorbing (non-reflecting) boundary based on Lysmer-Kuhlemeyer viscous dashpots.
+    ///
+    /// The boundary applies the traction a semi-infinite continuation of the material would,
+    /// `-ρ·c_p·v_n` along the normal and `-ρ·c_s·v_t` along the tangent, so a wave at normal
+    /// incidence is absorbed rather than reflected. Absorption degrades away from that incidence.
+    ///
+    /// The traction is graded over a band several cells deep (see `ABSORBING_LAYERS` in
+    /// `shaders/slosh/solver/boundary_condition.slang`), which the domain must have room for.
+    ///
+    /// Note a dashpot only opposes motion and holds nothing in place: this is meant for the
+    /// far-field walls of a wave propagation simulation, not the ground a material rests on.
+    ///
+    /// # Arguments
+    ///
+    /// * `wave_speed_p` - Pressure wave speed `sqrt((λ + 2μ) / ρ)` of the material in contact (m/s)
+    /// * `wave_speed_s` - Shear wave speed `sqrt(μ / ρ)` of the material in contact (m/s)
+    ///
+    /// See [`Self::non_reflecting_for_material`] for computing these from engineering parameters.
+    pub fn non_reflecting(wave_speed_p: f32, wave_speed_s: f32) -> GpuBoundaryCondition {
         Self {
-            ty: Self::DISABLED,
+            ty: Self::NON_REFLECTING,
             friction: 0.0,
+            wave_speed_p,
+            wave_speed_s,
         }
     }
 
-    pub fn non_reflecting() -> GpuBoundaryCondition {
-        todo!();
+    /// Same as [`Self::non_reflecting`], but derives the wave speeds from the elastic
+    /// properties of the material in contact with the boundary.
+    ///
+    /// # Arguments
+    ///
+    /// * `young_modulus` - Young’s modulus E (Pa) of the material in contact
+    /// * `poisson_ratio` - Poisson’s ratio ν of the material in contact
+    /// * `density` - Density ρ of the material in contact (kg/m³, or kg/m² in 2D)
+    pub fn non_reflecting_for_material(
+        young_modulus: f32,
+        poisson_ratio: f32,
+        density: f32,
+    ) -> GpuBoundaryCondition {
+        let coeffs = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
+        Self::non_reflecting(
+            ((coeffs.lambda + 2.0 * coeffs.mu) / density).sqrt(),
+            (coeffs.mu / density).sqrt(),
+        )
+    }
+
+    fn new(ty: u32, friction: f32) -> GpuBoundaryCondition {
+        Self {
+            ty,
+            friction,
+            wave_speed_p: 0.0,
+            wave_speed_s: 0.0,
+        }
     }
 }
 

@@ -127,12 +127,12 @@ func grid_update(
         #if DIM == 2
             let node_velocity = velocity_mass.xy;
             let node_mass = velocity_mass.z;
-            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt);
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt, cell_width);
             velocity_mass = float3(projected, node_mass);
         #else
             let node_velocity = velocity_mass.xyz;
             let node_mass = velocity_mass.w;
-            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt);
+            let projected = material.project_velocity(node_velocity, collision.normal, dist_with_margin, sim_params.dt, cell_width);
             velocity_mass = float4(projected, node_mass);
         #endif
     }

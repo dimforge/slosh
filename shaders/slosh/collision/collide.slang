@@ -84,6 +84,12 @@ public struct GridCollision {
 }
 
 
+// How far (in cells) from a collider’s surface a grid node still gets a collision reported. This
+// bounds the reach of every boundary condition; it is wider than the 1.5 cells the contact
+// conditions need because `NonReflecting` absorbs over a deeper band (see `ABSORBING_LAYERS` in
+// solver/boundary_condition.slang).
+public static const float COLLISION_REPORT_CELLS = 6.5;
+
 public func collide(
     StructuredBuffer<Shape> collision_shapes,
     StructuredBuffer<Pose> collision_shape_poses,
@@ -97,7 +103,7 @@ public func collide(
     static const float MAX_FLT = 1.0e10; // Is the f32::MAX constant defined somewhere in WGSL?
     var collision = GridCollision(Vect<float>(0.0), Vect<float>(0.0), 0, false);
 
-    let dist_cap = Vect<float>(cell_width * 1.5);
+    let dist_cap = Vect<float>(cell_width * COLLISION_REPORT_CELLS);
     var best_dist = MAX_FLT;
 
     // TODO: don’t  rely on the array length, e.g., if the user wants to

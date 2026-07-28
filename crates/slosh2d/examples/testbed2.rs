@@ -1,6 +1,7 @@
 mod centilever_beam2;
 mod elastic_cut2;
 mod elasticity2;
+mod non_reflecting2;
 mod sand2;
 
 #[kiss3d::main]
@@ -10,6 +11,10 @@ pub async fn main() {
         ("sand".to_string(), sand2::sand_demo),
         ("elasticity".to_string(), elasticity2::elasticity_demo),
         ("elastic_cut".to_string(), elastic_cut2::elastic_cut_demo),
+        (
+            "non-reflecting boundary".to_string(),
+            non_reflecting2::non_reflecting_demo,
+        ),
     ])
     .await;
 }
