@@ -323,6 +323,9 @@ public struct Node {
     /// (depending on the context). The fourth component contains the cell’s mass.
     // TODO: maybe we don’t really need to pack ourself.
     public vector<float, DIM + 1> momentum_velocity_mass;
+    /// Per-axis mass, `sum_p mass_scale_j * m_p * N_Ip`, which the momentum update divides by.
+    /// Equal to the scalar mass above unless a material rescales its own inertia (the PML does).
+    public vector<float, DIM> directional_mass;
 #if SLOSH_CPIC
     // If a particle is incompatible with this node (as pepr CPIC’s concept of compatibility
     // based on affinities), it will contribute to this field instead of `momentum_velocity_mass`.
@@ -470,6 +473,7 @@ func reset(
 //   for (var i = invocation_id.x; i < num_nodes; i += num_threads) {
     if (i < num_nodes) {
        nodes[i].momentum_velocity_mass = vector<float, DIM + 1>(0.0);
+       nodes[i].directional_mass = vector<float, DIM>(0.0);
 #if SLOSH_CPIC
        nodes[i].momentum_velocity_mass_incompatible = vector<float, DIM + 1>(0.0);
        nodes[i].cdf = NodeCdf(0.0, 0, NONE);

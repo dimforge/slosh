@@ -2,10 +2,12 @@
 //!
 //! This module provides material models that define how particles respond to deformation:
 //! - [`ElasticCoefficients`]: Linear elasticity using Lamé parameters
+//! - [`PmlModel`]: Absorbing (perfectly-matched-layer) material for far-field boundaries
 //! - [`DruckerPrager`]: Drucker-Prager plasticity model for granular materials (sand, soil)
 //!
 //! Material models are used by particles to compute stress from deformation gradients.
 
+use crate::math::Vector;
 use bytemuck::{Pod, Zeroable};
 pub use drucker_prager::{DruckerPrager, DruckerPragerPlasticState};
 
@@ -40,6 +42,42 @@ pub struct ElasticCoefficients {
     pub mu: f32,
     /// CFL coefficient for timestep stability (default 0.5).
     pub cfl_coeff: f32,
+}
+
+/// Absorbing (perfectly-matched-layer) material, after Kurima, Chandra & Soga
+/// ([arXiv:2407.02790](https://arxiv.org/abs/2407.02790)).
+///
+/// Linear elasticity with per-axis stretched coordinates, which slows outgoing waves instead of
+/// reflecting them. The stretch does not dissipate: pair it with damping over the same region.
+#[derive(Copy, Clone, PartialEq, Debug, Pod, Zeroable)]
+#[repr(C)]
+pub struct PmlModel {
+    /// Elastic coefficients, which should match the material the layer is absorbing for.
+    pub elastic: ElasticCoefficients,
+    /// Per-axis coordinate stretching `C'_j`, zero outside the absorbing layer. Always three
+    /// entries so the GPU layout is identical in 2D and 3D; the third is unused in 2D.
+    pub stretch: [f32; 3],
+}
+
+/// Maximum stretch `α` at the outer edge of an absorbing layer. The paper's parameter study
+/// settles on 4, with little further gain beyond ~3.2.
+pub const DEFAULT_PML_MAX_STRETCH: f32 = 4.0;
+
+/// Computes the PML coordinate stretching for a point inside an absorbing layer.
+///
+/// The layer wraps the box `[interior_mins, interior_maxs]`, `thickness` deep on every side, and
+/// the stretch ramps linearly from zero at its inner boundary to `max_stretch` at the outer one.
+pub fn pml_stretch(
+    position: Vector,
+    interior_mins: Vector,
+    interior_maxs: Vector,
+    thickness: f32,
+    max_stretch: f32,
+) -> Vector {
+    let below = (interior_mins - position).max(Vector::ZERO);
+    let above = (position - interior_maxs).max(Vector::ZERO);
+    let depth = ((below + above) / thickness.max(1.0e-6)).min(Vector::ONE);
+    depth * max_stretch
 }
 
 impl ElasticCoefficients {

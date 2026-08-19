@@ -4,7 +4,9 @@ import slosh.models.interfaces;
 import slosh.models.linear_elasticity;
 import slosh.models.neo_hookean_elasticity;
 import slosh.models.drucker_prager;
+import slosh.models.pml;
 import slosh.solver.particle;
+import slosh.models.utils;
 import slosh.aliases;
 
 
@@ -13,8 +15,10 @@ public enum class DefaultParticleModelType {
     ElasticNeoHookean = 1,
     SandLinear = 2,
     SandNeoHookean = 3,
+    // Absorbing (perfectly-matched-layer) particle; see models/pml.slang.
+    AbsorbingPml = 4,
     // Provided to help downstream users extend with their own enum.
-    LEN = 4,
+    LEN = 5,
 }
 
 public struct SandModel<ElasticModel> {
@@ -60,12 +64,14 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
         switch (DefaultParticleModelType(model_tag)) {
             case DefaultParticleModelType::ElasticLinear: {
                 let model = models.Load<LinearElasticModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(def_grad)
+                    + viscous_stress(model.lambda, model.mu, data.velocity_gradient, data.stiffness_damping);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::ElasticNeoHookean: {
                 let model = models.Load<NeoHookeanModel>(model_offset);
-                let stress = model.kirchoff_stress(def_grad);
+                let stress = model.kirchoff_stress(def_grad)
+                    + viscous_stress(model.lambda, model.mu, data.velocity_gradient, data.stiffness_damping);
                 return ModelUpdateResult(stress);
             }
             case DefaultParticleModelType::SandLinear: {
@@ -73,7 +79,8 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
                 let projection = model.plastic.project(model.plastic_state, def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
-                let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
+                let stress = model.elastic.kirchoff_stress(projection.deformation_gradient)
+                    + viscous_stress(model.elastic.lambda, model.elastic.mu, data.velocity_gradient, data.stiffness_damping);
                 def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
             }
@@ -82,9 +89,16 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
                 let projection = model.plastic.project(model.plastic_state, def_grad);
                 let state_offset = model_offset + model.state_offset();
                 models.Store<DruckerPragerPlasticState>(state_offset, projection.state);
-                let stress = model.elastic.kirchoff_stress(projection.deformation_gradient);
+                let stress = model.elastic.kirchoff_stress(projection.deformation_gradient)
+                    + viscous_stress(model.elastic.lambda, model.elastic.mu, data.velocity_gradient, data.stiffness_damping);
                 def_grad = projection.deformation_gradient;
                 return ModelUpdateResult(stress);
+            }
+            case DefaultParticleModelType::AbsorbingPml: {
+                let model = models.Load<PmlModel>(model_offset);
+                let stress = model.kirchoff_stress(def_grad)
+                    + model.viscous_stress(data.velocity_gradient, data.stiffness_damping);
+                return ModelUpdateResult(stress, -1.0, model.mass_scale());
             }
             default:
                 return ModelUpdateResult(Mat<float>(0.0));
@@ -120,6 +134,10 @@ public struct DefaultParticleModel<let BYTES_STRIDE: uint = DEFAULT_MODEL_BYTES_
             case DefaultParticleModelType::SandNeoHookean: {
                 let model = models.Load<SandModel<NeoHookeanModel>>(model_offset);
                 return model.elastic.timestep_bound(particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
+            }
+            case DefaultParticleModelType::AbsorbingPml: {
+                let model = models.Load<PmlModel>(model_offset);
+                return model.timestep_bound(particle_density0, particle_velocity, def_grad_det, cell_width);
             }
             default:
                 return 0.0;

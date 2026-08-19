@@ -60,19 +60,28 @@ impl GpuBoundaryCondition {
     /// The traction is graded over a band several cells deep (see `ABSORBING_LAYERS` in
     /// `shaders/slosh/solver/boundary_condition.slang`), which the domain must have room for.
     ///
-    /// Note a dashpot only opposes motion and holds nothing in place: this is meant for the
-    /// far-field walls of a wave propagation simulation, not the ground a material rests on.
+    /// It is layered on top of the [`Self::separate`] contact response, so `friction` behaves as
+    /// it does there. Note the shear dashpot damps tangential velocity all through the band, so
+    /// material resting inside it is dragged to a halt; pass a zero `wave_speed_s` to leave
+    /// sliding alone.
     ///
     /// # Arguments
     ///
     /// * `wave_speed_p` - Pressure wave speed `sqrt((λ + 2μ) / ρ)` of the material in contact (m/s)
-    /// * `wave_speed_s` - Shear wave speed `sqrt(μ / ρ)` of the material in contact (m/s)
+    /// * `wave_speed_s` - Shear wave speed `sqrt(μ / ρ)` of the material in contact (m/s), or
+    ///   zero to absorb the pressure wave only
+    /// * `friction` - Coulomb friction coefficient of the contact response, as in [`Self::separate`]
     ///
-    /// See [`Self::non_reflecting_for_material`] for computing these from engineering parameters.
-    pub fn non_reflecting(wave_speed_p: f32, wave_speed_s: f32) -> GpuBoundaryCondition {
+    /// See [`Self::non_reflecting_for_material`] for computing the wave speeds from engineering
+    /// parameters.
+    pub fn non_reflecting(
+        wave_speed_p: f32,
+        wave_speed_s: f32,
+        friction: f32,
+    ) -> GpuBoundaryCondition {
         Self {
             ty: Self::NON_REFLECTING,
-            friction: 0.0,
+            friction,
             wave_speed_p,
             wave_speed_s,
         }
@@ -86,13 +95,21 @@ impl GpuBoundaryCondition {
     /// * `young_modulus` - Young’s modulus E (Pa) of the material in contact
     /// * `poisson_ratio` - Poisson’s ratio ν of the material in contact
     /// * `density` - Density ρ of the material in contact (kg/m³, or kg/m² in 2D)
+    /// * `friction` - Coulomb friction coefficient of the contact response
     pub fn non_reflecting_for_material(
         young_modulus: f32,
         poisson_ratio: f32,
         density: f32,
+        friction: f32,
     ) -> GpuBoundaryCondition {
+        let (p, s) = Self::wave_speeds(young_modulus, poisson_ratio, density);
+        Self::non_reflecting(p, s, friction)
+    }
+
+    /// Pressure and shear wave speeds `(c_p, c_s)` of an isotropic linear elastic material.
+    pub fn wave_speeds(young_modulus: f32, poisson_ratio: f32, density: f32) -> (f32, f32) {
         let coeffs = ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio);
-        Self::non_reflecting(
+        (
             ((coeffs.lambda + 2.0 * coeffs.mu) / density).sqrt(),
             (coeffs.mu / density).sqrt(),
         )

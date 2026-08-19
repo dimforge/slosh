@@ -123,7 +123,7 @@ func particle_update(
         /*
          * Constitutive model.
          */
-        let update_data = ParticleUpdateData(dt, cell_width, particle_id, kin.affine, props.init_volume, props.phase);
+        let update_data = ParticleUpdateData(dt, cell_width, particle_id, kin.affine, props.init_volume, props.phase, props.stiffness_damping);
         let update_result = model.update(particles_model, update_data, def_grad);
 
         // Write back init_volume if the model modified it (e.g., swell).
@@ -137,7 +137,12 @@ func particle_update(
          */
         let inv_d = QuadraticKernel::inv_d(cell_width);
         // NOTE: the velocity gradient was stored in the affine buffer.
-        let affine = kin.affine * kin.mass - update_result.kirchoff_stress * (effective_init_volume * inv_d * dt);
+        //
+        // P2G contracts this as `sum_i dpt_i * A_ij`, so scaling column `j` applies the per-axis
+        // inertia to the inertial half only; the stress half is an internal force and is left alone.
+        kin.mass_scale = update_result.mass_scale;
+        let inertia = mul(kin.affine * kin.mass, diag(update_result.mass_scale));
+        let affine = inertia - update_result.kirchoff_stress * (effective_init_volume * inv_d * dt);
 
         /*
          * Write back the new particle properties.

@@ -138,6 +138,7 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             num_substeps: 1,
             gravity_factor: 1.0,
             restarting: false,
+            restart_requested: false,
             show_rigid_particles: false,
             cell_width: 0.01,
             particle_colors: None,
@@ -398,7 +399,7 @@ pub async fn run_with_hooks_and_config<GpuModel: GpuParticleModelData>(
         hooks,
         config,
         scene_builders,
-        |_, _, _, _| None,
+        |_, _, _, _, _| None,
         #[cfg(feature = "dim3")]
         up_axis,
     )
@@ -412,6 +413,7 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
     scene_builders: SceneBuilders<GpuModel>,
     mut extra_ui: impl FnMut(
         &egui::Context,
+        &mut AppState<GpuModel>,
         &PhysicsContext<GpuModel>,
         &SimulationStepResult,
         bool,
@@ -623,11 +625,21 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                 }
             });
 
-            ui_run_state = extra_ui(ctx, &stage.physics, &stage.step_result, stepped);
+            ui_run_state = extra_ui(
+                ctx,
+                &mut stage.app_state,
+                &stage.physics,
+                &stage.step_result,
+                stepped,
+            );
         });
 
         if let Some(run_state) = ui_run_state {
             stage.app_state.run_state = run_state;
+        }
+
+        if std::mem::take(&mut stage.app_state.restart_requested) {
+            new_selected_demo = Some(stage.selected_demo);
         }
 
         if let Some(demo) = new_selected_demo {

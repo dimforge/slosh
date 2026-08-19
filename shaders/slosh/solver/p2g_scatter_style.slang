@@ -26,10 +26,12 @@ static const uint WORKGROUP_SIZE = WORKGROUP_SIZE_X * WORKGROUP_SIZE_Y * WORKGRO
 #if DIM == 2
 groupshared float2 shared_pos[WORKGROUP_SIZE];
 groupshared float2 shared_momentum[WORKGROUP_SIZE];
+groupshared float2 shared_dir_mass[WORKGROUP_SIZE];
 groupshared float2x2 shared_affine[WORKGROUP_SIZE];
 #else
 groupshared float3 shared_pos[WORKGROUP_SIZE];
 groupshared float3 shared_momentum[WORKGROUP_SIZE];
+groupshared float3 shared_dir_mass[WORKGROUP_SIZE];
 groupshared float3x3 shared_affine[WORKGROUP_SIZE];
 #endif
 groupshared float shared_mass[WORKGROUP_SIZE];
@@ -71,12 +73,14 @@ func p2g_scatter_style(
     let local_cell = int2(int(tid % 8u), int(tid / 8u));
     let cell_pos = float2(block_vid * 8 + local_cell) * cell_width;
     var acc = float3(0.0);
+    var dir_mass_acc = float2(0.0);
     // This thread's node slab along the sort axis (the slowest-varying node axis).
     let node_slab = local_cell.y;
 #else
     let local_cell = int3(int(tid % 4u), int((tid / 4u) % 4u), int(tid / 16u));
     let cell_pos = float3(block_vid * 4 + local_cell) * cell_width;
     var acc = float4(0.0);
+    var dir_mass_acc = float3(0.0);
     let node_slab = local_cell.z;
 #endif
 
@@ -93,7 +97,10 @@ func p2g_scatter_style(
             shared_pos[tid] = pos;
             shared_mass[tid] = kin.mass;
             shared_affine[tid] = kin.affine;
-            shared_momentum[tid] = kin.velocity * kin.mass + kin.force_dt;
+            // Only the inertial momentum carries the per-axis mass scale; `force_dt` is an
+            // external force and, like gravity, is left alone.
+            shared_momentum[tid] = kin.mass_scale * kin.velocity * kin.mass + kin.force_dt;
+            shared_dir_mass[tid] = kin.mass_scale * kin.mass;
 
             // Slab key along the sort axis, relative to this block; must match the bucket key
             // used by the sort (same associated-cell rounding, same clamp at -2) so the shared
@@ -144,6 +151,7 @@ func p2g_scatter_style(
             if (weight != 0.0) {
                 let momentum = mul(dpt, shared_affine[p]) + shared_momentum[p];
                 acc += vector<float, DIM + 1>(momentum, shared_mass[p]) * weight;
+                dir_mass_acc += shared_dir_mass[p] * weight;
             }
         }
     }
@@ -152,4 +160,5 @@ func p2g_scatter_style(
     // (no atomics, no inter-block races), zeroing cells that received no contribution.
     let global_chunk_id = block_header_id_to_physical_id(BlockHeaderId(bid));
     nodes[global_chunk_id.id + tid].momentum_velocity_mass = acc;
+    nodes[global_chunk_id.id + tid].directional_mass = dir_mass_acc;
 }

@@ -69,6 +69,18 @@ func estimate_timestep_bound(
         var dt = model.timestep_bound(particles_model, particle_id, density0, def_grad, velocity, cell_width);
 
         /*
+         * Rayleigh stiffness-proportional damping tightens the explicit bound below the CFL one.
+         * For central differencing the critical step is `(2 / w) * (sqrt(1 + x^2) - x)` with
+         * `x = a_K w / 2`, using the model's own bound as the highest resolved frequency
+         * `w ~ 1 / dt`. Overshooting it silently disables diverging particles instead of blowing up.
+         */
+        let stiffness_damping = particles_props[particle_id].stiffness_damping;
+        if (stiffness_damping > 0.0 && dt > 0.0) {
+            let x = stiffness_damping / (2.0 * dt);
+            dt = min(dt, 2.0 * dt * (sqrt(1.0 + x * x) - x));
+        }
+
+        /*
          * Velocity-based restrictions (section 4.2)
          */
        var norm_affine_squared = 0.0;

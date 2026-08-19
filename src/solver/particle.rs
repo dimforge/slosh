@@ -45,7 +45,18 @@ pub struct ParticleDynamics {
     ///
     /// Applies a damping force proportional to velocity: F_damp = -damping * m * v.
     /// Typical values: 0.0 (no damping) to 10.0 (heavy damping).
+    ///
+    /// Opposes absolute velocity, so it damps rigid-body motion too: a body in free flight is
+    /// slowed like everything else. Use [`Self::stiffness_damping`] where that matters.
     pub damping: f32,
+    /// Rayleigh stiffness-proportional damping coefficient (s).
+    ///
+    /// Adds a viscous stress `a_K * C : sym(grad v)`. Unlike [`Self::damping`] it is blind to
+    /// rigid-body motion, so it attenuates waves without dragging on bulk movement.
+    ///
+    /// It tightens the explicit stability bound, which [`crate::solver::WgTimestepBounds`]
+    /// accounts for; keeping it below the timestep leaves that bound untouched.
+    pub stiffness_damping: f32,
     /// The particle phase (used by materials that can break).
     pub phase: f32,
     /// Whether this particle is active (1) or disabled (0).
@@ -76,6 +87,7 @@ impl ParticleDynamics {
             init_radius: radius,
             mass: init_volume * density,
             damping: 0.0,
+            stiffness_damping: 0.0,
             cdf: Cdf::default(),
             phase: 1.0,
             enabled: 1,
@@ -88,9 +100,14 @@ impl ParticleDynamics {
         self.fixed = fixed as u32;
     }
 
-    /// Sets the damping coefficient for this particle.
+    /// Sets the mass-proportional damping coefficient for this particle.
     pub fn set_damping(&mut self, damping: f32) {
         self.damping = damping;
+    }
+
+    /// Sets the stiffness-proportional damping coefficient for this particle.
+    pub fn set_stiffness_damping(&mut self, stiffness_damping: f32) {
+        self.stiffness_damping = stiffness_damping;
     }
 
     /// Updates the particle mass based on a new density.
@@ -106,6 +123,7 @@ impl ParticleDynamics {
             affine: self.affine,
             velocity: self.velocity,
             force_dt: self.force_dt,
+            mass_scale: Vector::ONE,
             vel_grad_det: self.vel_grad_det,
             mass: self.mass,
             enabled: self.enabled,
@@ -118,6 +136,7 @@ impl ParticleDynamics {
             init_volume: self.init_volume,
             init_radius: self.init_radius,
             damping: self.damping,
+            stiffness_damping: self.stiffness_damping,
             phase: self.phase,
             fixed: self.fixed,
         }
@@ -138,6 +157,9 @@ pub struct Kinematics {
     pub velocity: Vector,
     /// Additional force * dt applied to the particle.
     pub force_dt: Vector,
+    /// Per-axis multiplier on this particle's inertia, one for ordinary materials (the PML uses
+    /// `s_j²`). Recomputed from the material model at every particle update.
+    pub mass_scale: Vector,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
     /// Particle mass (kg).
@@ -160,6 +182,8 @@ pub struct ParticleProperties {
     pub init_radius: f32,
     /// Rayleigh mass-proportional damping coefficient (1/s).
     pub damping: f32,
+    /// Rayleigh stiffness-proportional damping coefficient (s).
+    pub stiffness_damping: f32,
     /// The particle phase (used by materials that can break).
     pub phase: f32,
     /// Whether this particle is fixed (1) or dynamic (0).

@@ -7,15 +7,26 @@ public struct ModelUpdateResult {
     public Mat<float> kirchoff_stress;
     // Negative means unchanged. If >= 0, the model modified init_volume (e.g., swell).
     public float init_volume;
+    // Per-axis multiplier on this material's inertia; one for anything ordinary. P2G scatters it
+    // into the node's directional mass, so a heavier axis also falls slower along it.
+    public Vect<float> mass_scale;
 
     public __init(Mat stress) {
         this.kirchoff_stress = stress;
         this.init_volume = -1.0;
+        this.mass_scale = Vect<float>(1.0);
     }
 
     public __init(Mat stress, float init_volume) {
         this.kirchoff_stress = stress;
         this.init_volume = init_volume;
+        this.mass_scale = Vect<float>(1.0);
+    }
+
+    public __init(Mat stress, float init_volume, Vect<float> mass_scale) {
+        this.kirchoff_stress = stress;
+        this.init_volume = init_volume;
+        this.mass_scale = mass_scale;
     }
 }
 
@@ -31,6 +42,8 @@ public struct ParticleUpdateData {
     public matrix<float, DIM, DIM> velocity_gradient;
     public float init_volume;
     public float phase;
+    // Rayleigh stiffness-proportional damping coefficient, in seconds. See `viscous_stress`.
+    public float stiffness_damping;
 
     public __init(float dt, float cell_width, uint particle_id, matrix<float, DIM, DIM> velocity_gradient, float init_volume, float phase) {
         this.dt = dt;
@@ -39,6 +52,17 @@ public struct ParticleUpdateData {
         this.velocity_gradient = velocity_gradient;
         this.init_volume = init_volume;
         this.phase = phase;
+        this.stiffness_damping = 0.0;
+    }
+
+    public __init(float dt, float cell_width, uint particle_id, matrix<float, DIM, DIM> velocity_gradient, float init_volume, float phase, float stiffness_damping) {
+        this.dt = dt;
+        this.cell_width = cell_width;
+        this.particle_id = particle_id;
+        this.velocity_gradient = velocity_gradient;
+        this.init_volume = init_volume;
+        this.phase = phase;
+        this.stiffness_damping = stiffness_damping;
     }
 }
 

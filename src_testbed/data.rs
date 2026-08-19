@@ -20,6 +20,9 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub num_substeps: u32,
     pub gravity_factor: f32,
     pub restarting: bool,
+    /// Set from a scene's extra UI to rebuild the current scene at the end of the frame, for
+    /// settings that change what the scene is made of. Same path as the "Restart" button.
+    pub restart_requested: bool,
     // pub hot_reload: HotReloadState,
     pub show_rigid_particles: bool,
     pub cell_width: f32,

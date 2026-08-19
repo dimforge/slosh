@@ -48,9 +48,9 @@ pub struct MpmPipelineKernels {
     /// rigid-particle pass yet.
     pub rigid_particles: bool,
     /// Run the per-node `reset` pass during the sort. Its only unconditional job is zeroing
-    /// `Node.momentum_velocity_mass`, which every P2G variant overwrites on every active node
-    /// anyway, so set `false` to skip it when the built-in P2G (or a `run_p2g` hook) is known to
-    /// write every active node.
+    /// `Node.momentum_velocity_mass` and `Node.directional_mass`, which every P2G variant
+    /// overwrites on every active node anyway, so set `false` to skip it when the built-in P2G
+    /// (or a `run_p2g` hook) is known to write both on every active node.
     ///
     /// Only honored with both `cpic` and `node_particle_lists` off. With either on, `reset` also
     /// does init those features rely on (the cpic incompatible/cdf lanes, the linked-list
