@@ -10,17 +10,16 @@
   `models::pml_stretch` computes the per-particle stretch from the layer geometry. It absorbs
   better than the dashpot boundary above (~0.2% vs ~1% of a reflecting wall's residual motion on
   a 2D impulse test) at the cost of the extra particles the layer needs.
-- Grid nodes now carry a per-direction mass (`Node.directional_mass`) alongside the scalar one, so
-  a material can rescale its own inertia per axis via `ModelUpdateResult::mass_scale`. The
-  momentum update divides by it while gravity keeps acting on the real mass. Ordinary materials
-  report a scale of one and are unaffected. This is what lets the absorbing PML layer above hold
-  itself up under gravity. A P2G hook replacing the built-in transfer must write this field too.
+- The PML and the two items below sit behind the new `pml` cargo feature, off by default, mirrored
+  in the shaders as `SLOSH_PML`. It shifts `DefaultParticleModelType::LEN` (5 on, 4 off).
+- With `pml` on, grid nodes carry a per-direction mass (`Node.directional_mass`), so a material can
+  rescale its own inertia per axis via `ModelUpdateResult::mass_scale`. The momentum update divides
+  by it while gravity keeps acting on the real mass. Ordinary materials report a scale of one. A
+  P2G hook replacing the built-in transfer must write this field too.
 - Add `ParticleDynamics::stiffness_damping`, the stiffness-proportional half of Rayleigh damping.
-  It adds a viscous stress `a_K * C : sym(grad v)` using each material's own elastic tensor, so
-  unlike the existing mass-proportional `damping` it is blind to rigid-body motion: a body in free
-  flight or a domain shaken at its base keeps moving while its vibrations are damped. Supported by
-  every built-in model. It tightens the explicit stability bound, which `WgTimestepBounds` now
-  accounts for.
+  It adds a viscous stress `a_K * C : sym(grad v)` from each material's own elastic tensor, so
+  unlike the mass-proportional `damping` it is blind to rigid-body motion. Supported by every
+  built-in model. It tightens the explicit stability bound, which `WgTimestepBounds` accounts for.
 - Grid nodes now get a collision reported up to `COLLISION_REPORT_CELLS` (6.5) cells from a
   collider instead of 1.5, so the absorbing boundary above can grade its damping over a band
   several cells deep. The contact boundary conditions gate themselves on the distance to the
