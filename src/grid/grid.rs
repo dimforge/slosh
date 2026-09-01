@@ -259,9 +259,9 @@ pub struct GpuGridMetadata {
 pub struct GpuGridNode {
     momentum_velocity_mass: glam::Vec4,
     // Per-axis mass; see `Node.directional_mass` in grid.slang.
-    #[cfg(feature = "dim2")]
+    #[cfg(all(feature = "pml", feature = "dim2"))]
     directional_mass: glam::Vec2,
-    #[cfg(feature = "dim3")]
+    #[cfg(all(feature = "pml", feature = "dim3"))]
     directional_mass: glam::Vec4,
     // Gated by the cpic feature (default on). Turning cpic off drops the node from 48 to 16
     // bytes, cutting grid traffic ~3x, and gives up collision-detection-field support. Keep in

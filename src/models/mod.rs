@@ -2,11 +2,13 @@
 //!
 //! This module provides material models that define how particles respond to deformation:
 //! - [`ElasticCoefficients`]: Linear elasticity using Lamé parameters
-//! - [`PmlModel`]: Absorbing (perfectly-matched-layer) material for far-field boundaries
 //! - [`DruckerPrager`]: Drucker-Prager plasticity model for granular materials (sand, soil)
+//! - `PmlModel`: Absorbing (perfectly-matched-layer) material for far-field boundaries,
+//!   behind the `pml` feature
 //!
 //! Material models are used by particles to compute stress from deformation gradients.
 
+#[cfg(feature = "pml")]
 use crate::math::Vector;
 use bytemuck::{Pod, Zeroable};
 pub use drucker_prager::{DruckerPrager, DruckerPragerPlasticState};
@@ -49,6 +51,7 @@ pub struct ElasticCoefficients {
 ///
 /// Linear elasticity with per-axis stretched coordinates, which slows outgoing waves instead of
 /// reflecting them. The stretch does not dissipate: pair it with damping over the same region.
+#[cfg(feature = "pml")]
 #[derive(Copy, Clone, PartialEq, Debug, Pod, Zeroable)]
 #[repr(C)]
 pub struct PmlModel {
@@ -61,12 +64,14 @@ pub struct PmlModel {
 
 /// Maximum stretch `α` at the outer edge of an absorbing layer. The paper's parameter study
 /// settles on 4, with little further gain beyond ~3.2.
+#[cfg(feature = "pml")]
 pub const DEFAULT_PML_MAX_STRETCH: f32 = 4.0;
 
 /// Computes the PML coordinate stretching for a point inside an absorbing layer.
 ///
 /// The layer wraps the box `[interior_mins, interior_maxs]`, `thickness` deep on every side, and
 /// the stretch ramps linearly from zero at its inner boundary to `max_stretch` at the outer one.
+#[cfg(feature = "pml")]
 pub fn pml_stretch(
     position: Vector,
     interior_mins: Vector,

@@ -47,7 +47,7 @@ pub struct ParticleDynamics {
     /// Typical values: 0.0 (no damping) to 10.0 (heavy damping).
     ///
     /// Opposes absolute velocity, so it damps rigid-body motion too: a body in free flight is
-    /// slowed like everything else. Use [`Self::stiffness_damping`] where that matters.
+    /// slowed like everything else. Use `stiffness_damping` where that matters.
     pub damping: f32,
     /// Rayleigh stiffness-proportional damping coefficient (s).
     ///
@@ -56,6 +56,7 @@ pub struct ParticleDynamics {
     ///
     /// It tightens the explicit stability bound, which [`crate::solver::WgTimestepBounds`]
     /// accounts for; keeping it below the timestep leaves that bound untouched.
+    #[cfg(feature = "pml")]
     pub stiffness_damping: f32,
     /// The particle phase (used by materials that can break).
     pub phase: f32,
@@ -87,6 +88,7 @@ impl ParticleDynamics {
             init_radius: radius,
             mass: init_volume * density,
             damping: 0.0,
+            #[cfg(feature = "pml")]
             stiffness_damping: 0.0,
             cdf: Cdf::default(),
             phase: 1.0,
@@ -106,6 +108,7 @@ impl ParticleDynamics {
     }
 
     /// Sets the stiffness-proportional damping coefficient for this particle.
+    #[cfg(feature = "pml")]
     pub fn set_stiffness_damping(&mut self, stiffness_damping: f32) {
         self.stiffness_damping = stiffness_damping;
     }
@@ -123,6 +126,7 @@ impl ParticleDynamics {
             affine: self.affine,
             velocity: self.velocity,
             force_dt: self.force_dt,
+            #[cfg(feature = "pml")]
             mass_scale: Vector::ONE,
             vel_grad_det: self.vel_grad_det,
             mass: self.mass,
@@ -136,6 +140,7 @@ impl ParticleDynamics {
             init_volume: self.init_volume,
             init_radius: self.init_radius,
             damping: self.damping,
+            #[cfg(feature = "pml")]
             stiffness_damping: self.stiffness_damping,
             phase: self.phase,
             fixed: self.fixed,
@@ -159,6 +164,7 @@ pub struct Kinematics {
     pub force_dt: Vector,
     /// Per-axis multiplier on this particle's inertia, one for ordinary materials (the PML uses
     /// `s_j²`). Recomputed from the material model at every particle update.
+    #[cfg(feature = "pml")]
     pub mass_scale: Vector,
     /// Determinant of velocity gradient (for volume change tracking).
     pub vel_grad_det: f32,
@@ -183,6 +189,7 @@ pub struct ParticleProperties {
     /// Rayleigh mass-proportional damping coefficient (1/s).
     pub damping: f32,
     /// Rayleigh stiffness-proportional damping coefficient (s).
+    #[cfg(feature = "pml")]
     pub stiffness_damping: f32,
     /// The particle phase (used by materials that can break).
     pub phase: f32,

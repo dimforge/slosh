@@ -1,5 +1,7 @@
 module timestep_bound;
 
+#include "slosh/features.h"
+
 import slosh.aliases;
 import slosh.grid.grid;
 import slosh.models.utils;
@@ -68,6 +70,7 @@ func estimate_timestep_bound(
         let model = ParticleModel();
         var dt = model.timestep_bound(particles_model, particle_id, density0, def_grad, velocity, cell_width);
 
+#if SLOSH_PML
         /*
          * Rayleigh stiffness-proportional damping tightens the explicit bound below the CFL one.
          * For central differencing the critical step is `(2 / w) * (sqrt(1 + x^2) - x)` with
@@ -79,6 +82,7 @@ func estimate_timestep_bound(
             let x = stiffness_damping / (2.0 * dt);
             dt = min(dt, 2.0 * dt * (sqrt(1.0 + x * x) - x));
         }
+#endif
 
         /*
          * Velocity-based restrictions (section 4.2)

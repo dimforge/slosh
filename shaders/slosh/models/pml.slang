@@ -6,6 +6,10 @@
 
 module pml;
 
+#include "slosh/features.h"
+
+#if SLOSH_PML
+
 import slosh.aliases;
 import slosh.models.interfaces;
 import slosh.models.linear_elasticity;
@@ -94,3 +98,5 @@ public struct PmlModel {
             particle_density0, particle_velocity, def_grad_det, 1.0, cell_width);
     }
 }
+
+#endif

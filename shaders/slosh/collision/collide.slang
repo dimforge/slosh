@@ -84,11 +84,10 @@ public struct GridCollision {
 }
 
 
-// How far (in cells) from a collider’s surface a grid node still gets a collision reported. This
-// bounds the reach of every boundary condition; it is wider than the 1.5 cells the contact
-// conditions need because `NonReflecting` absorbs over a deeper band (see `ABSORBING_LAYERS` in
-// solver/boundary_condition.slang).
-public static const float COLLISION_REPORT_CELLS = 6.5;
+// How far (in cells) from a collider’s surface a grid node still gets a collision reported.
+// Must be at least 1.5. Larger values (e.g. 6.5) increase the effectiveness of the Dashpots
+// non-reflective boundaries but are slightly more expensive and have more effect on movent.
+public static const float COLLISION_REPORT_CELLS = 1.5;
 
 public func collide(
     StructuredBuffer<Shape> collision_shapes,

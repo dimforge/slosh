@@ -1,5 +1,7 @@
 module p2g;
 
+#include "slosh/features.h"
+
 import slosh.solver.params;
 import slosh.solver.particle;
 import slosh.solver.boundary_condition;
@@ -17,7 +19,9 @@ static const uint NUM_SHARED_CELLS = 10 * 10; // block-size plus 2 from adjacent
 groupshared float3 shared_vel_mass[NUM_SHARED_CELLS];
 groupshared float2x2 shared_affine[NUM_SHARED_CELLS];
 groupshared float2 shared_force_dt[NUM_SHARED_CELLS];
+    #if SLOSH_PML
 groupshared float2 shared_mass_scale[NUM_SHARED_CELLS];
+    #endif
 #else
 static const uint WORKGROUP_SIZE_X = 4;
 static const uint WORKGROUP_SIZE_Y = 4;
@@ -26,7 +30,9 @@ static const uint NUM_SHARED_CELLS = 6 * 6 * 6; // block-size plus 2 from adjace
 groupshared float4 shared_vel_mass[NUM_SHARED_CELLS];
 groupshared float3x3 shared_affine[NUM_SHARED_CELLS];
 groupshared float3 shared_force_dt[NUM_SHARED_CELLS];
+    #if SLOSH_PML
 groupshared float3 shared_mass_scale[NUM_SHARED_CELLS];
+    #endif
 #endif
 groupshared SharedNode shared_nodes[NUM_SHARED_CELLS];
 groupshared Position shared_pos[NUM_SHARED_CELLS];
@@ -46,10 +52,14 @@ struct SharedNode {
 struct P2GStepResult {
 #if DIM == 2
     float3 new_momentum_velocity_mass;
+    #if SLOSH_PML
     float2 new_directional_mass;
+    #endif
 #else
     float4 new_momentum_velocity_mass;
+    #if SLOSH_PML
     float3 new_directional_mass;
+    #endif
 #endif
 }
 
@@ -115,7 +125,9 @@ func p2g(
 
         let partial_result = p2g_step(packed_cell_index_in_block, grid[0].cell_width); // , node_affinities, collider_id);
         total_result.new_momentum_velocity_mass += partial_result.new_momentum_velocity_mass;
+#if SLOSH_PML
         total_result.new_directional_mass += partial_result.new_directional_mass;
+#endif
     }
 
     // Grid update.
@@ -133,7 +145,9 @@ func p2g(
 
     // Write the node state to global memory.
     nodes[global_id].momentum_velocity_mass = total_result.new_momentum_velocity_mass;
+#if SLOSH_PML
     nodes[global_id].directional_mass = total_result.new_directional_mass;
+#endif
 }
 
 func p2g_step(
@@ -151,11 +165,15 @@ func p2g_step(
 #if DIM == 2
     let bottommost_contributing_node = flatten_shared_shift(2u, 2u);
     var new_momentum_velocity_mass = float3(0.0);
+    #if SLOSH_PML
     var new_directional_mass = float2(0.0);
+    #endif
 #else
     let bottommost_contributing_node = flatten_shared_shift(2u, 2u, 2u);
     var new_momentum_velocity_mass = float4(0.0);
+    #if SLOSH_PML
     var new_directional_mass = float3(0.0);
+    #endif
 #endif
     for (var i = 0u; i < NBH_LEN; i += 1u) {
         let packed_shift = NBH_SHIFTS_SHARED[i];
@@ -172,14 +190,22 @@ func p2g_step(
         let particle_vel = particle_vel_mass.xy;
         let particle_mass = particle_vel_mass.z;
         let shift = uint2(2u, 2) - NBH_SHIFTS[i];
+    #if SLOSH_PML
         let momentum = shared_mass_scale[nbh_shared_index] * particle_vel * particle_mass + particle_force_dt;
+    #else
+        let momentum = particle_vel * particle_mass + particle_force_dt;
+    #endif
         let dpt = ref_elt_pos_minus_particle_pos + float2(shift) * cell_width; // cell_pos - particle_pos
         let weight = w[0][shift.x] * w[1][shift.y];
 #else
         let particle_vel = particle_vel_mass.xyz;
         let particle_mass = particle_vel_mass.w;
         let shift = uint3(2u, 2, 2) - NBH_SHIFTS[i];
+    #if SLOSH_PML
         let momentum = shared_mass_scale[nbh_shared_index] * particle_vel * particle_mass + particle_force_dt;
+    #else
+        let momentum = particle_vel * particle_mass + particle_force_dt;
+    #endif
         let dpt = ref_elt_pos_minus_particle_pos + float3(shift) * cell_width; // cell_pos - particle_pos
         let weight = w[0][shift.x] * w[1][shift.y] * w[2][shift.z];
 #endif
@@ -187,10 +213,16 @@ func p2g_step(
 //        let particle_affinity = shared_affinities[nbh_shared_index];
         let contribution = vector<float, DIM + 1>(mul(dpt, particle_affine) + momentum, particle_mass) * weight;
         new_momentum_velocity_mass += contribution;
+#if SLOSH_PML
         new_directional_mass += shared_mass_scale[nbh_shared_index] * particle_mass * weight;
+#endif
     }
 
+#if SLOSH_PML
     return P2GStepResult(new_momentum_velocity_mass, new_directional_mass);
+#else
+    return P2GStepResult(new_momentum_velocity_mass);
+#endif
 }
 
 #if DIM == 2
@@ -349,7 +381,9 @@ func fetch_next_particle(
                     shared_pos[shared_flat_index] = particles_pos[curr_particle_id];
                     shared_affine[shared_flat_index] = particles_kin[curr_particle_id].affine;
                     shared_force_dt[shared_flat_index] = particles_kin[curr_particle_id].force_dt;
+#if SLOSH_PML
                     shared_mass_scale[shared_flat_index] = particles_kin[curr_particle_id].mass_scale;
+#endif
 
 #if DIM == 2
                     shared_vel_mass[shared_flat_index] = float3(particles_kin[curr_particle_id].velocity, particles_kin[curr_particle_id].mass);
@@ -367,13 +401,17 @@ func fetch_next_particle(
                     shared_affine[shared_flat_index] = float2x2(float2(0.0), float2(0.0));
                     shared_vel_mass[shared_flat_index] = float3(0.0);
                     shared_force_dt[shared_flat_index] = float2(0.0);
+    #if SLOSH_PML
                     shared_mass_scale[shared_flat_index] = float2(0.0);
+    #endif
 #else
                     shared_pos[shared_flat_index].pt = float3(0.0);
                     shared_affine[shared_flat_index] = float3x3(float3(0.0), float3(0.0), float3(0.0));
                     shared_vel_mass[shared_flat_index] = float4(0.0);
                     shared_force_dt[shared_flat_index] = float3(0.0);
+    #if SLOSH_PML
                     shared_mass_scale[shared_flat_index] = float3(0.0);
+    #endif
 #endif
                 }
 

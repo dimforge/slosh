@@ -43,8 +43,10 @@ use std::rc::Rc;
 use stensor::tensor::GpuTensor;
 use wgpu::Limits;
 
-type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
-type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
+/// The scene list a testbed is run with: a display name and a builder per scene.
+pub type SceneBuilders<GpuModel> = Vec<(String, SceneBuildFn<GpuModel>)>;
+/// Builds one scene, called on startup and on every restart.
+pub type SceneBuildFn<GpuModel> = fn(&WebGpu, &mut AppState<GpuModel>) -> PhysicsContext<GpuModel>;
 
 /// GPU-construction options for the testbed.
 pub struct TestbedConfig {

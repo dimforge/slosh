@@ -7,11 +7,18 @@ import slosh.solver.params;
 import slosh.collision.collide;
 import slosh.solver.boundary_condition;
 
-// SLOSH_CPIC gates the incompatible-momentum lane on Node (see grid.slang). Default on so a
-// standalone compile matches the crate's default layout.
-#ifndef SLOSH_CPIC
-#define SLOSH_CPIC 1
+#include "slosh/features.h"
+
+#if SLOSH_PML
+typealias NodeMass = Vect<float>;
+#else
+typealias NodeMass = float;
 #endif
+
+// Reciprocal node mass, zero where the node has none.
+func inv_mass_of(mass: NodeMass) -> NodeMass {
+    return select(mass > NodeMass(0.0), NodeMass(1.0) / mass, NodeMass(0.0));
+}
 
 #if DIM == 2
 static const uint WORKGROUP_SIZE_X = 8;
@@ -79,18 +86,18 @@ func grid_update(
      * Step 1: momentum -> velocity update (gravity + clamping).
      */
     let momentum_velocity_mass = nodes[global_id].momentum_velocity_mass;
-    let directional_mass = nodes[global_id].directional_mass;
-    var velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass, directional_mass);
+#if SLOSH_PML
+    let inv_mass = inv_mass_of(nodes[global_id].directional_mass);
+#else
+    let inv_mass = inv_mass_of(momentum_velocity_mass[DIM]);
+#endif
+    var velocity_mass = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass, inv_mass);
 #if SLOSH_CPIC
     // The incompatible lane carries no directional mass of its own: CPIC is not meant to overlap
     // with the materials that need one.
     let momentum_velocity_mass_incompatible = nodes[global_id].momentum_velocity_mass_incompatible;
-    #if DIM == 2
-    let incompatible_mass = Vect<float>(momentum_velocity_mass_incompatible.z);
-    #else
-    let incompatible_mass = Vect<float>(momentum_velocity_mass_incompatible.w);
-    #endif
-    let velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible, incompatible_mass);
+    let inv_mass_incompatible = inv_mass_of(NodeMass(momentum_velocity_mass_incompatible[DIM]));
+    let velocity_mass_incompatible = update_single_cell(sim_params, cell_width, cell_pos, momentum_velocity_mass_incompatible, inv_mass_incompatible);
     nodes[global_id].momentum_velocity_mass_incompatible = velocity_mass_incompatible;
 #endif
 
@@ -149,11 +156,10 @@ func grid_update(
 }
 
 #if DIM == 2
-func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_pos: float2, momentum_velocity_mass: float3, directional_mass: float2) -> float3 {
-    // The momentum carries each material's per-axis inertia, so the update divides by that mass.
-    // Gravity stays proportional to the real mass, so rescaled inertia means falling at `g / scale`.
+func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_pos: float2, momentum_velocity_mass: float3, inv_mass: NodeMass) -> float3 {
+    // Gravity stays proportional to the real mass, so a material that rescales its own inertia
+    // (the PML) falls at `g / scale` instead of carrying that much weight.
     let mass = momentum_velocity_mass.z;
-    let inv_mass = select(directional_mass > float2(0.0), float2(1.0) / directional_mass, float2(0.0));
     var velocity = (momentum_velocity_mass.xy + mass * sim_params.gravity * sim_params.dt) * inv_mass;
     // Clamp the velocity so it doesn't exceed 1 grid cell in one step.
     let vel_limit = float2(cell_width / sim_params.dt);
@@ -161,10 +167,9 @@ func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_po
     return float3(velocity, mass);
 }
 #else
-func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_pos: float3, momentum_velocity_mass: float4, directional_mass: float3) -> float4 {
+func update_single_cell(sim_params: SimulationParams, cell_width: float, cell_pos: float3, momentum_velocity_mass: float4, inv_mass: NodeMass) -> float4 {
     // See the 2D overload above.
     let mass = momentum_velocity_mass.w;
-    let inv_mass = select(directional_mass > float3(0.0), float3(1.0) / directional_mass, float3(0.0));
     var velocity = (momentum_velocity_mass.xyz + mass * sim_params.gravity * sim_params.dt) * inv_mass;
 
     // Clamp the velocity so it doesn't exceed 1 grid cell in one step.

@@ -1,5 +1,8 @@
+#[cfg(feature = "pml")]
 use crate::math::Vector;
-use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients, PmlModel};
+#[cfg(feature = "pml")]
+use crate::models::PmlModel;
+use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{NoUninit, Pod, Zeroable};
 
 /// Material model for MPM particles.
@@ -17,6 +20,7 @@ pub enum ParticleModel {
     /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
     SandNeoHookean(SandModel),
     /// Absorbing (perfectly-matched-layer) material for far-field boundaries.
+    #[cfg(feature = "pml")]
     AbsorbingPml(PmlModel),
 }
 
@@ -108,6 +112,7 @@ impl ParticleModel {
     /// * `young_modulus` - Young's modulus E (Pa) of the surrounded material
     /// * `poisson_ratio` - Poisson's ratio ν of the surrounded material
     /// * `stretch` - Per-axis coordinate stretching `C'_j` (zero means plain linear elasticity)
+    #[cfg(feature = "pml")]
     pub fn absorbing_pml(young_modulus: f32, poisson_ratio: f32, stretch: Vector) -> Self {
         #[cfg(feature = "dim2")]
         let stretch = [stretch.x, stretch.y, 0.0];
@@ -138,6 +143,7 @@ pub enum GpuParticleModel {
     /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
     SandNeoHookean(SandModel) = 3,
     /// Absorbing (perfectly-matched-layer) material with padding for GPU alignment.
+    #[cfg(feature = "pml")]
     AbsorbingPml(PmlModel, [u32; 6]) = 4,
 }
 
@@ -158,6 +164,7 @@ impl From<ParticleModel> for GpuParticleModel {
             ParticleModel::SandNeoHookean(sand_neo_hookean) => {
                 GpuParticleModel::SandNeoHookean(sand_neo_hookean)
             }
+            #[cfg(feature = "pml")]
             ParticleModel::AbsorbingPml(pml) => GpuParticleModel::AbsorbingPml(pml, [0; _]),
         }
     }
@@ -176,6 +183,7 @@ impl From<GpuParticleModel> for ParticleModel {
             GpuParticleModel::SandNeoHookean(sand_neo_hookean) => {
                 ParticleModel::SandNeoHookean(sand_neo_hookean)
             }
+            #[cfg(feature = "pml")]
             GpuParticleModel::AbsorbingPml(pml, _) => ParticleModel::AbsorbingPml(pml),
         }
     }

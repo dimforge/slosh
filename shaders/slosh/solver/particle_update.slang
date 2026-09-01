@@ -1,5 +1,7 @@
 module particle_update;
 
+#include "slosh/features.h"
+
 import slosh.solver.params;
 import slosh.solver.particle;
 import slosh.solver.boundary_condition;
@@ -123,7 +125,11 @@ func particle_update(
         /*
          * Constitutive model.
          */
+    #if SLOSH_PML
         let update_data = ParticleUpdateData(dt, cell_width, particle_id, kin.affine, props.init_volume, props.phase, props.stiffness_damping);
+    #else
+        let update_data = ParticleUpdateData(dt, cell_width, particle_id, kin.affine, props.init_volume, props.phase);
+    #endif
         let update_result = model.update(particles_model, update_data, def_grad);
 
         // Write back init_volume if the model modified it (e.g., swell).
@@ -137,11 +143,14 @@ func particle_update(
          */
         let inv_d = QuadraticKernel::inv_d(cell_width);
         // NOTE: the velocity gradient was stored in the affine buffer.
-        //
+    #if SLOSH_PML
         // P2G contracts this as `sum_i dpt_i * A_ij`, so scaling column `j` applies the per-axis
         // inertia to the inertial half only; the stress half is an internal force and is left alone.
         kin.mass_scale = update_result.mass_scale;
         let inertia = mul(kin.affine * kin.mass, diag(update_result.mass_scale));
+    #else
+        let inertia = kin.affine * kin.mass;
+    #endif
         let affine = inertia - update_result.kirchoff_stress * (effective_init_volume * inv_d * dt);
 
         /*

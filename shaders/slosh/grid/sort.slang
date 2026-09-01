@@ -3,11 +3,7 @@ module sort;
 import slosh.grid.grid;
 import slosh.solver.particle;
 
-// SLOSH_NODE_PARTICLE_LISTS gates the per-node particle linked-list build (see grid.slang).
-// Default on so a standalone compile keeps the full behavior.
-#ifndef SLOSH_NODE_PARTICLE_LISTS
-#define SLOSH_NODE_PARTICLE_LISTS 1
-#endif
+#include "slosh/features.h"
 
 // Returns the within-block sort bucket for a particle counted/inserted into its primary
 // block: one bucket per associated-cell slab along the slowest-varying node axis (y in 2D,
