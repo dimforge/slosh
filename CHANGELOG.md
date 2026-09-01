@@ -1,4 +1,4 @@
-# Unreleased
+# v0.8.0
 - Add the `GpuBoundaryCondition::non_reflecting` (absorbing) boundary condition, based on
   Lysmer-Kuhlemeyer viscous dashpots. It lets outgoing elastic waves leave the domain instead of
   being reflected back into it, emulating an unbounded medium. See the new `non_reflecting2` 2D
