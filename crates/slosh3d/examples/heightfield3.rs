@@ -40,8 +40,8 @@ pub fn heightfield_demo(backend: &WebGpu, app_state: &mut AppState) -> PhysicsCo
     }
 
     if !app_state.restarting {
-        app_state.min_num_substeps = 10;
-        app_state.max_num_substeps = 10;
+        app_state.min_num_substeps = 20;
+        app_state.max_num_substeps = 20;
         app_state.gravity_factor = 1.0;
     };
 

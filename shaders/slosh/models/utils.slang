@@ -1,5 +1,7 @@
 module utils;
 
+#include "slosh/features.h"
+
 import stensor.utils.mat;
 import slosh.aliases;
 
@@ -134,3 +136,30 @@ public struct ElasticitySoundSpeedTimestepBound {
         return this.alpha * cell_width / max_speed;
     }
 }
+
+#if SLOSH_PML
+// Rayleigh stiffness-proportional damping stress: `a_K * C : sym(grad v)`, with `C` the isotropic
+// elastic tensor. Unlike the mass-proportional damping in particle_update, it responds only to the
+// strain rate, so rigid-body motion is left alone.
+public func viscous_stress(
+    float lambda,
+    float mu,
+    Mat<float> velocity_gradient,
+    float stiffness_damping,
+) -> Mat<float> {
+    if (stiffness_damping <= 0.0) {
+        return Mat<float>(0.0);
+    }
+
+    // Rate of deformation, the symmetric part of the velocity gradient.
+    let rate = (velocity_gradient + transpose(velocity_gradient)) * 0.5;
+
+    var trace = 0.0;
+    [[ForceUnroll]]
+    for (var k = 0; k < DIM; k++) {
+        trace += rate[k][k];
+    }
+
+    return (rate * (2.0 * mu) + diag(Vect<float>(lambda * trace))) * stiffness_damping;
+}
+#endif

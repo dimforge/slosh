@@ -27,6 +27,13 @@ static const uint CDF_NORMALS = 4;
 static const uint CDF_DISTANCES = 5;
 static const uint CDF_SIGNS = 6;
 
+// Principal strain that saturates the VOLUME render mode.
+static const float VOLUME_STRAIN_SCALE = 0.0015;
+// Colors the VOLUME render mode saturates to. Pure shear lights up both ramps, so it reads
+// as white.
+static const float3 VOLUME_COMPRESSION_COLOR = float3(1.0, 0.45, 0.1);
+static const float3 VOLUME_DILATION_COLOR = float3(0.1, 0.65, 1.0);
+
 [shader("compute")]
 [numthreads(64, 1, 1)]
 func prep_readback(
@@ -62,9 +69,17 @@ func prep_readback(
             let vel = particles_kin[particle_id].velocity;
             instances[particle_id].color = float4(abs(vel) * dt * 100.0 + float2(0.2), color.z, color.w);
         } else if (mode == VOLUME) {
+            // Principal strains, positive under compression and negative under dilation.
             let svd = Svd2(def_grad);
-            let color_xy = (float2(1.0) - svd.S) / 0.005 + float2(0.2);
-            instances[particle_id].color = float4(color_xy, color.z, color.w);
+            let strain = (float2(1.0) - svd.S) / VOLUME_STRAIN_SCALE;
+            // One ramp out of black per sign, rather than the two ends of a single diverging
+            // ramp: that keeps the full brightness range, and dilation visible.
+            let compression = saturate(max(strain.x, strain.y));
+            let dilation = saturate(-min(strain.x, strain.y));
+            // Square root: lifts the small strains without moving the saturation point.
+            let rgb = sqrt(compression) * VOLUME_COMPRESSION_COLOR
+                + sqrt(dilation) * VOLUME_DILATION_COLOR;
+            instances[particle_id].color = float4(rgb, color.w);
         } else if (mode == PHASE) {
             let phase = particles_props[particle_id].phase;
             instances[particle_id].color = float4(0.0, 0.4 * phase, 0.4 * (1.0 - phase), color.w);

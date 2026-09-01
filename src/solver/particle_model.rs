@@ -1,3 +1,7 @@
+#[cfg(feature = "pml")]
+use crate::math::Vector;
+#[cfg(feature = "pml")]
+use crate::models::PmlModel;
 use crate::models::{DruckerPrager, DruckerPragerPlasticState, ElasticCoefficients};
 use bytemuck::{NoUninit, Pod, Zeroable};
 
@@ -15,6 +19,9 @@ pub enum ParticleModel {
     SandLinear(SandModel),
     /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
     SandNeoHookean(SandModel),
+    /// Absorbing (perfectly-matched-layer) material for far-field boundaries.
+    #[cfg(feature = "pml")]
+    AbsorbingPml(PmlModel),
 }
 
 impl Default for ParticleModel {
@@ -77,6 +84,46 @@ impl ParticleModel {
             elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
         })
     }
+
+    /// Creates an absorbing (perfectly-matched-layer) material for a far-field boundary.
+    ///
+    /// Particles carrying this model form a layer around the region of interest that lets outgoing
+    /// waves leave instead of reflecting them. The elastic parameters should match the surrounded
+    /// material; [`crate::models::pml_stretch`] computes `stretch` from the layer's geometry.
+    ///
+    /// The stretch redirects energy but does not dissipate it, so pair it with
+    /// [`crate::solver::ParticleDynamics::damping`] over the same particles (the paper uses
+    /// `α_M = 1`; what matters is `α_M·L/c`, the attenuation per transit of the layer). Prefer
+    /// [`crate::solver::ParticleDynamics::stiffness_damping`] when the domain itself moves, since
+    /// mass-proportional damping would resist that motion.
+    ///
+    /// # Gravity
+    ///
+    /// The layer's inertia is `s_j²` times the real mass while gravity acts on the real one, so it
+    /// falls `s_j²` times slower along a stretched axis instead of carrying that much weight.
+    ///
+    /// The stretched operator's static stiffness still differs from the elastic one, so a layer
+    /// under sustained load settles more than the material would (about twice, for a 4 m column on
+    /// a 2 m layer). The paper removes this with a geo-static pre-step, not implemented here;
+    /// keeping absorbing layers out of the load path avoids it.
+    ///
+    /// # Arguments
+    ///
+    /// * `young_modulus` - Young's modulus E (Pa) of the surrounded material
+    /// * `poisson_ratio` - Poisson's ratio ν of the surrounded material
+    /// * `stretch` - Per-axis coordinate stretching `C'_j` (zero means plain linear elasticity)
+    #[cfg(feature = "pml")]
+    pub fn absorbing_pml(young_modulus: f32, poisson_ratio: f32, stretch: Vector) -> Self {
+        #[cfg(feature = "dim2")]
+        let stretch = [stretch.x, stretch.y, 0.0];
+        #[cfg(feature = "dim3")]
+        let stretch = [stretch.x, stretch.y, stretch.z];
+
+        ParticleModel::AbsorbingPml(PmlModel {
+            elastic: ElasticCoefficients::from_young_modulus(young_modulus, poisson_ratio),
+            stretch,
+        })
+    }
 }
 
 /// GPU-compatible version of [`ParticleModel`] with explicit padding.
@@ -95,6 +142,9 @@ pub enum GpuParticleModel {
     SandLinear(SandModel) = 2,
     /// Sand with Neo-Hookean elasticity and Drucker-Prager plasticity.
     SandNeoHookean(SandModel) = 3,
+    /// Absorbing (perfectly-matched-layer) material with padding for GPU alignment.
+    #[cfg(feature = "pml")]
+    AbsorbingPml(PmlModel, [u32; 6]) = 4,
 }
 
 // IMPORTANT: this assertions is here to reduce risks of `GpuParticleModel` from mismatching
@@ -114,6 +164,8 @@ impl From<ParticleModel> for GpuParticleModel {
             ParticleModel::SandNeoHookean(sand_neo_hookean) => {
                 GpuParticleModel::SandNeoHookean(sand_neo_hookean)
             }
+            #[cfg(feature = "pml")]
+            ParticleModel::AbsorbingPml(pml) => GpuParticleModel::AbsorbingPml(pml, [0; _]),
         }
     }
 }
@@ -131,6 +183,8 @@ impl From<GpuParticleModel> for ParticleModel {
             GpuParticleModel::SandNeoHookean(sand_neo_hookean) => {
                 ParticleModel::SandNeoHookean(sand_neo_hookean)
             }
+            #[cfg(feature = "pml")]
+            GpuParticleModel::AbsorbingPml(pml, _) => ParticleModel::AbsorbingPml(pml),
         }
     }
 }

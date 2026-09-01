@@ -1,5 +1,7 @@
 module particle;
 
+#include "slosh/features.h"
+
 public struct Position {
     public vector<float, DIM> pt;
 }
@@ -21,6 +23,11 @@ public struct Kinematics {
     //       the force so we don't have to have access to dt in p2g
     //       (adding that access would exceed 10 bindings…)
     public vector<float, DIM> force_dt;
+#if SLOSH_PML
+    // Per-axis multiplier on this particle's inertia, one for ordinary materials (the PML uses
+    // `s_j^2`). Written by particle_update, so it stays one over the very first substep.
+    public vector<float, DIM> mass_scale;
+#endif
     public float vel_grad_det;
     public float mass;
     public uint enabled;
@@ -35,6 +42,9 @@ public struct ParticleProperties {
     public float init_volume;
     public float init_radius;
     public float damping;
+#if SLOSH_PML
+    public float stiffness_damping;
+#endif
     public float phase;
     public uint fixed;
 }
