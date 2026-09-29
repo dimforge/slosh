@@ -2,6 +2,7 @@ module boundary_condition;
 
 import slosh.aliases;
 import slosh.collision.collide;
+import slosh.solver.implicit.types;
 
 // Depth, in cells, of the `NonReflecting` absorbing band, graded linearly from full strength at
 // the collider surface. A deep, gentle band absorbs much better than a shallow, aggressive one,
@@ -47,6 +48,19 @@ public struct BoundaryCondition {
         this.friction = friction;
         this.wave_speed_p = wave_speed_p;
         this.wave_speed_s = wave_speed_s;
+    }
+
+    /// The grid-level projection the implicit solver enforces inside its linear system for a node
+    /// in contact: `BC_STICK`, `BC_SLIP`, or `BC_NONE` for the conditions that stay explicit.
+    public func implicit_projection() -> uint {
+        switch (this.type) {
+            case BoundaryConditionType::Stick:
+                return BC_STICK;
+            case BoundaryConditionType::Slip:
+                return BC_SLIP;
+            default:
+                return BC_NONE;
+        }
     }
 
     public func project_velocity(vel: Vect, n: Vect, float dist, float dt, float cell_width) -> Vect {

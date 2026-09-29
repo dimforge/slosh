@@ -7,6 +7,7 @@ use crate::grid::grid::{GpuGrid, GpuGridMetadata};
 use crate::math::Matrix;
 use crate::rbd::dynamics::GpuBodySet;
 use crate::solver::params::GpuSimulationParams;
+use crate::solver::params::IntegratorFlags;
 use crate::solver::particle_model::GpuParticleModelData;
 use crate::solver::{
     Cdf, GpuParticles, Kinematics, ParticlePosition, ParticleProperties, SimulationParams,
@@ -42,6 +43,7 @@ struct ParticleUpdateArgs<'a, B: Backend, GpuModel: GpuParticleModelData> {
     particles_def_grad: &'a GpuTensor<Matrix, B>,
     particles_props: &'a GpuTensor<ParticleProperties, B>,
     particles_len: &'a GpuScalar<u32, B>,
+    integrator: &'a GpuScalar<IntegratorFlags, B>,
 }
 
 impl<B: Backend> WgParticleUpdate<B> {
@@ -65,6 +67,7 @@ impl<B: Backend> WgParticleUpdate<B> {
             particles_def_grad: &particles.def_grad,
             particles_props: &particles.properties,
             particles_len: particles.gpu_len(),
+            integrator: &sim_params.integrator_flags,
         };
         self.particle_update
             .launch_capped(backend, pass, &args, particles.len() as u32)

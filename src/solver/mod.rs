@@ -39,7 +39,7 @@ pub use g2p_cdf::WgG2PCdf;
 pub use p2g::{WgP2G, WgP2GScatterStyle};
 #[cfg(feature = "cpic")]
 pub use p2g_cdf::WgP2GCdf;
-pub use params::{GpuSimulationParams, SimulationParams};
+pub use params::{GpuSimulationParams, IntegratorFlags, SimulationParams};
 pub use particle::*;
 pub use particle_model::*;
 // pub use particle_update::WgParticleUpdate;
@@ -47,6 +47,10 @@ pub use boundary_condition::{GpuBoundaryCondition, GpuMaterials};
 pub use grid_update::WgGridUpdate;
 #[cfg(feature = "cpic")]
 pub use grid_update_cdf::WgGridUpdateCdf;
+pub use implicit::{
+    CgParams, CgScalars, GpuCgNode, GpuImplicitParticle, ImplicitSolverParams, ImplicitWorkspace,
+    LineSearchCriterion, MpmIntegrator, WgImplicitSolver,
+};
 pub use particle_update::WgParticleUpdate;
 pub use rigid_impulses::{GpuImpulses, RigidImpulse, WgRigidImpulses};
 pub use rigid_particle_update::WgRigidParticleUpdate;
@@ -67,6 +71,9 @@ mod rigid_particle_update;
 mod grid_update;
 #[cfg(feature = "cpic")]
 mod grid_update_cdf;
+mod implicit;
 mod particle;
 mod particle_model;
+#[cfg(all(test, feature = "runtime"))]
+mod test_implicit;
 mod timestep_bound;

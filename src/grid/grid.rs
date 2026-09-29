@@ -241,7 +241,7 @@ impl<B: Backend> WgGrid<B> {
 /// Grid metadata stored on GPU.
 ///
 /// Contains information about the sparse grid structure and capacity.
-#[derive(Copy, Clone, PartialEq, Pod, Zeroable)]
+#[derive(Copy, Clone, PartialEq, Default, Pod, Zeroable)]
 #[repr(C)]
 pub struct GpuGridMetadata {
     num_active_blocks: u32,
@@ -513,6 +513,15 @@ impl<B: Backend> GpuGrid<B> {
             rigid_nodes_linked_lists,
             debug,
         })
+    }
+
+    /// Reads back the number of active blocks (blocking). Diagnostics and tests only.
+    pub async fn num_active_blocks(&self, backend: &B) -> u32 {
+        let meta: Vec<GpuGridMetadata> = backend
+            .slow_read_vec(self.meta.buffer())
+            .await
+            .unwrap_or_default();
+        meta.first().map(|m| m.num_active_blocks).unwrap_or(0)
     }
 
     pub fn swap_buffers(&mut self) {

@@ -44,6 +44,7 @@ func particle_update(
     RWStructuredBuffer<Mat<float>> particles_def_grad,
     RWStructuredBuffer<ParticleProperties> particles_props,
     ConstantBuffer<uint> particles_len,
+    ConstantBuffer<IntegratorFlags> integrator,
 ) {
     let _gs_n = particles_len;
     let _gs_total = min((_gs_n + 63u) / 64u, 65535u) * 64u;
@@ -151,7 +152,12 @@ func particle_update(
     #else
         let inertia = kin.affine * kin.mass;
     #endif
-        let affine = inertia - update_result.kirchoff_stress * (effective_init_volume * inv_d * dt);
+        // The implicit solver evaluates the forces itself at the trial state, so it needs the pure
+        // APIC momentum on the grid: no stress in the affine.
+        let stress_affine = integrator.implicit != 0
+            ? Mat<float>(0.0)
+            : update_result.kirchoff_stress * (effective_init_volume * inv_d * dt);
+        let affine = inertia - stress_affine;
 
         /*
          * Write back the new particle properties.

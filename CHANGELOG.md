@@ -1,3 +1,27 @@
+# Unreleased
+- Add an implicit grid solver, selected per simulation with `MpmData::integrator =
+  MpmIntegrator::Implicit(ImplicitSolverParams { .. })` on a pipeline built with
+  `MpmPipelineKernels { implicit: true, .. }` (off by default). It replaces the explicit
+  momentum-to-velocity update by backward Euler solved with Newton's method on the incremental
+  potential, entirely on the GPU: each Newton iteration evaluates the trial state of every particle
+  (deformation gradient projected for plastic models, stress, energy), solves for the direction with
+  a matrix-free, mass-preconditioned conjugate gradient on the definiteness-fixed Hessian, and picks
+  the step with a backtracking line search (on the incremental potential, or on the residual norm
+  for models without an energy). This lifts the sound-speed bound on the substep length: stiff
+  elastics run with a handful of substeps per frame. `ImplicitSolverParams::semi_implicit()` gives
+  the one-linearization variant. Grid-level stick/slip conditions and fixed particles are Dirichlet
+  conditions inside the solve; separating contacts stay explicit corrections.
+- Constitutive models take part in the implicit solve through the new `IImplicitParticleModel`
+  slang interface (`slosh/models/implicit_interfaces.slang`): a trial-state evaluation and a stress
+  differential. The default models implement it, and `LinearElasticModel` / `NeoHookeanModel`
+  gained an `energy_density`. A custom model specialization must export an
+  `ImplicitParticleModel` alongside `ParticleModel` to compile the implicit kernels.
+- The particle update reads a new `IntegratorFlags` uniform (`GpuSimulationParams::integrator_flags`)
+  and leaves the stress out of the APIC affine matrix when the implicit solver is active. A `run_g2p`
+  hook that fuses the particle update must do the same.
+- The testbeds compile the implicit kernels and expose the integrator and its parameters in the
+  settings window, with the last solve's Newton and CG statistics.
+
 # v0.8.0
 - Add the `GpuBoundaryCondition::non_reflecting` (absorbing) boundary condition, based on
   Lysmer-Kuhlemeyer viscous dashpots. It lets outgoing elastic waves leave the domain instead of
