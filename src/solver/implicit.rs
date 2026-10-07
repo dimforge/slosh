@@ -22,7 +22,7 @@
 //! iteration, the CG solve and the line search progress. A one-iteration, no-line-search
 //! configuration is the classic semi-implicit scheme (one linearization per substep).
 //!
-//! The constitutive models take part through [`IImplicitParticleModel`] (see
+//! The constitutive models take part through the Slang interface `IImplicitParticleModel` (see
 //! `shaders/slosh/models/implicit_interfaces.slang`), which the default models implement and
 //! which a custom model specialization must export as `ImplicitParticleModel`.
 
