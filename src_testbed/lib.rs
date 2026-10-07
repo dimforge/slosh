@@ -39,6 +39,7 @@ use slosh::rapier::geometry::Shape;
 use slosh::rapier::geometry::ShapeType;
 use slosh::rapier::prelude::ColliderHandle;
 use slosh::solver::GpuParticleModelData;
+use slosh::solver::ImplicitSolverParams;
 use std::rc::Rc;
 use stensor::tensor::GpuTensor;
 use wgpu::Limits;
@@ -57,12 +58,20 @@ pub struct TestbedConfig {
     /// Device limits requested from wgpu. Bump e.g. `max_storage_buffers_per_shader_stage`
     /// when hook kernels bind more buffers than the built-in passes need.
     pub limits: Limits,
+    /// Initial parameters of the implicit solver in the settings window (which starts with the
+    /// solver off). Consumers whose models have no energy should set the residual line-search
+    /// criterion here.
+    pub implicit_params: ImplicitSolverParams,
 }
 
 impl Default for TestbedConfig {
     fn default() -> Self {
         Self {
-            kernels: MpmPipelineKernels::default(),
+            // The implicit solver kernels are always compiled so the settings can toggle it.
+            kernels: MpmPipelineKernels {
+                implicit: true,
+                ..MpmPipelineKernels::default()
+            },
             limits: Limits {
                 max_storage_buffers_per_shader_stage: 13,
                 max_compute_workgroup_storage_size: 32768, // Why do we need this if wgsparkl didn’t?
@@ -70,6 +79,7 @@ impl Default for TestbedConfig {
                 max_storage_buffer_binding_size: 4_000_000_000,
                 ..Limits::default()
             },
+            implicit_params: ImplicitSolverParams::default(),
         }
     }
 }
@@ -139,6 +149,8 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             min_num_substeps: 1,
             num_substeps: 1,
             gravity_factor: 1.0,
+            implicit: false,
+            implicit_params: config.implicit_params,
             restarting: false,
             restart_requested: false,
             show_rigid_particles: false,
@@ -603,6 +615,122 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                     .changed()
                 {
                     new_selected_demo = Some(stage.selected_demo);
+                }
+
+                ui.separator();
+                {
+                    let state = &mut stage.app_state;
+                    let mut adaptive = state.min_num_substeps < state.max_num_substeps;
+                    if ui
+                        .checkbox(&mut adaptive, "Adaptive substeps")
+                        .on_hover_text(
+                            "Pick the substep count each frame from the particles' sound speed, \
+                             clamped to the range below",
+                        )
+                        .changed()
+                    {
+                        if adaptive {
+                            state.min_num_substeps = 1;
+                            state.max_num_substeps = state.max_num_substeps.max(2);
+                        } else {
+                            state.min_num_substeps = state.max_num_substeps;
+                        }
+                    }
+                    if adaptive {
+                        ui.add(
+                            egui::Slider::new(&mut state.min_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Min substeps"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut state.max_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Max substeps"),
+                        );
+                        if state.max_num_substeps <= state.min_num_substeps {
+                            state.max_num_substeps = state.min_num_substeps + 1;
+                        }
+                        ui.label(format!("current substeps: {}", state.num_substeps));
+                    } else {
+                        ui.add(
+                            egui::Slider::new(&mut state.max_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Substeps"),
+                        );
+                        state.min_num_substeps = state.max_num_substeps;
+                    }
+                }
+
+                ui.separator();
+                ui.checkbox(&mut stage.app_state.implicit, "Implicit solver")
+                    .on_hover_text(
+                        "Backward Euler grid solve (Newton + conjugate gradient); lifts the \
+                         sound-speed bound on the substep length, so stiff materials need far \
+                         fewer substeps",
+                    );
+                if stage.app_state.implicit {
+                    let params = &mut stage.app_state.implicit_params;
+                    ui.indent("implicit_params", |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut params.max_newton_iters, 1..=20)
+                                .text("Newton iters"),
+                        )
+                        .on_hover_text("1 without line search is the semi-implicit scheme");
+                        ui.add(
+                            egui::Slider::new(&mut params.newton_rel_tol, 1.0e-4..=1.0)
+                                .logarithmic(true)
+                                .text("Newton tolerance"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut params.max_cg_iters, 1..=200).text("CG iters"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut params.cg_rel_tol, 1.0e-5..=1.0e-1)
+                                .logarithmic(true)
+                                .text("CG tolerance"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut params.line_search_steps, 0..=10)
+                                .text("line search steps"),
+                        )
+                        .on_hover_text("0 always takes the full Newton step");
+                        let mut residual_criterion =
+                            params.line_search == slosh::solver::LineSearchCriterion::Residual;
+                        if ui
+                            .checkbox(&mut residual_criterion, "line search on the residual")
+                            .on_hover_text(
+                                "Measures the residual norm instead of the incremental \
+                                 potential; works for models without an energy",
+                            )
+                            .changed()
+                        {
+                            params.line_search = if residual_criterion {
+                                slosh::solver::LineSearchCriterion::Residual
+                            } else {
+                                slosh::solver::LineSearchCriterion::Energy
+                            };
+                        }
+                        if let Some(stats) = &stage.step_result.implicit_stats {
+                            let residual = if stats.g0_sq > 0.0 {
+                                (stats.g_sq / stats.g0_sq).max(0.0).sqrt()
+                            } else {
+                                0.0
+                            };
+                            let status = if stats.newton_done != 0 {
+                                "converged"
+                            } else {
+                                "max iters"
+                            };
+                            ui.label(format!(
+                                "last solve: {} Newton iters ({status}), residual {residual:.1e}",
+                                stats.newton_iters
+                            ));
+                            ui.label(format!(
+                                "last CG: {} iters, energy {:.3e}",
+                                stats.cg_iters, stats.energy
+                            ));
+                        }
+                    });
                 }
 
                 #[cfg(feature = "dim3")]

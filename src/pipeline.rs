@@ -11,9 +11,9 @@ use crate::rbd::dynamics::GpuBodySet;
 use crate::rbd::dynamics::body::{BodyCoupling, BodyCouplingEntry};
 use crate::solver::{
     GpuBoundaryCondition, GpuImpulses, GpuMaterials, GpuParticleModelData, GpuParticles,
-    GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, Particle, SimulationParams, WgG2P,
-    WgGridUpdate, WgP2G, WgP2GScatterStyle, WgParticleUpdate, WgRigidImpulses,
-    WgRigidParticleUpdate, WgTimestepBounds,
+    GpuRigidParticles, GpuSimulationParams, GpuTimestepBounds, ImplicitWorkspace, MpmIntegrator,
+    Particle, SimulationParams, WgG2P, WgGridUpdate, WgImplicitSolver, WgP2G, WgP2GScatterStyle,
+    WgParticleUpdate, WgRigidImpulses, WgRigidParticleUpdate, WgTimestepBounds,
 };
 // The CDF kernel wrappers read the gated `Node.cdf`, so they only exist under the `cpic` feature.
 #[cfg(feature = "cpic")]
@@ -64,6 +64,11 @@ pub struct MpmPipelineKernels {
     /// model, APIC affine). Disable only when a `run_g2p` hook folds this into its own kernel;
     /// particle state must be fully advanced before `after_particles_update` hooks run.
     pub particles_update: bool,
+    /// The implicit grid solver kernels (see [`MpmIntegrator::Implicit`]). Off by default: they
+    /// are only dispatched when `MpmData::integrator` selects the implicit integrator, and their
+    /// gather kernel is specialized for the particle model like `particles_update`, so a custom
+    /// model must export an `ImplicitParticleModel` specialization to compile them.
+    pub implicit: bool,
 }
 
 impl Default for MpmPipelineKernels {
@@ -75,6 +80,7 @@ impl Default for MpmPipelineKernels {
             node_reset: true,
             grid_update: true,
             particles_update: true,
+            implicit: false,
         }
     }
 }
@@ -125,6 +131,7 @@ pub struct MpmPipeline<B: Backend, GpuModel: GpuParticleModelData> {
     #[allow(dead_code)]
     grid_update_cdf: Option<WgGridUpdateCdf<B>>,
     grid_update: Option<WgGridUpdate<B>>,
+    implicit: Option<WgImplicitSolver<B>>,
     particles_update: Option<WgParticleUpdate<B>>,
     g2p: Option<WgG2P<B>>,
     #[cfg(feature = "cpic")]
@@ -256,6 +263,11 @@ pub struct MpmData<B: Backend, GpuModel: GpuParticleModelData> {
     pub gravity: Vector,
     /// Global simulation parameters (gravity, timestep).
     pub sim_params: GpuSimulationParams<B>,
+    /// Time integration scheme of the grid update. The implicit integrator needs a pipeline built
+    /// with [`MpmPipelineKernels::implicit`]; it is ignored otherwise.
+    pub integrator: MpmIntegrator,
+    /// Buffers of the implicit grid solve (empty unless the integrator is implicit).
+    pub implicit: ImplicitWorkspace<B>,
     /// Spatial grid for momentum transfer.
     pub grid: GpuGrid<B>,
     /// MPM particles (positions, velocities, masses, material properties).
@@ -413,6 +425,8 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmData<B, GpuModel> {
 
         Ok(Self {
             sim_params,
+            integrator: MpmIntegrator::Explicit,
+            implicit: ImplicitWorkspace::new(backend)?,
             particles,
             gravity: params.gravity,
             rigid_particles,
@@ -457,6 +471,12 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         Self::new_with_kernels(backend, compiler, MpmPipelineKernels::default())
     }
 
+    /// The implicit grid solver kernels, when the pipeline was built with
+    /// [`MpmPipelineKernels::implicit`]. Exposed for diagnostics and tests.
+    pub fn implicit_solver(&self) -> Option<&WgImplicitSolver<B>> {
+        self.implicit.as_ref()
+    }
+
     /// Like [`Self::new`], but only compiles the kernel families selected by `kernels`. Any
     /// skipped kernel must never be dispatched.
     pub fn new_with_kernels(
@@ -489,6 +509,22 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
             grid_update_cdf: kernels
                 .cdf
                 .then(|| WgGridUpdateCdf::from_backend(backend, compiler))
+                .transpose()?,
+            #[cfg(feature = "comptime")]
+            implicit: kernels
+                .implicit
+                .then(|| WgImplicitSolver::with_specializations(backend, compiler, &[]))
+                .transpose()?,
+            #[cfg(feature = "runtime")]
+            implicit: kernels
+                .implicit
+                .then(|| {
+                    WgImplicitSolver::with_specializations(
+                        backend,
+                        compiler,
+                        &GpuModel::specialization_modules(),
+                    )
+                })
                 .transpose()?,
             #[cfg(feature = "comptime")]
             particles_update: kernels
@@ -568,6 +604,15 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
         hooks_state: &mut dyn Any,
         mut timestamps: Option<&mut GpuTimestamps>,
     ) -> Result<(), B::Error> {
+        // The particle update must know whether the forces are evaluated by the implicit solver
+        // (no stress in the affine matrix) or explicitly. Only honored when the kernels exist.
+        let implicit_params = match data.integrator {
+            MpmIntegrator::Implicit(params) if self.implicit.is_some() => Some(params),
+            _ => None,
+        };
+        data.sim_params
+            .set_implicit(backend, implicit_params.is_some())?;
+
         // {
         //     let mut pass = encoder.begin_pass("update_rigid_particles", timestamps.as_deref_mut());
         //     self.impulses.launch_update_world_mass_properties(
@@ -688,6 +733,25 @@ impl<B: Backend, GpuModel: GpuParticleModelData> MpmPipeline<B, GpuModel> {
                 &data.grid,
                 &data.bodies,
                 &data.body_materials,
+            )?;
+        }
+
+        // Implicit grid solve, on the force-free velocities the grid update (built-in or fused
+        // into a P2G hook) left on the nodes.
+        if let (Some(implicit), Some(params)) = (&self.implicit, implicit_params)
+            && !data.particles.is_empty()
+        {
+            let mut pass = encoder.begin_pass("implicit_solve", timestamps.as_deref_mut());
+            implicit.launch_solve(
+                backend,
+                &mut pass,
+                &params,
+                &data.sim_params,
+                &data.grid,
+                &data.particles,
+                &data.bodies,
+                &data.body_materials,
+                &mut data.implicit,
             )?;
         }
 

@@ -162,4 +162,33 @@ public func viscous_stress(
 
     return (rate * (2.0 * mu) + diag(Vect<float>(lambda * trace))) * stiffness_damping;
 }
+
+// Dissipation potential of `viscous_stress` over a substep, `dt a_K (mu e:e + lambda / 2 tr(e)^2)`
+// with `e` the strain rate: its velocity-gradient derivative is `dt` times the viscous stress,
+// which is what the implicit solver's incremental potential needs.
+public func viscous_dissipation(
+    float lambda,
+    float mu,
+    Mat<float> velocity_gradient,
+    float stiffness_damping,
+    float dt,
+) -> float {
+    if (stiffness_damping <= 0.0) {
+        return 0.0;
+    }
+
+    let rate = (velocity_gradient + transpose(velocity_gradient)) * 0.5;
+    var tr = 0.0;
+    var sq = 0.0;
+    [[ForceUnroll]]
+    for (var i = 0; i < DIM; i++) {
+        tr += rate[i][i];
+        [[ForceUnroll]]
+        for (var j = 0; j < DIM; j++) {
+            sq += rate[i][j] * rate[i][j];
+        }
+    }
+
+    return dt * stiffness_damping * (mu * sq + 0.5 * lambda * tr * tr);
+}
 #endif

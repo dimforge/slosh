@@ -167,19 +167,20 @@ public func find_block_header_id(
     key: BlockVirtualId
 ) -> BlockHeaderId {
     let packed_key = pack_key(key);
-    var slot = hash(packed_key) & (grid[0].hmap_capacity - 1);
+    let capacity = grid[0].hmap_capacity;
+    var slot = hash(packed_key) & (capacity - 1);
 
-    while (true) {
+    // Bounded by the capacity: a full hashmap without the key must not loop forever (that hangs
+    // the GPU when diverging particles scatter over more blocks than the hashmap holds).
+    for (var k = 0u; k < capacity; k++) {
         let state = hmap_entries[slot].state;
         if (state == packed_key) {
             return hmap_entries[slot].value;
         } else if (state == NONE) {
-            // Using break here instead of `return BlockHeaderId(NONE);` otherwise slang optimizes-out the
-            // final return and naga complains about a missing return after the infinite loop.
             break;
         }
 
-         slot = (slot + 1) & (grid[0].hmap_capacity - 1);
+        slot = (slot + 1) & (capacity - 1);
     }
 
     return BlockHeaderId(NONE);

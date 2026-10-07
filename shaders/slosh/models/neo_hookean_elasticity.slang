@@ -7,6 +7,8 @@ import stensor.geometry.svd_glam.svd3;
 import slosh.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;
+import slosh.models.implicit_interfaces;
+import stensor.utils.mat;
 
 public struct NeoHookeanModel {
     public float lambda;
@@ -24,6 +26,45 @@ public struct NeoHookeanModel {
         #endif
 
         return stress;
+    }
+
+    /// Elastic energy density `mu / 2 (tr(F^T F) - DIM) - mu ln J + lambda / 2 (ln J)^2`, per unit
+    /// reference volume.
+    public func energy_density(def_grad: Mat<float>) -> float {
+        let j = max(determinant(def_grad), 1.0e-10);
+        let log_j = log(j);
+        let sq_norm = trace(mul(transpose(def_grad), def_grad));
+        return 0.5 * this.mu * (sq_norm - float(DIM)) - this.mu * log_j + 0.5 * this.lambda * log_j * log_j;
+    }
+
+    /// Differential of the Kirchhoff stress for a change `d_def_grad` of the deformation gradient,
+    /// with the reference gradient held fixed (`dP F^T`, stored layout). The off-diagonal blocks
+    /// of the Hessian are clamped to be positive semi-definite.
+    public func stress_differential(def_grad: Mat<float>, d_def_grad: Mat<float>) -> Mat<float> {
+        #if DIM == 2
+        let svd = Svd2(def_grad);
+        #else
+        let svd = Svd3(def_grad);
+        #endif
+        let s = max(svd.S, Vect<float>(MIN_SINGULAR_VALUE));
+        let inv_s = Vect<float>(1.0) / s;
+        let j = max(component_product(s), 1.0e-10);
+        let log_j = log(j);
+        // mu - lambda ln J: the coefficient of the 1 / (s_i s_j) terms.
+        let c = this.mu - this.lambda * log_j;
+
+        // Second derivatives w.r.t. the singular values:
+        // H_ii = mu + (mu + lambda (1 - ln J)) / s_i^2, H_ij = lambda / (s_i s_j).
+        let diag_extra = Vect<float>(this.mu) + inv_s * inv_s * c;
+        let h = diag_block(inv_s, this.lambda, diag_extra);
+
+        // Pair eigenvalues (psi_i - psi_j) / (s_i - s_j) and (psi_i + psi_j) / (s_i + s_j).
+        let inv_pp = Vect<float>(1.0) / pair_products(s);
+        let sym = Vect<float>(this.mu) + inv_pp * c;
+        let asym = Vect<float>(this.mu) - inv_pp * c;
+
+        let dp = apply_isotropic_hessian(svd.U, svd.Vt, h, sym, asym, d_def_grad);
+        return piola_differential_to_kirchhoff(def_grad, dp);
     }
 
     public func timestep_bound(

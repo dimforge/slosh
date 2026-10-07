@@ -6,7 +6,9 @@ use slosh::rapier::prelude::{
     CCDSolver, ColliderSet, DefaultBroadPhase, ImpulseJointSet, IntegrationParameters,
     IslandManager, MultibodyJointSet, NarrowPhase, PhysicsPipeline, RigidBodySet,
 };
-use slosh::solver::{GpuParticleModel, GpuParticleModelData, Particle};
+use slosh::solver::{
+    GpuParticleModel, GpuParticleModelData, ImplicitSolverParams, MpmIntegrator, Particle,
+};
 use std::any::Any;
 
 pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
@@ -19,6 +21,12 @@ pub struct AppState<GpuModel: GpuParticleModelData = GpuParticleModel> {
     pub max_num_substeps: u32,
     pub num_substeps: u32,
     pub gravity_factor: f32,
+    /// Whether the grid update uses the implicit solver (see [`MpmIntegrator`]). Pushed into
+    /// `MpmData::integrator` before every step, so it can be toggled while running.
+    pub implicit: bool,
+    /// Parameters of the implicit solver, kept while it is disabled so toggling it back restores
+    /// them.
+    pub implicit_params: ImplicitSolverParams,
     pub restarting: bool,
     /// Set from a scene's extra UI to rebuild the current scene at the end of the frame, for
     /// settings that change what the scene is made of. Same path as the "Restart" button.
@@ -108,6 +116,17 @@ impl<'a, GpuModel: GpuParticleModelData> PhysicsState<'a, GpuModel> {
             .particles
             .append(self.backend, particles)
             .expect("Failed to add particles.");
+    }
+}
+
+impl<GpuModel: GpuParticleModelData> AppState<GpuModel> {
+    /// The integrator the settings currently select.
+    pub fn integrator(&self) -> MpmIntegrator {
+        if self.implicit {
+            MpmIntegrator::Implicit(self.implicit_params)
+        } else {
+            MpmIntegrator::Explicit
+        }
     }
 }
 

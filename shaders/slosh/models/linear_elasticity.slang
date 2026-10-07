@@ -7,6 +7,7 @@ import stensor.geometry.svd_glam.svd3;
 import slosh.aliases;
 import slosh.models.utils;
 import slosh.models.interfaces;
+import slosh.models.implicit_interfaces;
 
 // Positive elastic energy density and Kirchhoff stress computed from a single shared SVD.
 public struct ElasticEnergyStress {
@@ -113,6 +114,51 @@ public struct LinearElasticModel {
         return result;
     }
     #endif
+
+    /// Elastic energy density `mu sum (s_i - 1)^2 + lambda / 2 (J - 1)^2`, per unit reference volume.
+    public func energy_density(def_grad: Mat<float>) -> float {
+        #if DIM == 2
+        let svd = Svd2(def_grad);
+        #else
+        let svd = Svd3(def_grad);
+        #endif
+        let j = component_product(svd.S);
+        let dev = svd.S - Vect<float>(1.0);
+        return this.mu * dot(dev, dev) + 0.5 * this.lambda * (j - 1.0) * (j - 1.0);
+    }
+
+    /// Differential of the Kirchhoff stress for a change `d_def_grad` of the deformation gradient,
+    /// with the reference gradient held fixed (`dP F^T`, stored layout). The off-diagonal blocks
+    /// of the Hessian are clamped to be positive semi-definite, which the implicit solver's
+    /// conjugate gradient needs.
+    public func stress_differential(def_grad: Mat<float>, d_def_grad: Mat<float>) -> Mat<float> {
+        #if DIM == 2
+        let svd = Svd2(def_grad);
+        #else
+        let svd = Svd3(def_grad);
+        #endif
+        let s = max(svd.S, Vect<float>(MIN_SINGULAR_VALUE));
+        let inv_s = Vect<float>(1.0) / s;
+        let j = component_product(s);
+        let mu2 = 2.0 * this.mu;
+        // lambda (J - 1) J: the volumetric derivative shared by every block.
+        let vol = this.lambda * (j - 1.0) * j;
+
+        // Second derivatives w.r.t. the singular values:
+        // H_ii = 2 mu + lambda J^2 / s_i^2, H_ij = lambda (2J - 1) J / (s_i s_j).
+        let ones_coeff = this.lambda * (2.0 * j - 1.0) * j;
+        let diag_extra = Vect<float>(mu2) - inv_s * inv_s * vol;
+        let h = diag_block(inv_s, ones_coeff, diag_extra);
+
+        // Pair eigenvalues (psi_i - psi_j) / (s_i - s_j) and (psi_i + psi_j) / (s_i + s_j).
+        let pp = pair_products(s);
+        let ps = pair_sums(s);
+        let sym = Vect<float>(mu2) - Vect<float>(vol) / pp;
+        let asym = Vect<float>(mu2) * (Vect<float>(1.0) - Vect<float>(2.0) / ps) + Vect<float>(vol) / pp;
+
+        let dp = apply_isotropic_hessian(svd.U, svd.Vt, h, sym, asym, d_def_grad);
+        return piola_differential_to_kirchhoff(def_grad, dp);
+    }
 
     public func timestep_bound(
         particle_density0: float,

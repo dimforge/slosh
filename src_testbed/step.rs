@@ -4,7 +4,7 @@ use slang_hal::backend::{Backend, WebGpu};
 use slang_hal::BufferUsages;
 #[cfg(feature = "webgpu")]
 use slang_hal::GpuTimingResult;
-use slosh::solver::{GpuParticleModelData, SimulationParams};
+use slosh::solver::{CgScalars, GpuParticleModelData, SimulationParams};
 use stensor::tensor::GpuTensor;
 
 /// Byte stride of one `Mat<f32>` element in the GPU def-grad buffer, matching
@@ -42,6 +42,8 @@ pub struct SimulationStepResult {
     /// In 3D only the first three entries of each column are meaningful; the
     /// fourth entry of each column is slang padding.
     pub def_grad_raw: Vec<f32>,
+    /// Scalars of the last implicit grid solve, when the implicit solver is enabled.
+    pub implicit_stats: Option<CgScalars>,
 }
 
 impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
@@ -145,6 +147,10 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
             let gpu_params = physics.data.sim_params.params.buffer_mut();
             self.gpu.write_buffer(gpu_params, 0, &[params]).unwrap();
         }
+
+        // The integrator is a per-step setting: the solver kernels are always compiled by the
+        // testbed, so this can be toggled while running.
+        physics.data.integrator = self.app_state.integrator();
 
         let t_encoding = web_time::Instant::now();
         let mut encoder = self.gpu.begin_encoding();
@@ -308,6 +314,13 @@ impl<GpuModel: GpuParticleModelData> Stage<GpuModel> {
 
         self.gpu.synchronize().unwrap();
         let t_total_step = t_total.elapsed().as_secs_f32() * 1000.0;
+
+        // The step already waited for the GPU, so this readback costs one small copy.
+        self.step_result.implicit_stats = if self.app_state.implicit {
+            physics.data.implicit.read_scalars(&self.gpu).await.ok()
+        } else {
+            None
+        };
 
         // TODO: reuse the `physics.data.particles_pos_staging` buffer.
         let t_readback = web_time::Instant::now();
