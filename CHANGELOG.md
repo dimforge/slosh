@@ -21,6 +21,8 @@
   hook that fuses the particle update must do the same.
 - The testbeds compile the implicit kernels and expose the integrator and its parameters in the
   settings window, with the last solve's Newton and CG statistics.
+- The testbed settings window exposes the substep count: a fixed number, or the adaptive
+  `[min, max]` range (scenes still set their defaults on restart).
 
 # v0.8.0
 - Add the `GpuBoundaryCondition::non_reflecting` (absorbing) boundary condition, based on

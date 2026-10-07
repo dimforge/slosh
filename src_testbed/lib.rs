@@ -618,6 +618,50 @@ pub async fn run_with_hooks_and_ui<GpuModel: GpuParticleModelData>(
                 }
 
                 ui.separator();
+                {
+                    let state = &mut stage.app_state;
+                    let mut adaptive = state.min_num_substeps < state.max_num_substeps;
+                    if ui
+                        .checkbox(&mut adaptive, "Adaptive substeps")
+                        .on_hover_text(
+                            "Pick the substep count each frame from the particles' sound speed, \
+                             clamped to the range below",
+                        )
+                        .changed()
+                    {
+                        if adaptive {
+                            state.min_num_substeps = 1;
+                            state.max_num_substeps = state.max_num_substeps.max(2);
+                        } else {
+                            state.min_num_substeps = state.max_num_substeps;
+                        }
+                    }
+                    if adaptive {
+                        ui.add(
+                            egui::Slider::new(&mut state.min_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Min substeps"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut state.max_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Max substeps"),
+                        );
+                        if state.max_num_substeps <= state.min_num_substeps {
+                            state.max_num_substeps = state.min_num_substeps + 1;
+                        }
+                        ui.label(format!("current substeps: {}", state.num_substeps));
+                    } else {
+                        ui.add(
+                            egui::Slider::new(&mut state.max_num_substeps, 1..=500)
+                                .logarithmic(true)
+                                .text("Substeps"),
+                        );
+                        state.min_num_substeps = state.max_num_substeps;
+                    }
+                }
+
+                ui.separator();
                 ui.checkbox(&mut stage.app_state.implicit, "Implicit solver")
                     .on_hover_text(
                         "Backward Euler grid solve (Newton + conjugate gradient); lifts the \
