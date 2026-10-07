@@ -1,4 +1,4 @@
-# Unreleased
+# v0.9.0
 - Add an implicit grid solver, selected per simulation with `MpmData::integrator =
   MpmIntegrator::Implicit(ImplicitSolverParams { .. })` on a pipeline built with
   `MpmPipelineKernels { implicit: true, .. }` (off by default). It replaces the explicit
