@@ -1,4 +1,4 @@
-# Unreleased
+# v0.10.0
 - Fix grid nodes lying on a triangle-mesh collider (exactly, or within float error) getting no
   collision. `collide()` skipped a collider whenever the node-to-projection distance was zero, so a
   flat mesh floor lying on a grid plane left that whole layer of nodes unconstrained and particles
