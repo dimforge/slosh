@@ -1,3 +1,11 @@
+# Unreleased
+- Fix grid nodes lying on a triangle-mesh collider (exactly, or within float error) getting no
+  collision. `collide()` skipped a collider whenever the node-to-projection distance was zero, so a
+  flat mesh floor lying on a grid plane left that whole layer of nodes unconstrained and particles
+  could sink through it. `TriMesh.project_local_point` now also returns the pseudo-normal of the
+  feature it projects onto, and `collide()` uses it for points within `1.0e-4` cell widths of the
+  surface.
+
 # v0.9.0
 - Add an implicit grid solver, selected per simulation with `MpmData::integrator =
   MpmIntegrator::Implicit(ImplicitSolverParams { .. })` on a pipeline built with

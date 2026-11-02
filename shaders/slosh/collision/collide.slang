@@ -100,6 +100,8 @@ public func collide(
     Vect point,
 ) -> GridCollision {
     static const float MAX_FLT = 1.0e10; // Is the f32::MAX constant defined somewhere in WGSL?
+    // Distance to the boundary, relative to the cell width, below which a point counts as on it.
+    static const float ON_BOUNDARY_TOLERANCE = 1.0e-4;
     var collision = GridCollision(Vect<float>(0.0), Vect<float>(0.0), 0, false);
 
     let dist_cap = Vect<float>(cell_width * COLLISION_REPORT_CELLS);
@@ -118,6 +120,8 @@ public func collide(
         let shape_type = shape.shape_type();
 
         var proj = ProjectionResult(point, false);
+        // Outward surface normal at `proj`, for shapes that can provide one.
+        var surface_normal = Vect<float>(0.0);
         bool handled = false;
 
         if (shape_type != Shape::SHAPE_TYPE_POLYLINE && shape_type != Shape::SHAPE_TYPE_TRIMESH) {
@@ -131,8 +135,9 @@ public func collide(
             let local_pt = shape_pose.inv_mul_pt(point);
             let local_proj = trimesh.project_local_point(collision_shape_idx, collision_shape_vtx, local_pt, dist_cap.x);
 
-            if (local_proj._1) {
+            if (local_proj._2) {
                 proj = ProjectionResult(shape_pose.mul_pt(local_proj._0.point), local_proj._0.is_inside);
+                surface_normal = shape_pose.mul_vec(local_proj._1);
                 handled = true;
             }
         }
@@ -144,8 +149,18 @@ public func collide(
             if (proj.is_inside || all(abs(dpt) <= dist_cap)) {
                 let sign = (proj.is_inside) ? -1.0 : 1.0;
                 let dist = length(dpt);
-                if (sign * dist < best_dist && dist != 0.0) {
-                    collision.normal = dpt / (dist * -sign);
+                // A point on (or within float error of) the boundary, such as a grid node lying
+                // exactly on a flat floor, has no usable projection direction: use the surface
+                // normal instead of skipping the collider, which would leave the node free.
+                var normal = Vect<float>(0.0);
+                if (any(surface_normal != Vect<float>(0.0)) && dist <= cell_width * ON_BOUNDARY_TOLERANCE) {
+                    normal = normalize(surface_normal);
+                } else if (dist != 0.0) {
+                    normal = dpt / (dist * -sign);
+                }
+
+                if (sign * dist < best_dist && any(normal != Vect<float>(0.0))) {
+                    collision.normal = normal;
                     collision.point = proj.point;
                     collision.collider_id = i;
                     collision.valid = true;

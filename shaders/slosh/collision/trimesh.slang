@@ -108,6 +108,8 @@ public struct TriMesh {
         }
     }
 
+    // Returns the projection, the (unnormalized) pseudo-normal of the feature it lies on, and
+    // whether any triangle was found within `max_dist`.
     public func project_local_point(
         // Contains BVH topology, triangle indices
         StructuredBuffer<uint> idx,
@@ -115,7 +117,7 @@ public struct TriMesh {
         StructuredBuffer<Vect> vtx,
         Vect pt,
         max_dist: float
-    ) -> Tuple<ProjectionResult, bool> {
+    ) -> Tuple<ProjectionResult, Vect, bool> {
         var curr = 0u;
         var best = max_dist;
         var best_proj = ProjectionWithLocation.solid(pt);
@@ -151,7 +153,7 @@ public struct TriMesh {
 
         let pn = this.pseudo_normal(idx, vtx, best_tri_id, best_proj.feature_type, best_proj.id);
         let is_inside = dot(pn, pt - best_proj.point) <= 0.0;
-        return Tuple<ProjectionResult, bool>(ProjectionResult(best_proj.point, is_inside), found);
+        return Tuple<ProjectionResult, Vect, bool>(ProjectionResult(best_proj.point, is_inside), pn, found);
     }
 }
 
